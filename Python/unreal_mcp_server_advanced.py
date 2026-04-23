@@ -387,6 +387,11 @@ class UnrealConnection:
                     error_msg = response.get("error") or response.get("message", "Unknown error")
                     response = {"status": "error", "error": error_msg}
                     logger.warning(f"Unreal returned failure: {error_msg}")
+                elif response.get("status") == "success" and isinstance(response.get("result"), dict):
+                    result_data = response["result"]
+                    response.setdefault("success", result_data.get("success", True))
+                    for key, value in result_data.items():
+                        response.setdefault(key, value)
                 
                 return response
                 
@@ -493,6 +498,39 @@ def delete_actor(name: str) -> Dict[str, Any]:
         return {"success": False, "message": str(e)}
 
 @mcp.tool()
+def spawn_actor(
+    type: str,
+    name: str,
+    location: Optional[List[float]] = None,
+    rotation: Optional[List[float]] = None,
+    scale: Optional[List[float]] = None,
+    static_mesh: Optional[str] = None
+) -> Dict[str, Any]:
+    """Spawn an actor by type and name."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+    try:
+        params = {
+            "type": type,
+            "name": name
+        }
+        if location is not None:
+            params["location"] = location
+        if rotation is not None:
+            params["rotation"] = rotation
+        if scale is not None:
+            params["scale"] = scale
+        if static_mesh is not None:
+            params["static_mesh"] = static_mesh
+
+        return safe_spawn_actor(unreal, params, auto_unique_name=False)
+    except Exception as e:
+        logger.error(f"spawn_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
 def set_actor_transform(
     name: str,
     location: List[float] = None,
@@ -543,12 +581,20 @@ def add_component_to_blueprint(
     blueprint_name: str,
     component_type: str,
     component_name: str,
-    location: List[float] = [],
-    rotation: List[float] = [],
-    scale: List[float] = [],
-    component_properties: Dict[str, Any] = {}
+    location: Optional[List[float]] = None,
+    rotation: Optional[List[float]] = None,
+    scale: Optional[List[float]] = None,
+    component_properties: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Add a component to a Blueprint."""
+    if location is None:
+        location = []
+    if rotation is None:
+        rotation = []
+    if scale is None:
+        scale = []
+    if component_properties is None:
+        component_properties = {}
     unreal = get_unreal_connection()
     if not unreal:
         return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -833,12 +879,14 @@ def get_blueprint_function_details(
 def create_pyramid(
     base_size: int = 3,
     block_size: float = 100.0,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "PyramidBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube"
 ) -> Dict[str, Any]:
     """Spawn a pyramid made of cube actors."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -874,13 +922,15 @@ def create_wall(
     length: int = 5,
     height: int = 2,
     block_size: float = 100.0,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     orientation: str = "x",
     name_prefix: str = "WallBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube"
 ) -> Dict[str, Any]:
     """Create a simple wall from cubes."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -913,13 +963,15 @@ def create_tower(
     height: int = 10,
     base_size: int = 4,
     block_size: float = 100.0,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "TowerBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
     tower_style: str = "cylindrical"  # "cylindrical", "square", "tapered"
 ) -> Dict[str, Any]:
     """Create a realistic tower with various architectural styles."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1051,13 +1103,17 @@ def create_tower(
 @mcp.tool()
 def create_staircase(
     steps: int = 5,
-    step_size: List[float] = [100.0, 100.0, 50.0],
-    location: List[float] = [0.0, 0.0, 0.0],
+    step_size: Optional[List[float]] = None,
+    location: Optional[List[float]] = None,
     name_prefix: str = "Stair",
     mesh: str = "/Engine/BasicShapes/Cube.Cube"
 ) -> Dict[str, Any]:
     """Create a staircase from cubes."""
     try:
+        if step_size is None:
+            step_size = [100.0, 100.0, 50.0]
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1087,13 +1143,15 @@ def construct_house(
     width: int = 1200,
     depth: int = 1000,
     height: int = 600,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "House",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
     house_style: str = "modern"  # "modern", "cottage"
 ) -> Dict[str, Any]:
     """Construct a realistic house with architectural details and multiple rooms."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1110,7 +1168,7 @@ def construct_house(
 @mcp.tool()
 def construct_mansion(
     mansion_scale: str = "large",  # "small", "large", "epic", "legendary"
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "Mansion"
 ) -> Dict[str, Any]:
     """
@@ -1118,6 +1176,8 @@ def construct_mansion(
     fountains, and luxury features perfect for dramatic TikTok reveals.
     """
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1165,12 +1225,14 @@ def construct_mansion(
 def create_arch(
     radius: float = 300.0,
     segments: int = 6,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "ArchBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube"
 ) -> Dict[str, Any]:
     """Create a simple arch using cubes in a semicircle."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1201,12 +1263,12 @@ def create_arch(
 def spawn_physics_blueprint_actor (
     name: str,
     mesh_path: str = "/Engine/BasicShapes/Cube.Cube",
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     mass: float = 1.0,
     simulate_physics: bool = True,
     gravity_enabled: bool = True,
-    color: List[float] = None,  # Optional color parameter [R, G, B] or [R, G, B, A]
-    scale: List[float] = [1.0, 1.0, 1.0]  # Default scale
+    color: Optional[List[float]] = None,  # Optional color parameter [R, G, B] or [R, G, B, A]
+    scale: Optional[List[float]] = None  # Default scale
 ) -> Dict[str, Any]:
     """
     Quickly spawn a single actor with physics, color, and a specific mesh.
@@ -1221,6 +1283,10 @@ def spawn_physics_blueprint_actor (
                If [R, G, B] is provided, alpha will be set to 1.0 automatically.
     """
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
+        if scale is None:
+            scale = [1.0, 1.0, 1.0]
         bp_name = f"{name}_BP"
         create_blueprint(bp_name, "Actor")
         add_component_to_blueprint(bp_name, "StaticMeshComponent", "Mesh", scale=scale)
@@ -1242,15 +1308,26 @@ def spawn_physics_blueprint_actor (
                     logger.warning(f"Failed to set color {color} for {bp_name}: {color_result.get('message', 'Unknown error')}")
 
         compile_blueprint(bp_name)
-        result = spawn_blueprint_actor(bp_name, name, location)
-        
+
         # Spawn the blueprint actor using helper function
         unreal = get_unreal_connection()
-        result = spawn_blueprint_actor(unreal, bp_name, name, location)
+        result = spawn_blueprint_actor(
+            unreal,
+            bp_name,
+            name,
+            location,
+            auto_unique_name=False
+        )
 
         # Ensure proper scale is set on the spawned actor
         if result.get("success", False):
-            spawned_name = result.get("result", {}).get("name", name)
+            spawned_name = (
+                result.get("final_name")
+                or result.get("name")
+                or result.get("result", {}).get("final_name")
+                or result.get("result", {}).get("name")
+                or name
+            )
             set_actor_transform(spawned_name, scale=scale)
 
         return result
@@ -1264,10 +1341,12 @@ def create_maze(
     cols: int = 8,
     cell_size: float = 300.0,
     wall_height: int = 3,
-    location: List[float] = [0.0, 0.0, 0.0]
+    location: Optional[List[float]] = None
 ) -> Dict[str, Any]:
     """Create a proper solvable maze with entrance, exit, and guaranteed path using recursive backtracking algorithm."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1521,13 +1600,15 @@ def set_mesh_material_color(
 def create_town(
     town_size: str = "medium",  # "small", "medium", "large", "metropolis"
     building_density: float = 0.7,  # 0.0 to 1.0
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "Town",
     include_infrastructure: bool = True,
     architectural_style: str = "mixed"  # "modern", "cottage", "mansion", "mixed", "downtown", "futuristic"
 ) -> Dict[str, Any]:
     """Create a full dynamic town with buildings, streets, infrastructure, and vehicles."""
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         import random
         random.seed()  # Use different seed each time for variety
         
@@ -1683,7 +1764,7 @@ def create_town(
 @mcp.tool()
 def create_castle_fortress(
     castle_size: str = "large",  # "small", "medium", "large", "epic"
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     name_prefix: str = "Castle",
     include_siege_weapons: bool = True,
     include_village: bool = True,
@@ -1695,6 +1776,8 @@ def create_castle_fortress(
     the scale and detail of a complete medieval fortress.
     """
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}
@@ -1757,7 +1840,7 @@ def create_suspension_bridge(
     tower_height: float = 4000.0,
     cable_sag_ratio: float = 0.12,
     module_size: float = 200.0,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     orientation: str = "x",
     name_prefix: str = "Bridge",
     deck_mesh: str = "/Engine/BasicShapes/Cube.Cube",
@@ -1792,6 +1875,8 @@ def create_suspension_bridge(
         Dictionary with success status, spawned actors, and performance metrics
     """
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         import time
         start_time = time.perf_counter()
         
@@ -1881,7 +1966,7 @@ def create_aqueduct(
     tiers: int = 2,
     deck_width: float = 600.0,
     module_size: float = 200.0,
-    location: List[float] = [0.0, 0.0, 0.0],
+    location: Optional[List[float]] = None,
     orientation: str = "x",
     name_prefix: str = "Aqueduct",
     arch_mesh: str = "/Engine/BasicShapes/Cylinder.Cylinder",
@@ -1915,6 +2000,8 @@ def create_aqueduct(
         Dictionary with success status, spawned actors, and performance metrics
     """
     try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
         import time
         start_time = time.perf_counter()
         

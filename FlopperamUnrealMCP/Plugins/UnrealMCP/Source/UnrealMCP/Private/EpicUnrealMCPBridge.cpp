@@ -198,20 +198,15 @@ void UEpicUnrealMCPBridge::StopServer()
 FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Executing command: %s"), *CommandType);
-    
-    // Create a promise to wait for the result
-    TPromise<FString> Promise;
-    TFuture<FString> Future = Promise.GetFuture();
-    
-    // Queue execution on Game Thread
-    AsyncTask(ENamedThreads::GameThread, [this, CommandType, Params, Promise = MoveTemp(Promise)]() mutable
+
+    auto ExecuteOnCurrentThread = [this, &CommandType, &Params]() -> FString
     {
         TSharedPtr<FJsonObject> ResponseJson = MakeShareable(new FJsonObject);
-        
+
         try
         {
             TSharedPtr<FJsonObject> ResultJson;
-            
+
             if (CommandType == TEXT("ping"))
             {
                 ResultJson = MakeShareable(new FJsonObject);
@@ -266,18 +261,17 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
             {
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
                 ResponseJson->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *CommandType));
-                
-                FString ResultString;
-                TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
+
+                FString UnknownCommandResult;
+                TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&UnknownCommandResult);
                 FJsonSerializer::Serialize(ResponseJson.ToSharedRef(), Writer);
-                Promise.SetValue(ResultString);
-                return;
+                return UnknownCommandResult;
             }
-            
+
             // Check if the result contains an error
             bool bSuccess = true;
             FString ErrorMessage;
-            
+
             if (ResultJson->HasField(TEXT("success")))
             {
                 bSuccess = ResultJson->GetBoolField(TEXT("success"));
@@ -303,14 +297,29 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
         catch (const std::exception& e)
         {
             ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
-            ResponseJson->SetStringField(TEXT("error"), UTF8_TO_TCHAR(e.what()));
+                ResponseJson->SetStringField(TEXT("error"), UTF8_TO_TCHAR(e.what()));
         }
-        
+
         FString ResultString;
         TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
         FJsonSerializer::Serialize(ResponseJson.ToSharedRef(), Writer);
-        Promise.SetValue(ResultString);
+        return ResultString;
+    };
+
+    if (IsInGameThread())
+    {
+        return ExecuteOnCurrentThread();
+    }
+
+    // Create a promise to wait for the result
+    TPromise<FString> Promise;
+    TFuture<FString> Future = Promise.GetFuture();
+
+    // Queue execution on Game Thread
+    AsyncTask(ENamedThreads::GameThread, [ExecuteOnCurrentThread, Promise = MoveTemp(Promise)]() mutable
+    {
+        Promise.SetValue(ExecuteOnCurrentThread());
     });
-    
+
     return Future.Get();
 }

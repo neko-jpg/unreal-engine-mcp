@@ -33,6 +33,78 @@ FEpicUnrealMCPBlueprintCommands::FEpicUnrealMCPBlueprintCommands()
 {
 }
 
+namespace
+{
+    TSharedPtr<FJsonObject> MakeBlueprintSuccessResult(std::initializer_list<TPair<FString, TSharedPtr<FJsonValue>>> Fields)
+    {
+        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetBoolField(TEXT("success"), true);
+        for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Fields)
+        {
+            ResultObj->SetField(Field.Key, Field.Value);
+        }
+        return ResultObj;
+    }
+
+    UClass* ResolveComponentClass(const FString& RequestedType)
+    {
+        if (RequestedType.Equals(TEXT("StaticMeshComponent"), ESearchCase::IgnoreCase) ||
+            RequestedType.Equals(TEXT("UStaticMeshComponent"), ESearchCase::IgnoreCase))
+        {
+            return UStaticMeshComponent::StaticClass();
+        }
+
+        if (RequestedType.Equals(TEXT("BoxComponent"), ESearchCase::IgnoreCase) ||
+            RequestedType.Equals(TEXT("UBoxComponent"), ESearchCase::IgnoreCase))
+        {
+            return UBoxComponent::StaticClass();
+        }
+
+        if (RequestedType.Equals(TEXT("SphereComponent"), ESearchCase::IgnoreCase) ||
+            RequestedType.Equals(TEXT("USphereComponent"), ESearchCase::IgnoreCase))
+        {
+            return USphereComponent::StaticClass();
+        }
+
+        TArray<FString> CandidateNames;
+        CandidateNames.Add(RequestedType);
+
+        if (!RequestedType.EndsWith(TEXT("Component")))
+        {
+            CandidateNames.Add(RequestedType + TEXT("Component"));
+        }
+
+        const int32 CandidateCount = CandidateNames.Num();
+        for (int32 Index = 0; Index < CandidateCount; ++Index)
+        {
+            const FString& Candidate = CandidateNames[Index];
+            if (!Candidate.StartsWith(TEXT("U")))
+            {
+                CandidateNames.Add(TEXT("U") + Candidate);
+            }
+        }
+
+        for (const FString& Candidate : CandidateNames)
+        {
+            if (UClass* FoundClass = FindObject<UClass>(nullptr, *Candidate))
+            {
+                if (FoundClass->IsChildOf(UActorComponent::StaticClass()))
+                {
+                    return FoundClass;
+                }
+            }
+
+            const FString EnginePath = FString::Printf(TEXT("/Script/Engine.%s"), *Candidate);
+            if (UClass* FoundClass = LoadClass<UActorComponent>(nullptr, *EnginePath))
+            {
+                return FoundClass;
+            }
+        }
+
+        return nullptr;
+    }
+}
+
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     if (CommandType == TEXT("create_blueprint"))
@@ -191,10 +263,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateBlueprint(c
         // Mark the package dirty
         Package->MarkPackageDirty();
 
-        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-        ResultObj->SetStringField(TEXT("name"), AssetName);
-        ResultObj->SetStringField(TEXT("path"), PackagePath + AssetName);
-        return ResultObj;
+        return MakeBlueprintSuccessResult({
+            {TEXT("name"), MakeShared<FJsonValueString>(AssetName)},
+            {TEXT("path"), MakeShared<FJsonValueString>(PackagePath + AssetName)}
+        });
     }
 
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create blueprint"));
@@ -212,13 +284,13 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddComponentToBlu
     FString ComponentType;
     if (!Params->TryGetStringField(TEXT("component_type"), ComponentType))
     {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'type' parameter"));
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'component_type' parameter"));
     }
 
     FString ComponentName;
     if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
     {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'component_name' parameter"));
     }
 
     // Find the blueprint
@@ -229,31 +301,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddComponentToBlu
     }
 
     // Create the component - dynamically find the component class by name
-    UClass* ComponentClass = nullptr;
-
-    // Try to find the class with exact name first
-    ComponentClass = FindObject<UClass>(nullptr, *ComponentType);
-    
-    // If not found, try with "Component" suffix
-    if (!ComponentClass && !ComponentType.EndsWith(TEXT("Component")))
-    {
-        FString ComponentTypeWithSuffix = ComponentType + TEXT("Component");
-        ComponentClass = FindObject<UClass>(nullptr, *ComponentTypeWithSuffix);
-    }
-    
-    // If still not found, try with "U" prefix
-    if (!ComponentClass && !ComponentType.StartsWith(TEXT("U")))
-    {
-        FString ComponentTypeWithPrefix = TEXT("U") + ComponentType;
-        ComponentClass = FindObject<UClass>(nullptr, *ComponentTypeWithPrefix);
-        
-        // Try with both prefix and suffix
-        if (!ComponentClass && !ComponentType.EndsWith(TEXT("Component")))
-        {
-            FString ComponentTypeWithBoth = TEXT("U") + ComponentType + TEXT("Component");
-            ComponentClass = FindObject<UClass>(nullptr, *ComponentTypeWithBoth);
-        }
-    }
+    UClass* ComponentClass = ResolveComponentClass(ComponentType);
     
     // Verify that the class is a valid component type
     if (!ComponentClass || !ComponentClass->IsChildOf(UActorComponent::StaticClass()))
@@ -289,10 +337,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddComponentToBlu
         // Compile the blueprint
         FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-        ResultObj->SetStringField(TEXT("component_name"), ComponentName);
-        ResultObj->SetStringField(TEXT("component_type"), ComponentType);
-        return ResultObj;
+        return MakeBlueprintSuccessResult({
+            {TEXT("component_name"), MakeShared<FJsonValueString>(ComponentName)},
+            {TEXT("component_type"), MakeShared<FJsonValueString>(ComponentType)}
+        });
     }
 
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add component to blueprint"));
@@ -369,9 +417,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSetPhysicsPropert
     // Mark the blueprint as modified
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
-    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-    ResultObj->SetStringField(TEXT("component"), ComponentName);
-    return ResultObj;
+    return MakeBlueprintSuccessResult({
+        {TEXT("component"), MakeShared<FJsonValueString>(ComponentName)}
+    });
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params)
@@ -393,10 +441,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCompileBlueprint(
     // Compile the blueprint
     FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-    ResultObj->SetStringField(TEXT("name"), BlueprintName);
-    ResultObj->SetBoolField(TEXT("compiled"), true);
-    return ResultObj;
+    return MakeBlueprintSuccessResult({
+        {TEXT("name"), MakeShared<FJsonValueString>(BlueprintName)},
+        {TEXT("compiled"), MakeShared<FJsonValueBoolean>(true)}
+    });
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params)
@@ -467,7 +515,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
     UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: About to spawn actor from blueprint '%s' with GeneratedClass: %s"), 
            *BlueprintName, Blueprint->GeneratedClass ? *Blueprint->GeneratedClass->GetName() : TEXT("NULL"));
 
-    AActor* NewActor = World->SpawnActor<AActor>(Blueprint->GeneratedClass, SpawnTransform);
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *ActorName;
+
+    AActor* NewActor = World->SpawnActor<AActor>(Blueprint->GeneratedClass, SpawnTransform, SpawnParams);
     
     UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: SpawnActor completed, NewActor: %s"), 
            NewActor ? *NewActor->GetName() : TEXT("NULL"));
@@ -1161,7 +1212,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleReadBlueprintCont
     FString BlueprintPath;
     if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
     {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+        if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintPath))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+        }
     }
 
     // Get optional parameters
@@ -1178,7 +1232,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleReadBlueprintCont
     Params->TryGetBoolField(TEXT("include_interfaces"), bIncludeInterfaces);
 
     // Load the blueprint
-    UBlueprint* Blueprint = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
+    UBlueprint* Blueprint = FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintPath);
     if (!Blueprint)
     {
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to load blueprint: %s"), *BlueprintPath));
@@ -1305,7 +1359,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAnalyzeBlueprintG
     FString BlueprintPath;
     if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
     {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+        if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintPath))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+        }
     }
 
     FString GraphName = TEXT("EventGraph");
@@ -1321,7 +1378,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAnalyzeBlueprintG
     Params->TryGetBoolField(TEXT("trace_execution_flow"), bTraceExecutionFlow);
 
     // Load the blueprint
-    UBlueprint* Blueprint = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
+    UBlueprint* Blueprint = FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintPath);
     if (!Blueprint)
     {
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to load blueprint: %s"), *BlueprintPath));

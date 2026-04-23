@@ -79,8 +79,14 @@ class ActorNameManager:
         if unreal_connection:
             try:
                 response = unreal_connection.send_command("find_actors_by_name", {"pattern": name})
-                if response and response.get("status") == "success" and "actors" in response:
-                    actors = response.get("actors", [])
+                actors = []
+                if response and response.get("status") == "success":
+                    if isinstance(response.get("actors"), list):
+                        actors = response.get("actors", [])
+                    elif isinstance(response.get("result"), dict) and isinstance(response["result"].get("actors"), list):
+                        actors = response["result"].get("actors", [])
+
+                if actors:
                     if isinstance(actors, list):
                         # Check for exact name match
                         for actor in actors:

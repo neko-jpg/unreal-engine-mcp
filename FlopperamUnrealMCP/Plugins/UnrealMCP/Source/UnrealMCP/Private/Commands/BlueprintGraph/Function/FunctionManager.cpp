@@ -1,4 +1,5 @@
 #include "Commands/BlueprintGraph/Function/FunctionManager.h"
+#include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -266,29 +267,7 @@ TSharedPtr<FJsonObject> FFunctionManager::RenameFunction(const TSharedPtr<FJsonO
 
 UBlueprint* FFunctionManager::LoadBlueprint(const FString& BlueprintName)
 {
-	// Try direct load with _C suffix first (most reliable for Blueprint assets)
-	FString ClassPath = BlueprintName + TEXT("_C");
-	UClass* BlueprintClass = Cast<UClass>(StaticLoadObject(UClass::StaticClass(), nullptr, *ClassPath));
-	if (BlueprintClass)
-	{
-		// Get the Blueprint asset from the class
-		for (TObjectIterator<UBlueprint> It; It; ++It)
-		{
-			if (It->GetPathName().Contains(BlueprintName))
-			{
-				return *It;
-			}
-		}
-	}
-
-	// Try EditorAssetLibrary as fallback
-	if (UEditorAssetLibrary::DoesAssetExist(BlueprintName))
-	{
-		UObject* Asset = UEditorAssetLibrary::LoadAsset(BlueprintName);
-		return Cast<UBlueprint>(Asset);
-	}
-
-	return nullptr;
+	return FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
 }
 
 bool FFunctionManager::ValidateFunctionName(const FString& FunctionName)

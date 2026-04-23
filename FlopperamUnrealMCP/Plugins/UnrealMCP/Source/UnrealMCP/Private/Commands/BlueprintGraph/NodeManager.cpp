@@ -608,7 +608,7 @@ TSharedPtr<FJsonObject> FBlueprintNodeManager::CreateSuccessResponse(const UK2No
 {
 	TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject);
 	Response->SetBoolField(TEXT("success"), true);
-	Response->SetStringField(TEXT("node_id"), Node->GetName());
+	Response->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
 	Response->SetStringField(TEXT("node_type"), NodeType);
 	Response->SetNumberField(TEXT("pos_x"), Node->NodePosX);
 	Response->SetNumberField(TEXT("pos_y"), Node->NodePosY);

@@ -105,3 +105,6 @@ MCPGameProject/Config/DefaultEditorPerProjectUserSettings.ini
 # Clang
 .clang-format
 .clangd
+
+#AGETNS.md
+AGENTS.md

@@ -1,4 +1,5 @@
 #include "Commands/BlueprintGraph/Function/FunctionIO.h"
+#include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraphSchema_K2.h"
@@ -286,20 +287,7 @@ bool FFunctionIO::AddFunctionParameter(
 
 UBlueprint* FFunctionIO::LoadBlueprint(const FString& BlueprintName)
 {
-	// Try direct load
-	UBlueprint* Blueprint = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintName));
-	if (Blueprint)
-	{
-		return Blueprint;
-	}
-
-	// Try EditorAssetLibrary
-	if (UEditorAssetLibrary::DoesAssetExist(BlueprintName))
-	{
-		return Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintName));
-	}
-
-	return nullptr;
+	return FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
 }
 
 FEdGraphPinType FFunctionIO::GetPropertyTypeFromString(const FString& TypeName)
