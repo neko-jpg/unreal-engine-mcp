@@ -100,19 +100,43 @@ class TestDocsToolConsistency:
             pytest.skip("No tool names extracted from docs")
         missing = {t for t in docs if t not in reg}
         whitelist = {"send_command", "get_global_actor_name_manager", "clear_actor_cache",
-                     "safe_spawn_actor", "safe_delete_actor", "get_unique_actor_name",
-                     # markdown false positives
-                     "name", "simulate_physics", "linear_damping", "blueprint_name",
-                     "house_style", "block_size", "material_path", "mesh_path",
-                     "component_type", "angular_damping", "length", "cols", "depth",
-                     "execute", "rotation", "then", "parameter_name", "type",
-                     "architectural_style", "include_infrastructure", "mesh", "step_size",
-                     "rows", "gravity_enabled", "parent_class", "location", "base_size",
-                     "compile", "wall_height", "pattern", "tower_style", "cell_size",
-                     "actor_name", "scale", "width", "radius", "building_density",
-                     "town_size", "orientation", "steps", "component_name", "segments",
-                     "component_properties", "height", "static_mesh", "color",
-                     "name_prefix", "mass", "disconnect_nodes"}
+                      "safe_spawn_actor", "safe_delete_actor", "get_unique_actor_name",
+                      # parameter names that appear in docs as `name(` or `name |` patterns
+                      "name", "simulate_physics", "linear_damping", "blueprint_name",
+                      "house_style", "block_size", "material_path", "mesh_path",
+                      "component_type", "angular_damping", "length", "cols", "depth",
+                      "execute", "rotation", "then", "parameter_name", "type",
+                      "architectural_style", "include_infrastructure", "mesh", "step_size",
+                      "rows", "gravity_enabled", "parent_class", "location", "base_size",
+                      "compile", "wall_height", "pattern", "tower_style", "cell_size",
+                      "actor_name", "scale", "width", "radius", "building_density",
+                      "town_size", "orientation", "steps", "component_name", "segments",
+                      "component_properties", "height", "static_mesh", "color",
+                      "name_prefix", "mass", "disconnect_nodes",
+                      # additional parameter names from expanded tools-reference.md
+                      "property_name", "expose_on_spawn", "target_node_id",
+                      "trace_execution_flow", "var_name", "new_function_name",
+                      "source_pin_name", "actors", "graph_name", "tower_height",
+                      "arches", "is_blueprint_writable", "is_private", "pos_y",
+                      "bitmask", "include_components", "target_function", "message",
+                      "value_range_max", "include_pin_connections", "node_type",
+                      "replication_enabled", "slider_range_max", "category",
+                      "castle_size", "bitmask_enum", "arch_radius", "deck_mesh",
+                      "dry_run", "include_graph", "span_length", "units",
+                      "slider_range_min", "include_variables", "is_editable_in_instance",
+                      "node_id", "deck_width", "module_size", "pos_x",
+                      "include_functions", "var_type", "property_value",
+                      "include_siege_weapons", "include_village", "event_name",
+                      "is_array", "blueprint_path", "is_public", "include_node_details",
+                      "target_blueprint", "search_path", "mansion_scale",
+                      "suspender_mesh", "pier_width", "material_slot", "random_string",
+                      "include_engine_materials", "target_pin_name", "function_name",
+                      "include_event_graph", "include_interfaces", "tooltip",
+                      "replication_condition", "param_type", "return_type",
+                      "value_range_min", "default_value", "expose_to_cinematics",
+                      "tiers", "source_node_id", "cable_sag_ratio", "variable_type",
+                      "is_blueprint_readable", "event_type", "param_name",
+                      "old_function_name", "variable_name"}
         missing -= whitelist
         assert not missing, f"Tools mentioned in docs but not in implementation: {missing}"
 

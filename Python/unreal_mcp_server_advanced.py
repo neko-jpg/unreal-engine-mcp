@@ -24,6 +24,7 @@ from server.actor_tools import (
     delete_actor,
     spawn_actor,
     set_actor_transform,
+    batch_spawn_actors,
 )
 
 from server.blueprint_tools import (
@@ -100,6 +101,7 @@ __all__ = [
     "delete_actor",
     "spawn_actor",
     "set_actor_transform",
+    "batch_spawn_actors",
     "create_blueprint",
     "add_component_to_blueprint",
     "set_static_mesh_properties",

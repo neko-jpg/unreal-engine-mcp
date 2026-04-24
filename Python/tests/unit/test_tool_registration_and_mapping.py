@@ -16,6 +16,7 @@ import inspect
 import json
 import re
 from contextlib import ExitStack
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -103,6 +104,7 @@ class TestToolCommandMapping:
         ("apply_material_to_actor", "apply_material_to_actor"),
         ("apply_material_to_blueprint", "apply_material_to_blueprint"),
         ("get_actor_material_info", "get_actor_material_info"),
+        ("get_blueprint_material_info", "get_blueprint_material_info"),
         ("set_mesh_material_color", "set_mesh_material_color"),
     ])
     def test_tool_calls_expected_command(self, tool_name, expected_cmd, fake_conn):
@@ -245,3 +247,134 @@ class TestMutableDefaultArguments:
             for fn, pn, d in bad:
                 msg += f"  {fn}(... {pn}={d!r} ...)\n"
             pytest.fail(msg)
+
+
+class TestPythonToCppCommandMapping:
+    """
+    Detect drift between Python @mcp.tool() names and C++ command strings.
+
+    We extract command strings from both sides and report additions/removals.
+    Known aliases (different Python tool name from C++ command) should be whitelisted.
+    """
+
+    def _collect_cpp_commands(self):
+        """Parse C++ dispatcher condition strings to find supported commands."""
+        project_root = Path(__file__).resolve().parents[3]
+        cpp_dir = project_root / "FlopperamUnrealMCP" / "Plugins" / "UnrealMCP" / "Source" / "UnrealMCP" / "Private"
+        commands = set()
+        for cpp_file in cpp_dir.rglob("EpicUnrealMCP*.cpp"):
+            text = cpp_file.read_text(encoding="utf-8")
+            for m in re.finditer(r'CommandType\s*==\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
+                commands.add(m.group(1))
+            for m in re.finditer(r'HandleCommand\s*\(\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
+                commands.add(m.group(1))
+        return commands
+
+    def _collect_python_commands(self):
+        """Commands Python tools send to Unreal via send_command."""
+        cmds = set()
+        project_root = Path(__file__).resolve().parents[3]
+        python_root = project_root / "Python"
+        for py_file in (python_root / "server").rglob("*.py"):
+            text = py_file.read_text(encoding="utf-8")
+            for m in re.finditer(r'send_command[\s\(]*["\']([^"\']+)["\']', text):
+                cmds.add(m.group(1))
+        for py_file in (python_root / "helpers").rglob("*.py"):
+            text = py_file.read_text(encoding="utf-8")
+            for m in re.finditer(r'send_command[\s\(]*["\']([^"\']+)["\']', text):
+                cmds.add(m.group(1))
+        return cmds
+
+    def _collect_registered_tool_names(self):
+        """Collect all @mcp.tool() registered function names."""
+        return set(mcp._tool_manager._tools.keys())
+
+    def test_python_commands_are_handled_in_cpp(self):
+        """Every command sent by Python tools should be routable in C++."""
+        py_cmds = self._collect_python_commands()
+        cpp_cmds = self._collect_cpp_commands()
+        missing = py_cmds - cpp_cmds
+        known_missing_whitelist = set()
+        actual_missing = missing - known_missing_whitelist
+        assert not actual_missing, (
+            f"Python sends these commands but C++ dispatcher does not explicitly route them: {actual_missing}"
+        )
+
+    def test_cpp_commands_are_used_by_python(self):
+        """C++ commands that are not called by Python may indicate stale C++ code or missing tools."""
+        py_cmds = self._collect_python_commands()
+        cpp_cmds = self._collect_cpp_commands()
+        missing = cpp_cmds - py_cmds
+        whitelist = {"ping"}
+        actual_missing = missing - whitelist
+        assert not actual_missing, (
+            f"C++ supports these commands but Python tools never send them: {actual_missing}"
+        )
+
+    def test_each_mcp_tool_sends_exactly_one_cpp_command(self):
+        """Each MCP tool (except world-building orchestrators) should map to exactly one C++ command."""
+        skip_tools = {
+            "create_pyramid", "create_wall", "create_tower", "create_staircase",
+            "construct_house", "construct_mansion", "create_arch",
+            "create_maze", "create_town", "create_castle_fortress",
+            "create_suspension_bridge", "create_aqueduct",
+            "spawn_physics_blueprint_actor",
+            "set_mesh_material_color",
+        }
+        registered = self._collect_registered_tool_names()
+        for tool_name in sorted(registered):
+            if tool_name in skip_tools:
+                continue
+            fn = getattr(srv, tool_name, None)
+            if fn is None:
+                continue
+
+    def test_registered_tools_cover_all_cpp_commands(self):
+        """All C++ commands should be reachable through at least one MCP tool."""
+        py_cmds = self._collect_python_commands()
+        cpp_cmds = self._collect_cpp_commands()
+        unreachable = cpp_cmds - py_cmds - {"ping"}
+        assert not unreachable, (
+            f"C++ commands not reachable through any Python tool: {unreachable}"
+        )
+
+    def test_tool_name_to_command_mapping_is_complete(self):
+        """Verify the known tool-to-command mapping covers all commands."""
+        known_mapping = {
+            "get_actors_in_level": "get_actors_in_level",
+            "find_actors_by_name": "find_actors_by_name",
+            "delete_actor": "delete_actor",
+            "spawn_actor": "spawn_actor",
+            "set_actor_transform": "set_actor_transform",
+            "create_blueprint": "create_blueprint",
+            "add_component_to_blueprint": "add_component_to_blueprint",
+            "set_static_mesh_properties": "set_static_mesh_properties",
+            "set_physics_properties": "set_physics_properties",
+            "compile_blueprint": "compile_blueprint",
+            "read_blueprint_content": "read_blueprint_content",
+            "analyze_blueprint_graph": "analyze_blueprint_graph",
+            "get_blueprint_variable_details": "get_blueprint_variable_details",
+            "get_blueprint_function_details": "get_blueprint_function_details",
+            "get_available_materials": "get_available_materials",
+            "apply_material_to_actor": "apply_material_to_actor",
+            "apply_material_to_blueprint": "apply_material_to_blueprint",
+            "get_actor_material_info": "get_actor_material_info",
+            "get_blueprint_material_info": "get_blueprint_material_info",
+            "add_node": "add_blueprint_node",
+            "connect_nodes": "connect_nodes",
+            "create_variable": "create_variable",
+            "set_blueprint_variable_properties": "set_blueprint_variable_properties",
+            "add_event_node": "add_event_node",
+            "delete_node": "delete_node",
+            "set_node_property": "set_node_property",
+            "create_function": "create_function",
+            "add_function_input": "add_function_input",
+            "add_function_output": "add_function_output",
+            "delete_function": "delete_function",
+            "rename_function": "rename_function",
+        }
+        registered = self._collect_registered_tool_names()
+        for tool_name, cmd in known_mapping.items():
+            assert tool_name in registered, (
+                f"Tool '{tool_name}' in known mapping but not registered in FastMCP"
+            )

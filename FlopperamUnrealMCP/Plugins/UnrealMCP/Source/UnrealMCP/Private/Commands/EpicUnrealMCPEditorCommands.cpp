@@ -22,6 +22,7 @@
 #include "Engine/BlueprintGeneratedClass.h"
 #include "EditorAssetLibrary.h"
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
+#include "ScopedTransaction.h"
 
 FEpicUnrealMCPEditorCommands::FEpicUnrealMCPEditorCommands()
 {
@@ -159,6 +160,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnActor(const TSh
         }
     }
 
+    FScopedTransaction Transaction(TEXT("UnrealMCP: Spawn Actor"));
+
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = *ActorName;
 
@@ -237,7 +240,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActor(const TS
             // Store actor info before deletion for the response
             TSharedPtr<FJsonObject> ActorInfo = FEpicUnrealMCPCommonUtils::ActorToJsonObject(Actor);
             
-            // Delete the actor
+            // Delete the actor within a transaction for undo support
+            FScopedTransaction Transaction(TEXT("UnrealMCP: Delete Actor"));
             Actor->Destroy();
             
             TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
@@ -279,6 +283,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorTransform(co
 
     // Get transform parameters
     FTransform NewTransform = TargetActor->GetTransform();
+
+    FScopedTransaction Transaction(TEXT("UnrealMCP: Set Actor Transform"));
+    TargetActor->Modify();
 
     if (Params->HasField(TEXT("location")))
     {

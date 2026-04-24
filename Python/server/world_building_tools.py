@@ -7,6 +7,12 @@ import time
 from typing import Dict, Any, Optional, List
 
 from server.core import mcp, get_unreal_connection
+from server.validation import (
+    validate_vector3, validate_int, validate_float, validate_string,
+    validate_positive_int, validate_unreal_path, MAX_ACTORS_PER_BATCH,
+    ValidationError, make_validation_error_response_from_exception,
+)
+from server.actor_tools import batch_spawn_actors
 from helpers.infrastructure_creation import (
     _create_street_grid, _create_street_lights, _create_town_vehicles,
     _create_town_decorations, _create_traffic_lights, _create_street_signage,
@@ -41,38 +47,50 @@ def create_pyramid(
     block_size: float = 100.0,
     location: Optional[List[float]] = None,
     name_prefix: str = "PyramidBlock",
-    mesh: str = "/Engine/BasicShapes/Cube.Cube"
+    mesh: str = "/Engine/BasicShapes/Cube.Cube",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Spawn a pyramid made of cube actors."""
     try:
+        validate_positive_int(base_size, "base_size", max_val=50)
+        validate_float(block_size, "block_size", min_val=1.0, max_val=10000.0)
+        validate_vector3(location, "location", allow_none=True)
+        validate_string(name_prefix, "name_prefix")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
-        spawned = []
         scale = block_size / 100.0
+        actor_specs = []
         for level in range(base_size):
             count = base_size - level
             for x in range(count):
                 for y in range(count):
-                    actor_name = f"{name_prefix}_{level}_{x}_{y}"
-                    loc = [
-                        location[0] + (x - (count - 1)/2) * block_size,
-                        location[1] + (y - (count - 1)/2) * block_size,
-                        location[2] + level * block_size
-                    ]
-                    params = {
-                        "name": actor_name,
+                    actor_specs.append({
+                        "name": f"{name_prefix}_{level}_{x}_{y}",
                         "type": "StaticMeshActor",
-                        "location": loc,
+                        "location": [
+                            location[0] + (x - (count - 1) / 2) * block_size,
+                            location[1] + (y - (count - 1) / 2) * block_size,
+                            location[2] + level * block_size,
+                        ],
                         "scale": [scale, scale, scale],
-                        "static_mesh": mesh
-                    }
-                    resp = safe_spawn_actor(unreal, params)
-                    if resp and resp.get("status") == "success":
-                        spawned.append(resp)
-        return {"success": True, "actors": spawned}
+                        "static_mesh": mesh,
+                    })
+
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "actor_count": len(actor_specs),
+                "actors": actor_specs,
+                "message": f"Would spawn {len(actor_specs)} actors for pyramid (base_size={base_size}).",
+            }
+
+        result = batch_spawn_actors(actor_specs)
+        result["message"] = f"Pyramid created: base_size={base_size}, spawned {result.get('spawned_count', 0)} actors"
+        return result
     except Exception as e:
         logger.error(f"create_pyramid error: {e}")
         return {"success": False, "message": str(e)}
@@ -86,35 +104,49 @@ def create_wall(
     location: Optional[List[float]] = None,
     orientation: str = "x",
     name_prefix: str = "WallBlock",
-    mesh: str = "/Engine/BasicShapes/Cube.Cube"
+    mesh: str = "/Engine/BasicShapes/Cube.Cube",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a simple wall from cubes."""
     try:
+        validate_positive_int(length, "length", max_val=200)
+        validate_positive_int(height, "height", max_val=100)
+        validate_float(block_size, "block_size", min_val=1.0, max_val=10000.0)
+        validate_vector3(location, "location", allow_none=True)
+        validate_string(name_prefix, "name_prefix")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
-        spawned = []
         scale = block_size / 100.0
+        actor_specs = []
         for h in range(height):
             for i in range(length):
-                actor_name = f"{name_prefix}_{h}_{i}"
                 if orientation == "x":
                     loc = [location[0] + i * block_size, location[1], location[2] + h * block_size]
                 else:
                     loc = [location[0], location[1] + i * block_size, location[2] + h * block_size]
-                params = {
-                    "name": actor_name,
+                actor_specs.append({
+                    "name": f"{name_prefix}_{h}_{i}",
                     "type": "StaticMeshActor",
                     "location": loc,
                     "scale": [scale, scale, scale],
-                    "static_mesh": mesh
-                }
-                resp = safe_spawn_actor(unreal, params)
-                if resp and resp.get("status") == "success":
-                    spawned.append(resp)
-        return {"success": True, "actors": spawned}
+                    "static_mesh": mesh,
+                })
+
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "actor_count": len(actor_specs),
+                "actors": actor_specs,
+                "message": f"Would spawn {len(actor_specs)} actors for wall (length={length}, height={height}).",
+            }
+
+        result = batch_spawn_actors(actor_specs)
+        result["message"] = f"Wall created: length={length}, height={height}, spawned {result.get('spawned_count', 0)} actors"
+        return result
     except Exception as e:
         logger.error(f"create_wall error: {e}")
         return {"success": False, "message": str(e)}
@@ -492,8 +524,29 @@ def create_maze(
 ) -> Dict[str, Any]:
     """Create a proper solvable maze with entrance, exit, and guaranteed path using recursive backtracking algorithm."""
     try:
+        validate_positive_int(rows, "rows", max_val=100)
+        validate_positive_int(cols, "cols", max_val=100)
+        validate_float(cell_size, "cell_size", min_val=10.0, max_val=10000.0)
+        validate_positive_int(wall_height, "wall_height", max_val=50)
+        validate_vector3(location, "location", allow_none=True)
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    try:
         if location is None:
             location = [0.0, 0.0, 0.0]
+
+        estimated_actors = (rows * 2 + 1) * (cols * 2 + 1) * wall_height + 2
+        if estimated_actors > MAX_ACTORS_PER_BATCH:
+            return {
+                "success": False,
+                "message": (
+                    f"Estimated {estimated_actors} actors exceeds limit of {MAX_ACTORS_PER_BATCH}. "
+                    f"Reduce rows, cols, or wall_height."
+                ),
+                "estimated_actor_count": estimated_actors,
+                "max_actors": MAX_ACTORS_PER_BATCH,
+            }
+
         unreal = get_unreal_connection()
         if not unreal:
             return {"success": False, "message": "Failed to connect to Unreal Engine"}

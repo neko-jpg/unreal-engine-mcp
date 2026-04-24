@@ -98,7 +98,31 @@ def get_actor_material_info(
         return {"success": False, "message": str(e)}
 
 
-get_blueprint_material_info = get_actor_material_info
+@mcp.tool()
+def get_blueprint_material_info(
+    blueprint_name: str,
+    component_name: str
+) -> Dict[str, Any]:
+    """Get information about the materials currently applied to a Blueprint component."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+    try:
+        params = {
+            "blueprint_name": blueprint_name,
+            "component_name": component_name
+        }
+        response = unreal.send_command("get_blueprint_material_info", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_blueprint_material_info error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# Deprecated alias for backwards compatibility; prefer the decorated tool above.
+# get_blueprint_material_info is the canonical MCP tool.
+_get_blueprint_material_info_alias = get_blueprint_material_info
 
 
 @mcp.tool()

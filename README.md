@@ -1,3 +1,21 @@
+## Unofficial Fork Notice (Read First)
+
+This repository is an **unofficial fork** of the original project:
+
+- Original repository: [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp)
+- This fork is maintained independently and is **not** the official Flopperam repository.
+- This fork is **not affiliated with, endorsed by, or operated by** Flopperam.
+- This fork is separate from the paid **Flopperam Agent** product.
+
+For transparency:
+
+- The MIT license text is bundled in LICENSE.
+- Fork-specific modifications are documented in CHANGELOG.md.
+
+Suggested display name to avoid confusion with the official project: **Unreal Engine MCP Community Fork (Unofficial)**.
+
+---
+
 ## Update 03/25/2026
 ---
 ## Flop MCP
@@ -139,18 +157,18 @@ Check out these examples of the MCP server in action on our channel:
 
 ---
 
-## Complete Tool Arsenal
+## Complete Tool Arsenal (46 tools)
 
 | **Category** | **Tools** | **Description** |
 |--------------|-----------|-----------------|
-| **Blueprint Visual Scripting** | `add_node`, `connect_nodes`, `delete_node`, `set_node_property`, `create_variable`, `set_blueprint_variable_properties`, `create_function`, `add_function_input`, `add_function_output`, `delete_function`, `rename_function` | Complete Blueprint programming with 23+ node types, variables with full property control, custom functions, and dynamic graph management |
+| **Blueprint Visual Scripting** | `add_node`, `add_event_node`, `connect_nodes`, `delete_node`, `set_node_property`, `create_variable`, `set_blueprint_variable_properties`, `create_function`, `add_function_input`, `add_function_output`, `delete_function`, `rename_function` | Complete Blueprint programming with 23+ node types, variables with full property control, custom functions, and dynamic graph management |
 | **Blueprint Analysis** | `read_blueprint_content`, `analyze_blueprint_graph`, `get_blueprint_variable_details`, `get_blueprint_function_details` | Deep inspection of Blueprint structure, event graphs, execution flow, variables, and functions |
 | **World Building** | `create_town`, `construct_house`, `construct_mansion`, `create_tower`, `create_arch`, `create_staircase` | Build complex architectural structures and entire settlements |
 | **Epic Structures** | `create_castle_fortress`, `create_suspension_bridge`, `create_aqueduct` | Massive engineering marvels and medieval fortresses |
 | **Level Design** | `create_maze`, `create_pyramid`, `create_wall` | Design challenging game levels and puzzles |
-| **Physics & Materials** | `spawn_physics_blueprint_actor`, `set_physics_properties`, `get_available_materials`, `apply_material_to_actor`, `apply_material_to_blueprint`, `set_mesh_material_color` | Create realistic physics simulations and material systems |
+| **Physics & Materials** | `spawn_physics_blueprint_actor`, `set_physics_properties`, `get_available_materials`, `apply_material_to_actor`, `apply_material_to_blueprint`, `get_actor_material_info`, `get_blueprint_material_info`, `set_mesh_material_color` | Create physics simulations and manage material systems |
 | **Blueprint System** | `create_blueprint`, `compile_blueprint`, `add_component_to_blueprint`, `set_static_mesh_properties` | Visual scripting and custom actor creation |
-| **Actor Management** | `get_actors_in_level`, `find_actors_by_name`, `delete_actor`, `set_actor_transform`, `get_actor_material_info` | Precise control over scene objects and inspection |
+| **Actor Management** | `get_actors_in_level`, `find_actors_by_name`, `spawn_actor`, `batch_spawn_actors`, `delete_actor`, `set_actor_transform` | Precise control over scene objects, batch spawning, and inspection |
 
 ---
 
@@ -158,7 +176,7 @@ Check out these examples of the MCP server in action on our channel:
 
 ### Prerequisites
 - **Unreal Engine 5.5+** 
-- **Python 3.12+**
+- **Python 3.10+** (3.12 recommended; 3.10–3.13 supported)
 - **MCP Client** (Claude Desktop, Cursor, or Windsurf)
 
 ### 1. Setup Options
