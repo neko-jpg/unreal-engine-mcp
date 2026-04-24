@@ -38,6 +38,8 @@ public:
 	void StartServer();
 	void StopServer();
 	bool IsRunning() const { return bIsRunning; }
+	FIPv4Address GetServerAddress() const { return ServerAddress; }
+	uint16 GetServerPort() const { return Port; }
 
 	// Command execution
 	FString ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
@@ -48,6 +50,7 @@ private:
 	TSharedPtr<FSocket> ListenerSocket;
 	TSharedPtr<FSocket> ConnectionSocket;
 	FRunnableThread* ServerThread;
+	FMCPServerRunnable* Runnable;
 
 	// Server configuration
 	FIPv4Address ServerAddress;

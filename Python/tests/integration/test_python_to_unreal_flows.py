@@ -52,7 +52,21 @@ def unreal_editor_process():
         "-log",
     ]
 
-    process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log_dir = REPO_ROOT.parent / "FlopperamUnrealMCP" / "Saved" / "Logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = log_dir / "pytest-unreal-editor.stdout.log"
+    stderr_path = log_dir / "pytest-unreal-editor.stderr.log"
+    stdout_file = stdout_path.open("wb")
+    stderr_file = stderr_path.open("wb")
+    stdin_file = open(os.devnull, "rb")
+
+    try:
+        process = subprocess.Popen(args, stdin=stdin_file, stdout=stdout_file, stderr=stderr_file)
+    except OSError as exc:
+        stdin_file.close()
+        stdout_file.close()
+        stderr_file.close()
+        pytest.skip(f"Unreal Editor could not be started in this environment: {exc}")
 
     deadline = time.time() + 180
     while time.time() < deadline:
@@ -73,6 +87,9 @@ def unreal_editor_process():
             process.wait(timeout=30)
         except subprocess.TimeoutExpired:
             process.kill()
+    stdin_file.close()
+    stdout_file.close()
+    stderr_file.close()
 
 
 @pytest.fixture

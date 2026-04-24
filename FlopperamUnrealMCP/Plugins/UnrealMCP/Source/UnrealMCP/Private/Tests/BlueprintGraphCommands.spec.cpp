@@ -118,6 +118,22 @@ bool FUnrealMCPBlueprintGraphCommandsTest::RunTest(const FString& Parameters)
 		{
 			return Variable.VarName == FName(*VariableName);
 		}));
+
+		FBPVariableDescription* Variable = Blueprint->NewVariables.FindByPredicate([&VariableName](const FBPVariableDescription& Candidate)
+		{
+			return Candidate.VarName == FName(*VariableName);
+		});
+		TestNotNull(TEXT("Variable should be available for property flag assertions"), Variable);
+		if (Variable)
+		{
+			TSharedPtr<FJsonObject> PrivateResult = GraphCommands.HandleCommand(TEXT("set_blueprint_variable_properties"), MakeObject({
+				{TEXT("blueprint_name"), MakeStringValue(BlueprintName)},
+				{TEXT("variable_name"), MakeStringValue(VariableName)},
+				{TEXT("is_private"), MakeBoolValue(true)}
+			}));
+			TestTrue(TEXT("set_blueprint_variable_properties should accept is_private"), IsSuccessResponse(PrivateResult));
+			TestTrue(TEXT("is_private should set CPF_NativeAccessSpecifierPrivate"), (Variable->PropertyFlags & CPF_NativeAccessSpecifierPrivate) != 0);
+		}
 	}
 
 	DeleteBlueprintIfExists(BlueprintName);

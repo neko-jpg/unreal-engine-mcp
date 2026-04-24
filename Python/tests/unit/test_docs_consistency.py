@@ -60,8 +60,12 @@ class TestDocsToolConsistency:
 
     def _collect_source_tools(self):
         import pathlib
-        src = pathlib.Path(srv.__file__).read_text(encoding="utf-8")
-        return set(m.group(1) for m in re.finditer(r'@mcp\.tool\(\)\s*def\s+(\w+)', src))
+        src_files = [pathlib.Path(srv.__file__)] + list((PYTHON_DIR / "server").glob("*.py"))
+        tools = set()
+        for src_file in src_files:
+            src = src_file.read_text(encoding="utf-8")
+            tools.update(m.group(1) for m in re.finditer(r'@mcp\.tool\(\)\s*def\s+(\w+)', src))
+        return tools
 
     def _collect_docs_tools(self):
         tools = set()

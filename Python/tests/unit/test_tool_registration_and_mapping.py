@@ -15,23 +15,44 @@ Covers:
 import inspect
 import json
 import re
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
 
 import unreal_mcp_server_advanced as srv
 from unreal_mcp_server_advanced import mcp, get_unreal_connection
+from server import actor_tools, blueprint_tools, blueprint_graph_tools, material_tools, world_building_tools
 
 
 def _collect_source_tools():
     """Detect functions wrapped by FastMCP tool decorators in the source module."""
     import pathlib
-    src = pathlib.Path(srv.__file__).read_text(encoding="utf-8")
-    # Allow comments and blank lines between @mcp.tool() and the next def.
-    return [m.group(1) for m in re.finditer(r'@mcp\.tool\(.*?\)[\s]*?def\s+(\w+)', src, re.DOTALL)]
+    python_dir = pathlib.Path(srv.__file__).parent
+    src_files = [pathlib.Path(srv.__file__)] + list((python_dir / "server").glob("*.py"))
+    tools = []
+    for src_file in src_files:
+        src = src_file.read_text(encoding="utf-8")
+        # Allow comments and blank lines between @mcp.tool() and the next def.
+        tools.extend(m.group(1) for m in re.finditer(r'@mcp\.tool\(.*?\)[\s]*?def\s+(\w+)', src, re.DOTALL))
+    return tools
 
 
 TOOL_FUNCS = _collect_source_tools()
+
+
+def _patch_tool_connections(fake_conn):
+    stack = ExitStack()
+    for module in [
+        srv,
+        actor_tools,
+        blueprint_tools,
+        blueprint_graph_tools,
+        material_tools,
+        world_building_tools,
+    ]:
+        stack.enter_context(patch.object(module, "get_unreal_connection", return_value=fake_conn, create=True))
+    return stack
 
 
 class TestToolRegistration:
@@ -111,7 +132,7 @@ class TestToolCommandMapping:
             else:
                 kwargs[name] = "default"
 
-        with patch.object(srv, "get_unreal_connection", return_value=fake_conn):
+        with _patch_tool_connections(fake_conn):
             fn(**kwargs)
 
         # Read the last command sent.
@@ -121,14 +142,14 @@ class TestToolCommandMapping:
         )
 
     def test_create_blueprint_required_params(self, fake_conn):
-        with patch.object(srv, "get_unreal_connection", return_value=fake_conn):
+        with _patch_tool_connections(fake_conn):
             srv.create_blueprint(name="MyBP", parent_class="Actor")
         last = fake_conn.history[-1]
         assert last["params"]["name"] == "MyBP"
         assert last["params"]["parent_class"] == "Actor"
 
     def test_add_component_required_params(self, fake_conn):
-        with patch.object(srv, "get_unreal_connection", return_value=fake_conn):
+        with _patch_tool_connections(fake_conn):
             srv.add_component_to_blueprint(
                 blueprint_name="MyBP",
                 component_type="StaticMeshComponent",
@@ -140,7 +161,7 @@ class TestToolCommandMapping:
         assert last["params"]["component_name"] == "MeshComp"
 
     def test_set_physics_properties_params(self, fake_conn):
-        with patch.object(srv, "get_unreal_connection", return_value=fake_conn):
+        with _patch_tool_connections(fake_conn):
             srv.set_physics_properties(
                 blueprint_name="MyBP",
                 component_name="MeshComp",
@@ -187,7 +208,7 @@ class TestMutableDefaultArguments:
     def add_component_to_blueprint_mutable_defaults_not_shared(self):
         from tests.conftest import FakeUnrealConnection
         fake_conn = FakeUnrealConnection()
-        with patch.object(srv, "get_unreal_connection", return_value=fake_conn):
+        with _patch_tool_connections(fake_conn):
             # First call.
             r1 = srv.add_component_to_blueprint(
                 blueprint_name="BP", component_type="A", component_name="C1",

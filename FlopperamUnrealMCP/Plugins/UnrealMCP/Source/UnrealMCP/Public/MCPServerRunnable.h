@@ -4,6 +4,7 @@
 #include "HAL/Runnable.h"
 #include "Sockets.h"
 #include "Interfaces/IPv4/IPv4Address.h"
+#include <atomic>
 
 class UEpicUnrealMCPBridge;
 
@@ -23,12 +24,11 @@ public:
 	virtual void Exit() override;
 
 protected:
-	void HandleClientConnection(TSharedPtr<FSocket> ClientSocket);
 	void ProcessMessage(TSharedPtr<FSocket> Client, const FString& Message);
 
 private:
 	UEpicUnrealMCPBridge* Bridge;
 	TSharedPtr<FSocket> ListenerSocket;
 	TSharedPtr<FSocket> ClientSocket;
-	bool bRunning;
+	std::atomic<bool> bRunning;
 }; 

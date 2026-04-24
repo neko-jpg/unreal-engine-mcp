@@ -1,6 +1,6 @@
 # Unreal MCP Advanced Server
 
-A streamlined version of the Unreal MCP server that focuses only on advanced composition and building tools, reducing the total tool count from 44 to **21 tools**.
+A streamlined MCP server for Unreal Engine composition and Blueprint workflows. The entrypoint remains `unreal_mcp_server_advanced.py`; implementation is split by responsibility under `server/` and reusable helpers under `helpers/`.
 
 ## What's Included
 
@@ -77,11 +77,19 @@ The following tool categories were removed to reduce complexity:
 
 ## Usage
 
-Run the streamlined server instead of the full one:
+Run the advanced server:
 
 ```bash
 python unreal_mcp_server_advanced.py
 ```
+
+The server connects to `127.0.0.1:55557` by default. Override the target Unreal listener with environment variables:
+
+```bash
+UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55558 python unreal_mcp_server_advanced.py
+```
+
+The matching Unreal plugin listener can be configured from Project Settings under **Plugins -> Unreal MCP** or with the `unreal.mcp.host` and `unreal.mcp.port` console variables before startup.
 
 ## Benefits
 

@@ -256,16 +256,20 @@ TSharedPtr<FJsonObject> FBPVariables::SetVariableProperties(const TSharedPtr<FJs
         UpdatedProperties->SetNumberField("replication_condition", ReplicationConditionValue);
     }
 
-    // Update is_private (Row 7 - MD_AllowPrivateAccess metadata)
+    // Update is_private using the native access-specifier flags consumed by Blueprint compilation.
     if (Params->HasField(TEXT("is_private")))
     {
         bool bIsPrivate = Params->GetBoolField(TEXT("is_private"));
         if (bIsPrivate)
         {
+            VarDesc->PropertyFlags &= ~CPF_NativeAccessSpecifiers;
+            VarDesc->PropertyFlags |= CPF_NativeAccessSpecifierPrivate;
             VarDesc->SetMetaData(TEXT("AllowPrivateAccess"), TEXT("true"));
         }
         else
         {
+            VarDesc->PropertyFlags &= ~CPF_NativeAccessSpecifiers;
+            VarDesc->PropertyFlags |= CPF_NativeAccessSpecifierPublic;
             VarDesc->RemoveMetaData(TEXT("AllowPrivateAccess"));
         }
         UpdatedProperties->SetBoolField("is_private", bIsPrivate);
@@ -426,7 +430,7 @@ FEdGraphPinType FBPVariables::GetPinTypeFromString(const FString& TypeString)
     }
     else
     {
-        // Défaut: float
+        // Default: float
         PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
         PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
     }

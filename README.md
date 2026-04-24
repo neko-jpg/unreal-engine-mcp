@@ -179,7 +179,7 @@ cd unreal-engine-mcp
 **Option B: Add Plugin to Your Existing Project**
 ```bash
 # Copy the plugin to your project
-cp -r UnrealMCP/ YourProject/Plugins/
+cp -r FlopperamUnrealMCP/Plugins/UnrealMCP YourProject/Plugins/
 
 # Enable in Unreal Editor
 Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
@@ -188,7 +188,7 @@ Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
 **Option C: Install for All Projects**
 ```bash
 # Copy to Engine plugins folder (available to all projects)
-cp -r UnrealMCP/ "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
+cp -r FlopperamUnrealMCP/Plugins/UnrealMCP "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
 
 # Enable in any project through the Plugin Browser
 Edit → Plugins → Search "UnrealMCP" → Enable
@@ -266,6 +266,25 @@ cd Python
 uv run unreal_mcp_server_advanced.py
 ```
 
+The Python server connects to Unreal at `127.0.0.1:55557` by default. Override this with environment variables when running multiple Editors or using a non-default bind address:
+
+```bash
+UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55558 uv run unreal_mcp_server_advanced.py
+```
+
+On PowerShell:
+
+```powershell
+$env:UNREAL_MCP_HOST = "127.0.0.1"; $env:UNREAL_MCP_PORT = "55558"; uv run unreal_mcp_server_advanced.py
+```
+
+The Unreal plugin listens on the same defaults. In the Editor, change them under **Project Settings → Plugins → Unreal MCP**, or use console variables before the bridge starts:
+
+```text
+unreal.mcp.host 127.0.0.1
+unreal.mcp.port 55558
+```
+
 ### 3. Configure Your AI Client
 
 Add this to your MCP configuration:
@@ -325,6 +344,8 @@ graph TB
     C --> J[Component System]
     C --> K[Material System]
 ```
+
+The Python entrypoint is intentionally thin. Connection and tool groups live under `Python/server/`, while reusable domain helpers remain under `Python/helpers/`.
 
 **Performance**: Native C++ plugin ensures minimal latency for real-time control
 **Reliability**: Robust TCP communication with automatic reconnection

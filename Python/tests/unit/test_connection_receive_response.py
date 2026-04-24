@@ -22,7 +22,7 @@ from unreal_mcp_server_advanced import UnrealConnection
 
 
 def _payload(data: dict) -> bytes:
-    return json.dumps(data).encode("utf-8")
+    return (json.dumps(data) + "\n").encode("utf-8")
 
 
 class TestReceiveResponseChunks:
@@ -60,9 +60,8 @@ class TestReceiveResponseChunks:
 
     def test_incomplete_json_on_timeout_raises(self, fake_socket_factory):
         conn = UnrealConnection()
-        # Partial JSON only.
         partial = b'{"status": "success", "result": {"a": 1'
-        fake = fake_socket_factory(response_payloads=[partial], timeout_after_recv=True)
+        fake = fake_socket_factory(response_payloads=[partial], timeout_after_recv=True, chunk_size=20)
         with patch.object(conn, "_create_socket", return_value=fake):
             conn.connect()
         with pytest.raises(TimeoutError):
@@ -99,7 +98,7 @@ class TestReceiveResponseChunks:
     def test_incomplete_data_on_close_raises(self, fake_socket_factory):
         conn = UnrealConnection()
         partial = b'{"incomplete"'
-        fake = fake_socket_factory(response_payloads=[partial])  # Single chunk, still incomplete.
+        fake = fake_socket_factory(response_payloads=[partial], chunk_size=8, close_after_n_recv=1)
         with patch.object(conn, "_create_socket", return_value=fake):
             conn.connect()
         with pytest.raises(ConnectionError):

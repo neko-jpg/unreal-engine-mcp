@@ -22,7 +22,6 @@
 #include "Engine/Selection.h"
 #include "Kismet/GameplayStatics.h"
 #include "Async/Async.h"
-// Add Blueprint related includes
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Factories/BlueprintFactory.h"
@@ -35,12 +34,10 @@
 #include "Components/SphereComponent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
-// UE5.5 correct includes
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "UObject/Field.h"
 #include "UObject/FieldPath.h"
-// Blueprint Graph specific includes
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -50,54 +47,89 @@
 #include "GameFramework/InputSettings.h"
 #include "EditorSubsystem.h"
 #include "Subsystems/EditorActorSubsystem.h"
-// Include our new command handler classes
 #include "Commands/EpicUnrealMCPEditorCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
+#include "UnrealMCPSettings.h"
 
-// Default settings
+static TAutoConsoleVariable<FString> CVarMCPHost(
+    TEXT("unreal.mcp.host"),
+    TEXT(""),
+    TEXT("Optional host override for the MCP server. Empty uses Project Settings."),
+    ECVF_Default
+);
+
+static TAutoConsoleVariable<int32> CVarMCPPort(
+    TEXT("unreal.mcp.port"),
+    0,
+    TEXT("Optional port override for the MCP server. 0 uses Project Settings."),
+    ECVF_Default
+);
+
 #define MCP_SERVER_HOST "127.0.0.1"
 #define MCP_SERVER_PORT 55557
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()
+    : bIsRunning(false)
+    , ServerThread(nullptr)
+    , Runnable(nullptr)
 {
     EditorCommands = MakeShared<FEpicUnrealMCPEditorCommands>();
     BlueprintCommands = MakeShared<FEpicUnrealMCPBlueprintCommands>();
     BlueprintGraphCommands = MakeShared<FEpicUnrealMCPBlueprintGraphCommands>();
+
+    const UUnrealMCPSettings* Settings = GetDefault<UUnrealMCPSettings>();
+    FString HostStr = Settings ? Settings->Host : TEXT(MCP_SERVER_HOST);
+    const FString CVarHost = CVarMCPHost.GetValueOnAnyThread();
+    if (!CVarHost.IsEmpty())
+    {
+        HostStr = CVarHost;
+    }
+    if (HostStr.IsEmpty())
+    {
+        HostStr = TEXT(MCP_SERVER_HOST);
+    }
+    if (!FIPv4Address::Parse(HostStr, ServerAddress))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("EpicUnrealMCPBridge: Invalid unreal.mcp.host '%s', falling back to 127.0.0.1"), *HostStr);
+        FIPv4Address::Parse(TEXT(MCP_SERVER_HOST), ServerAddress);
+    }
+
+    int32 ConfiguredPort = Settings ? Settings->Port : MCP_SERVER_PORT;
+    const int32 CVarPort = CVarMCPPort.GetValueOnAnyThread();
+    if (CVarPort > 0)
+    {
+        ConfiguredPort = CVarPort;
+    }
+    if (ConfiguredPort < 1 || ConfiguredPort > 65535)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("EpicUnrealMCPBridge: Invalid MCP port %d, falling back to %d"), ConfiguredPort, MCP_SERVER_PORT);
+        ConfiguredPort = MCP_SERVER_PORT;
+    }
+    Port = static_cast<uint16>(ConfiguredPort);
 }
 
 UEpicUnrealMCPBridge::~UEpicUnrealMCPBridge()
 {
+    StopServer();
     EditorCommands.Reset();
     BlueprintCommands.Reset();
     BlueprintGraphCommands.Reset();
 }
 
-// Initialize subsystem
 void UEpicUnrealMCPBridge::Initialize(FSubsystemCollectionBase& Collection)
 {
-    UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Initializing"));
-    
-    bIsRunning = false;
-    ListenerSocket = nullptr;
-    ConnectionSocket = nullptr;
-    ServerThread = nullptr;
-    Port = MCP_SERVER_PORT;
-    FIPv4Address::Parse(MCP_SERVER_HOST, ServerAddress);
-
-    // Start the server automatically
+    UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Initializing"));
     StartServer();
 }
 
-// Clean up resources when subsystem is destroyed
 void UEpicUnrealMCPBridge::Deinitialize()
 {
-    UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Shutting down"));
+    UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Shutting down"));
     StopServer();
 }
 
-// Start the MCP server
 void UEpicUnrealMCPBridge::StartServer()
 {
     if (bIsRunning)
@@ -106,7 +138,6 @@ void UEpicUnrealMCPBridge::StartServer()
         return;
     }
 
-    // Create socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (!SocketSubsystem)
     {
@@ -114,7 +145,6 @@ void UEpicUnrealMCPBridge::StartServer()
         return;
     }
 
-    // Create listener socket
     TSharedPtr<FSocket> NewListenerSocket = MakeShareable(SocketSubsystem->CreateSocket(NAME_Stream, TEXT("UnrealMCPListener"), false));
     if (!NewListenerSocket.IsValid())
     {
@@ -122,32 +152,31 @@ void UEpicUnrealMCPBridge::StartServer()
         return;
     }
 
-    // Allow address reuse for quick restarts
     NewListenerSocket->SetReuseAddr(true);
     NewListenerSocket->SetNonBlocking(true);
 
-    // Bind to address
     FIPv4Endpoint Endpoint(ServerAddress, Port);
     if (!NewListenerSocket->Bind(*Endpoint.ToInternetAddr()))
     {
         UE_LOG(LogTemp, Error, TEXT("EpicUnrealMCPBridge: Failed to bind listener socket to %s:%d"), *ServerAddress.ToString(), Port);
+        ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(NewListenerSocket.Get());
         return;
     }
 
-    // Start listening
     if (!NewListenerSocket->Listen(5))
     {
         UE_LOG(LogTemp, Error, TEXT("EpicUnrealMCPBridge: Failed to start listening"));
+        ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(NewListenerSocket.Get());
         return;
     }
 
     ListenerSocket = NewListenerSocket;
     bIsRunning = true;
-    UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Server started on %s:%d"), *ServerAddress.ToString(), Port);
+    UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Server started on %s:%d"), *ServerAddress.ToString(), Port);
 
-    // Start server thread
+    Runnable = new FMCPServerRunnable(this, ListenerSocket);
     ServerThread = FRunnableThread::Create(
-        new FMCPServerRunnable(this, ListenerSocket),
+        Runnable,
         TEXT("UnrealMCPServerThread"),
         0, TPri_Normal
     );
@@ -160,7 +189,6 @@ void UEpicUnrealMCPBridge::StartServer()
     }
 }
 
-// Stop the MCP server
 void UEpicUnrealMCPBridge::StopServer()
 {
     if (!bIsRunning)
@@ -170,15 +198,33 @@ void UEpicUnrealMCPBridge::StopServer()
 
     bIsRunning = false;
 
-    // Clean up thread
+    if (Runnable)
+    {
+        Runnable->Stop();
+    }
+
+    if (ListenerSocket.IsValid())
+    {
+        ListenerSocket->Close();
+    }
+    if (ConnectionSocket.IsValid())
+    {
+        ConnectionSocket->Close();
+    }
+
     if (ServerThread)
     {
-        ServerThread->Kill(true);
+        ServerThread->WaitForCompletion();
         delete ServerThread;
         ServerThread = nullptr;
     }
 
-    // Close sockets
+    if (Runnable)
+    {
+        delete Runnable;
+        Runnable = nullptr;
+    }
+
     if (ConnectionSocket.IsValid())
     {
         ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(ConnectionSocket.Get());
@@ -191,13 +237,12 @@ void UEpicUnrealMCPBridge::StopServer()
         ListenerSocket.Reset();
     }
 
-    UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Server stopped"));
+    UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Server stopped"));
 }
 
-// Execute a command received from a client
 FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
-    UE_LOG(LogTemp, Display, TEXT("EpicUnrealMCPBridge: Executing command: %s"), *CommandType);
+    UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Executing command: %s"), *CommandType);
 
     auto ExecuteOnCurrentThread = [this, &CommandType, &Params]() -> FString
     {
@@ -212,17 +257,15 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                 ResultJson = MakeShareable(new FJsonObject);
                 ResultJson->SetStringField(TEXT("message"), TEXT("pong"));
             }
-            // Editor Commands (including actor manipulation)
-            else if (CommandType == TEXT("get_actors_in_level") || 
+            else if (CommandType == TEXT("get_actors_in_level") ||
                      CommandType == TEXT("find_actors_by_name") ||
                      CommandType == TEXT("spawn_actor") ||
-                     CommandType == TEXT("delete_actor") || 
+                     CommandType == TEXT("delete_actor") ||
                      CommandType == TEXT("set_actor_transform") ||
                      CommandType == TEXT("spawn_blueprint_actor"))
             {
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
             }
-            // Blueprint Commands
             else if (CommandType == TEXT("create_blueprint") ||
                      CommandType == TEXT("add_component_to_blueprint") ||
                      CommandType == TEXT("set_physics_properties") ||
@@ -241,7 +284,6 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
             {
                 ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
             }
-            // Blueprint Graph Commands
             else if (CommandType == TEXT("add_blueprint_node") ||
                      CommandType == TEXT("connect_nodes") ||
                      CommandType == TEXT("create_variable") ||
@@ -263,12 +305,12 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                 ResponseJson->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *CommandType));
 
                 FString UnknownCommandResult;
-                TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&UnknownCommandResult);
+                TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+                    TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&UnknownCommandResult);
                 FJsonSerializer::Serialize(ResponseJson.ToSharedRef(), Writer);
                 return UnknownCommandResult;
             }
 
-            // Check if the result contains an error
             bool bSuccess = true;
             FString ErrorMessage;
 
@@ -280,16 +322,14 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                     ErrorMessage = ResultJson->GetStringField(TEXT("error"));
                 }
             }
-            
+
             if (bSuccess)
             {
-                // Set success status and include the result
                 ResponseJson->SetStringField(TEXT("status"), TEXT("success"));
                 ResponseJson->SetObjectField(TEXT("result"), ResultJson);
             }
             else
             {
-                // Set error status and include the error message
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
                 ResponseJson->SetStringField(TEXT("error"), ErrorMessage);
             }
@@ -297,11 +337,12 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
         catch (const std::exception& e)
         {
             ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
-                ResponseJson->SetStringField(TEXT("error"), UTF8_TO_TCHAR(e.what()));
+            ResponseJson->SetStringField(TEXT("error"), UTF8_TO_TCHAR(e.what()));
         }
 
         FString ResultString;
-        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
+        TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ResultString);
         FJsonSerializer::Serialize(ResponseJson.ToSharedRef(), Writer);
         return ResultString;
     };
@@ -311,11 +352,9 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
         return ExecuteOnCurrentThread();
     }
 
-    // Create a promise to wait for the result
     TPromise<FString> Promise;
     TFuture<FString> Future = Promise.GetFuture();
 
-    // Queue execution on Game Thread
     AsyncTask(ENamedThreads::GameThread, [ExecuteOnCurrentThread, Promise = MoveTemp(Promise)]() mutable
     {
         Promise.SetValue(ExecuteOnCurrentThread());

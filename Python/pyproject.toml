@@ -26,8 +26,11 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# The advanced server script is a single-file module
 py-modules = ["unreal_mcp_server_advanced"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server*", "helpers*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -41,7 +44,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["helpers", "unreal_mcp_server_advanced.py"]
+source = ["helpers", "server", "unreal_mcp_server_advanced.py"]
 omit = ["tests/*", ".venv/*"]
 
 [tool.coverage.report]

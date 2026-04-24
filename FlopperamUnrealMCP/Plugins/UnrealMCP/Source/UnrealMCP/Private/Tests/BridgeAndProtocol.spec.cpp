@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 
 #include "EpicUnrealMCPBridge.h"
+#include "HAL/IConsoleManager.h"
 #include "Tests/MCPAutomationTestUtils.h"
 
 using namespace UnrealMCP::Tests;
@@ -39,6 +40,34 @@ bool FUnrealMCPBridgeRoutingTest::RunTest(const FString& Parameters)
 		{TEXT("name"), MakeStringValue(ActorName)}
 	}));
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealMCPBridgeConfigTest, "UnrealMCP.L1.Bridge.Configuration", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnrealMCPBridgeConfigTest::RunTest(const FString& Parameters)
+{
+	IConsoleVariable* HostCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("unreal.mcp.host"));
+	IConsoleVariable* PortCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("unreal.mcp.port"));
+	TestNotNull(TEXT("unreal.mcp.host CVar should exist"), HostCVar);
+	TestNotNull(TEXT("unreal.mcp.port CVar should exist"), PortCVar);
+	if (!HostCVar || !PortCVar)
+	{
+		return false;
+	}
+
+	HostCVar->Set(TEXT("127.0.0.2"), ECVF_SetByCode);
+	PortCVar->Set(55558, ECVF_SetByCode);
+	UEpicUnrealMCPBridge* Bridge = NewObject<UEpicUnrealMCPBridge>();
+	TestNotNull(TEXT("Bridge instance should be created"), Bridge);
+	if (Bridge)
+	{
+		TestEqual(TEXT("Bridge should use CVar host override"), Bridge->GetServerAddress().ToString(), FString(TEXT("127.0.0.2")));
+		TestEqual(TEXT("Bridge should use CVar port override"), static_cast<int32>(Bridge->GetServerPort()), 55558);
+	}
+
+	HostCVar->Set(TEXT(""), ECVF_SetByCode);
+	PortCVar->Set(0, ECVF_SetByCode);
 	return true;
 }
 

@@ -146,7 +146,7 @@ def reset_singletons():
     """
     Reset global singletons between tests to avoid cross-test pollution.
     """
-    import unreal_mcp_server_advanced as srv
+    import server.core as srv
     import helpers.actor_name_manager as anm
 
     with srv._connection_lock:

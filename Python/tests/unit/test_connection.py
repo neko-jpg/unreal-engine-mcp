@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
-import unreal_mcp_server_advanced as srv
+import server.core as srv
 from unreal_mcp_server_advanced import UnrealConnection, get_unreal_connection, reset_unreal_connection
 
 
@@ -135,7 +135,7 @@ class TestSendCommandRetry:
         conn = UnrealConnection()
         # First attempt disconnects on recv, second attempt succeeds.
         fail = fake_socket_factory(response_payloads=[], close_after_n_recv=1)
-        success_payload = json.dumps({"status": "success", "result": {"name": "A"}}).encode("utf-8")
+        success_payload = json.dumps({"status": "success", "result": {"name": "A"}}).encode("utf-8") + b"\n"
         ok = fake_socket_factory(response_payloads=[success_payload])
 
         created = []
@@ -179,17 +179,17 @@ class TestSendCommandRetry:
 class TestSendCommandOnce:
     def test_payload_contains_type_and_params(self, fake_socket_factory):
         conn = UnrealConnection()
-        payload = json.dumps({"status": "success", "result": {}}).encode("utf-8")
+        payload = json.dumps({"status": "success", "result": {}}).encode("utf-8") + b"\n"
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             conn._send_command_once("my_cmd", {"key": 42}, 0)
         sent = json.loads(fake._last_sent.decode("utf-8"))
-        assert sent["type"] == "my_cmd"
+        assert sent["command"] == "my_cmd"
         assert sent["params"] == {"key": 42}
 
     def test_payload_with_none_params_defaults_to_empty_dict(self, fake_socket_factory):
         conn = UnrealConnection()
-        payload = json.dumps({"status": "success", "result": {}}).encode("utf-8")
+        payload = json.dumps({"status": "success", "result": {}}).encode("utf-8") + b"\n"
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             conn._send_command_once("my_cmd", None, 0)
@@ -198,7 +198,7 @@ class TestSendCommandOnce:
 
     def test_error_response_returned_as_is(self, fake_socket_factory):
         conn = UnrealConnection()
-        payload = json.dumps({"status": "error", "error": "not found"}).encode("utf-8")
+        payload = json.dumps({"status": "error", "error": "not found"}).encode("utf-8") + b"\n"
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             resp = conn._send_command_once("my_cmd", {}, 0)
@@ -207,7 +207,7 @@ class TestSendCommandOnce:
 
     def test_legacy_success_false_normalized_to_error(self, fake_socket_factory):
         conn = UnrealConnection()
-        payload = json.dumps({"success": False, "error": "legacy fail"}).encode("utf-8")
+        payload = json.dumps({"success": False, "error": "legacy fail"}).encode("utf-8") + b"\n"
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             resp = conn._send_command_once("my_cmd", {}, 0)
@@ -280,18 +280,15 @@ class TestSendCommandErrors:
 
     def test_json_decode_error(self, fake_socket_factory):
         conn = UnrealConnection()
-        bad = b'{"incomplete"'
-        # Payload arrives once -> _receive_response tries JSON, fails, continues,
-        # then next recv is empty -> ConnectionError with incomplete data.
-        # _send_command_once surfaces that _receive_response exception.
+        bad = b'{"incomplete"}\n'
         fake = fake_socket_factory(response_payloads=[bad])
         with patch.object(conn, "_create_socket", return_value=fake):
-            with pytest.raises(ConnectionError):
+            with pytest.raises(ValueError):
                 conn._send_command_once("cmd", {}, 0)
 
     def test_empty_response(self, fake_socket_factory):
         conn = UnrealConnection()
         fake = fake_socket_factory(response_payloads=[b""])
         with patch.object(conn, "_create_socket", return_value=fake):
-            with pytest.raises((ConnectionError, json.JSONDecodeError)):
+            with pytest.raises(ConnectionError):
                 conn._send_command_once("cmd", {}, 0)

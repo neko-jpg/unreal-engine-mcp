@@ -21,7 +21,7 @@ from unreal_mcp_server_advanced import UnrealConnection
 
 
 def _payload(data: dict) -> bytes:
-    return json.dumps(data).encode("utf-8")
+    return (json.dumps(data) + "\n").encode("utf-8")
 
 
 class TestSingleCommandPerSend:
@@ -34,7 +34,7 @@ class TestSingleCommandPerSend:
         sent = json.loads(fake._last_sent.decode("utf-8"))
         # Single JSON root object.
         assert isinstance(sent, dict)
-        assert sent["type"] == "my_command"
+        assert sent["command"] == "my_command"
 
 
 class TestMultiChunkReassembly:
@@ -78,20 +78,19 @@ class TestIncompleteJsonDoesNotSucceed:
     def test_partial_json_raises(self, fake_socket_factory):
         conn = UnrealConnection()
         partial = b'{"status": "success", "result": {"a": 1'
-        fake = fake_socket_factory(response_payloads=[partial])
+        fake = fake_socket_factory(response_payloads=[partial], chunk_size=8, close_after_n_recv=1)
         with patch.object(conn, "_create_socket", return_value=fake):
             conn.connect()
-        with pytest.raises((ConnectionError, json.JSONDecodeError)):
+        with pytest.raises(ConnectionError):
             conn._receive_response("spawn_actor")
 
     def test_truncated_after_valid_prefix_raises(self, fake_socket_factory):
         conn = UnrealConnection()
-        # Prefix looks valid, but JSON is not actually closed.
         partial = b'{"status": "success", "result": '
-        fake = fake_socket_factory(response_payloads=[partial])
+        fake = fake_socket_factory(response_payloads=[partial], chunk_size=8, close_after_n_recv=1)
         with patch.object(conn, "_create_socket", return_value=fake):
             conn.connect()
-        with pytest.raises((ConnectionError, json.JSONDecodeError)):
+        with pytest.raises(ConnectionError):
             conn._receive_response("spawn_actor")
 
     def test_empty_response_raises(self, fake_socket_factory):
