@@ -19,6 +19,7 @@ namespace UnrealMCP::Tests
 	TSharedPtr<FJsonValue> MakeBoolValue(bool bValue);
 	TSharedPtr<FJsonValue> MakeNumberValue(double Value);
 	TSharedPtr<FJsonValue> MakeArrayValue(std::initializer_list<double> Values);
+	TSharedPtr<FJsonValue> MakeArrayValue(std::initializer_list<TSharedPtr<FJsonValue>> Values);
 	TSharedPtr<FJsonValue> MakeObjectValue(const TSharedPtr<FJsonObject>& Value);
 
 	bool IsSuccessResponse(const TSharedPtr<FJsonObject>& Response);

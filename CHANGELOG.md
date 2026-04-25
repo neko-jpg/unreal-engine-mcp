@@ -4,6 +4,88 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-04-26] - scenectl CLI MVP
+
+### Added
+
+- Added `scripts/scenectl.py`, a thin CLI over `scene-syncd` for `doctor`, local `start`/`stop`, scene creation, object listing, DB tag add/remove, safe tombstone dry-runs, sync plan, and guarded sync apply.
+- Added root `scenectl.cmd` so Windows CMD can run `scenectl ...` from the repository root.
+- Added an interactive `scenectl` shell when no arguments are provided, with color output, slash commands (`/help`, `/doctor`, `/object ...`, `/exit`), and Windows candidate display when typing `/` or pressing `Tab`.
+- Added project-local OpenCode slash commands under `.opencode/commands/`: `/scenectl`, `/scene-doctor`, `/scene-list`, `/scene-plan`, `/scene-apply`, and `/scene-delete-dry-run`.
+- Added `docs/scene-sync/13_scenectl_cli.md` with usage, safety rules, and current limits.
+- Added unit coverage for CLI object filtering and upsert payload construction.
+
+### Fixed
+
+- Fixed scene object tag persistence in `scene-syncd` by adding `tags.*` schema typing and explicitly writing tags after object upserts.
+
+### Verification
+
+- Ran `python scripts/scenectl.py --help`.
+- Ran `python -m pytest tests/unit/test_scenectl.py -v` in `Python`.
+- Ran `cargo build` in `rust/scene-syncd`; existing unused-code warnings remain.
+- Ran `python scripts/scenectl.py doctor` successfully against SurrealDB, `scene-syncd`, and Unreal.
+- Ran `cmd /c "(echo /help & echo /exit) | scenectl"` and `cmd /c "(echo /doctor & echo /exit) | scenectl"` to verify the interactive shell.
+- Tagged the `castle_crown_064013` scene objects by group, then verified `python scripts/scenectl.py object list --scene castle_crown_064013 --tag white_castle_crown` returned 22 objects.
+- Verified delete and apply safety guards: `object delete --dry-run` listed targets without writing, and `apply` without `--yes` refused to run.
+
+---
+
+## [2026-04-26] - Scene sync craft-flow regression fix
+
+### Fixed
+
+- Fixed `scene-syncd` object upserts after initial creation by normalizing omitted or JSON `null` object fields (`asset_ref`, `visual`, `physics`, `metadata`) to `{}` before writing to SurrealDB schemafull `object` fields.
+
+### Verification
+
+- Ran `cargo test object_or_empty` in `rust/scene-syncd`.
+- Ran `cargo build` in `rust/scene-syncd`; existing unused-code warnings remain.
+- Re-ran a DB-driven craft test through SurrealDB and `scene-syncd`: bulk-created 12 Unreal actors for `craft_lab_063003`, then updated the `forge_core` transform through DB state and verified Unreal reported location `[800, 0, 230]` via `find_actor_by_mcp_id`.
+
+---
+
+## [2026-04-25] - OpenCode MCP configuration fix
+
+### Fixed
+
+- Updated the OpenCode MCP configuration sample from the legacy `mcpServers` shape to the current top-level `mcp` schema so OpenCode 1.14.x accepts the config.
+- Added `.opencode/opencode.jsonc` as a project-local OpenCode config that starts the Unreal MCP server through the repository Python virtual environment.
+
+### Verification
+
+- Ran `opencode debug config` successfully against `C:\Users\arat2\.config\opencode\opencode.jsonc`.
+- Ran `opencode mcp list` successfully; `unreal-engine-mcp` connected with 57 tools.
+- Verified the direct `.venv` Python command imports `unreal_mcp_server_advanced` successfully.
+
+---
+
+## [2026-04-25] - Phase 4 scene-syncd verification
+
+### Fixed
+
+- Fixed `scene-syncd` Unreal bridge framing to use newline-delimited JSON, matching the current Unreal MCP plugin and Python client behavior.
+- Fixed SurrealDB persistence for Phase 4 create sync by aligning timestamp serialization with SurrealDB `datetime` fields, avoiding serialized string timestamps in schemafull tables.
+- Fixed `scene-syncd` record creation for scenes, scene objects, sync runs, and operation logs so SurrealDB record IDs are not serialized as ordinary string fields.
+- Updated the local SurrealDB schema definitions used by `scene-syncd` to match the current Rust domain model for string scene/object references and nested transform fields.
+
+### Added
+
+- Added `scripts/verify_phase4.py` to verify the Phase 4 create-only flow end to end: create desired state through `scene-syncd`, apply sync, then confirm the actor exists in Unreal.
+
+### Verification
+
+- Installed SurrealDB v2.4.0 locally under `tools/surrealdb/surreal.exe`.
+- Started SurrealDB on `127.0.0.1:8000` and `scene-syncd` on `127.0.0.1:8787`.
+- Ran `cargo build` in `rust/scene-syncd` successfully. Existing unused-code warnings remain.
+- Ran `python scripts/verify_phase4.py` successfully; it created `Phase4VerifyCube_20260425191854` in Unreal through `/sync/apply`.
+
+### Notes
+
+- The currently running Unreal plugin responds `Unknown command` for `find_actor_by_mcp_id`, so the active editor binary does not appear to include the repository's newer mcp_id command handlers. Create-only actor generation is verified, but mcp_id-based post-apply reconciliation requires launching a rebuilt plugin binary with those handlers.
+
+---
+
 ## [2026-04-25] - Unreal project cleanup and shutdown crash fix
 
 ### Fixed

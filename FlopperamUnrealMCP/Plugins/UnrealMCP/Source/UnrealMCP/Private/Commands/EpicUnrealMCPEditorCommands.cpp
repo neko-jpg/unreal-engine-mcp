@@ -60,6 +60,19 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
     {
         return HandleSetActorTransform(Params);
     }
+    // MCP identity commands
+    else if (CommandType == TEXT("find_actor_by_mcp_id"))
+    {
+        return HandleFindActorByMcpId(Params);
+    }
+    else if (CommandType == TEXT("set_actor_transform_by_mcp_id"))
+    {
+        return HandleSetActorTransformByMcpId(Params);
+    }
+    else if (CommandType == TEXT("delete_actor_by_mcp_id"))
+    {
+        return HandleDeleteActorByMcpId(Params);
+    }
     // Blueprint actor spawning
     else if (CommandType == TEXT("spawn_blueprint_actor"))
     {
@@ -246,6 +259,34 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnActor(const TSh
         Transform.SetScale3D(Scale);
         NewActor->SetActorTransform(Transform);
 
+        // Apply mcp_id tag if provided
+        FString McpId;
+        if (Params->TryGetStringField(TEXT("mcp_id"), McpId) && !McpId.IsEmpty())
+        {
+            NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+            NewActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *McpId)));
+        }
+
+        // Apply additional tags if provided
+        if (Params->HasField(TEXT("tags")))
+        {
+            const TArray<TSharedPtr<FJsonValue>>* TagsJsonArray;
+            if (Params->TryGetArrayField(TEXT("tags"), TagsJsonArray))
+            {
+                for (const TSharedPtr<FJsonValue>& TagValue : *TagsJsonArray)
+                {
+                    if (TagValue->Type == EJson::String)
+                    {
+                        FString TagStr = TagValue->AsString();
+                        if (!TagStr.IsEmpty())
+                        {
+                            NewActor->Tags.AddUnique(FName(*TagStr));
+                        }
+                    }
+                }
+            }
+        }
+
         // Return the created actor's details
         return FEpicUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
     }
@@ -366,6 +407,207 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorTransform(co
 
     // Return updated actor info
     return FEpicUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true);
+}
+
+AActor* FEpicUnrealMCPEditorCommands::FindActorByMcpId(UWorld* World, const FString& McpId) const
+{
+    if (!World || McpId.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    const FName TargetTag(*FString::Printf(TEXT("mcp_id:%s"), *McpId));
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+    AActor* FoundActor = nullptr;
+    int32 MatchCount = 0;
+    for (AActor* Actor : AllActors)
+    {
+        if (Actor && Actor->Tags.Contains(TargetTag))
+        {
+            FoundActor = Actor;
+            MatchCount++;
+        }
+    }
+
+    if (MatchCount > 1)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("FindActorByMcpId: Multiple actors found with mcp_id '%s'"), *McpId);
+    }
+
+    return FoundActor;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleFindActorByMcpId(const TSharedPtr<FJsonObject>& Params)
+{
+    FString McpId;
+    if (!Params->TryGetStringField(TEXT("mcp_id"), McpId) || McpId.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'mcp_id' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    const FName TargetTag(*FString::Printf(TEXT("mcp_id:%s"), *McpId));
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+    TArray<AActor*> MatchingActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (Actor && Actor->Tags.Contains(TargetTag))
+        {
+            MatchingActors.Add(Actor);
+        }
+    }
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    if (MatchingActors.Num() == 0)
+    {
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetStringField(TEXT("message"), TEXT("No actor found with the given mcp_id"));
+        ResultObj->SetObjectField(TEXT("actor"), nullptr);
+    }
+    else if (MatchingActors.Num() == 1)
+    {
+        ResultObj->SetBoolField(TEXT("success"), true);
+        TSharedPtr<FJsonValue> ActorJsonValue = FEpicUnrealMCPCommonUtils::ActorToJson(MatchingActors[0]);
+        if (ActorJsonValue.IsValid() && ActorJsonValue->Type == EJson::Object)
+        {
+            ResultObj->SetObjectField(TEXT("actor"), ActorJsonValue->AsObject());
+        }
+    }
+    else
+    {
+        ResultObj->SetBoolField(TEXT("success"), false);
+        ResultObj->SetStringField(TEXT("error"), FString::Printf(TEXT("Multiple actors found with mcp_id '%s'"), *McpId));
+        TArray<TSharedPtr<FJsonValue>> ConflictArray;
+        for (AActor* Actor : MatchingActors)
+        {
+            ConflictArray.Add(FEpicUnrealMCPCommonUtils::ActorToJson(Actor));
+        }
+        ResultObj->SetArrayField(TEXT("actors"), ConflictArray);
+    }
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorTransformByMcpId(const TSharedPtr<FJsonObject>& Params)
+{
+    FString McpId;
+    if (!Params->TryGetStringField(TEXT("mcp_id"), McpId) || McpId.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'mcp_id' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* TargetActor = FindActorByMcpId(World, McpId);
+    if (!TargetActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor with mcp_id '%s' not found"), *McpId));
+    }
+
+    FTransform NewTransform = TargetActor->GetTransform();
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Actor Transform By McpId")));
+    TargetActor->Modify();
+
+    FString ParamError;
+
+    if (Params->HasField(TEXT("location")))
+    {
+        FVector NewLocation;
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("location"), NewLocation, ParamError))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Invalid 'location': %s"), *ParamError));
+        }
+        NewTransform.SetLocation(NewLocation);
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        FRotator NewRotation;
+        if (!FEpicUnrealMCPCommonUtils::TryGetRotatorFromJson(Params, TEXT("rotation"), NewRotation, ParamError))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Invalid 'rotation': %s"), *ParamError));
+        }
+        NewTransform.SetRotation(FQuat(NewRotation));
+    }
+    if (Params->HasField(TEXT("scale")))
+    {
+        FVector NewScale;
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("scale"), NewScale, ParamError))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Invalid 'scale': %s"), *ParamError));
+        }
+        NewTransform.SetScale3D(NewScale);
+    }
+
+    TargetActor->SetActorTransform(NewTransform);
+
+    return FEpicUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId(const TSharedPtr<FJsonObject>& Params)
+{
+    FString McpId;
+    if (!Params->TryGetStringField(TEXT("mcp_id"), McpId) || McpId.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'mcp_id' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+    const FName TargetTag(*FString::Printf(TEXT("mcp_id:%s"), *McpId));
+    TArray<AActor*> MatchingActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (Actor && Actor->Tags.Contains(TargetTag))
+        {
+            MatchingActors.Add(Actor);
+        }
+    }
+
+    if (MatchingActors.Num() == 0)
+    {
+        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("No actor with mcp_id '%s' found (already deleted)"), *McpId));
+        ResultObj->SetBoolField(TEXT("deleted"), false);
+        return ResultObj;
+    }
+
+    if (MatchingActors.Num() > 1)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Multiple actors found with mcp_id '%s'"), *McpId));
+    }
+
+    AActor* Actor = MatchingActors[0];
+    TSharedPtr<FJsonObject> ActorInfo = FEpicUnrealMCPCommonUtils::ActorToJsonObject(Actor);
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Delete Actor By McpId")));
+    Actor->Modify();
+    Actor->Destroy();
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetObjectField(TEXT("deleted_actor"), ActorInfo);
+    ResultObj->SetBoolField(TEXT("deleted"), true);
+    return ResultObj;
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params)

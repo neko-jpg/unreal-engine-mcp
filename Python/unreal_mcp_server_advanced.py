@@ -25,6 +25,9 @@ from server.actor_tools import (
     spawn_actor,
     set_actor_transform,
     batch_spawn_actors,
+    find_actor_by_mcp_id,
+    set_actor_transform_by_mcp_id,
+    delete_actor_by_mcp_id,
 )
 
 from server.blueprint_tools import (
@@ -77,6 +80,16 @@ from server.world_building_tools import (
     create_castle_fortress,
     create_suspension_bridge,
     create_aqueduct,
+)
+
+from server.scene_tools import (
+    scene_create,
+    scene_upsert_actor,
+    scene_upsert_actors,
+    scene_delete_actor,
+    scene_list_objects,
+    scene_health,
+    scene_plan_sync,
 )
 
 

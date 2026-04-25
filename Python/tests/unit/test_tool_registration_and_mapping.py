@@ -106,6 +106,9 @@ class TestToolCommandMapping:
         ("get_actor_material_info", "get_actor_material_info"),
         ("get_blueprint_material_info", "get_blueprint_material_info"),
         ("set_mesh_material_color", "set_mesh_material_color"),
+        ("find_actor_by_mcp_id", "find_actor_by_mcp_id"),
+        ("set_actor_transform_by_mcp_id", "set_actor_transform_by_mcp_id"),
+        ("delete_actor_by_mcp_id", "delete_actor_by_mcp_id"),
     ])
     def test_tool_calls_expected_command(self, tool_name, expected_cmd, fake_conn):
         fn = getattr(srv, tool_name)
@@ -321,6 +324,9 @@ class TestPythonToCppCommandMapping:
             "spawn_physics_blueprint_actor",
             "set_mesh_material_color",
             "batch_spawn_actors",
+            "scene_create", "scene_upsert_actor", "scene_upsert_actors",
+            "scene_delete_actor", "scene_list_objects", "scene_health",
+            "scene_plan_sync",
         }
         registered = self._collect_registered_tool_names()
         missing = []
@@ -381,6 +387,9 @@ class TestPythonToCppCommandMapping:
             "delete_actor": "delete_actor",
             "spawn_actor": "spawn_actor",
             "set_actor_transform": "set_actor_transform",
+            "find_actor_by_mcp_id": "find_actor_by_mcp_id",
+            "set_actor_transform_by_mcp_id": "set_actor_transform_by_mcp_id",
+            "delete_actor_by_mcp_id": "delete_actor_by_mcp_id",
             "create_blueprint": "create_blueprint",
             "add_component_to_blueprint": "add_component_to_blueprint",
             "set_static_mesh_properties": "set_static_mesh_properties",

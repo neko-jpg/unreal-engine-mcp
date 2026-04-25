@@ -25,6 +25,14 @@ private:
     TSharedPtr<FJsonObject> HandleDeleteActor(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetActorTransform(const TSharedPtr<FJsonObject>& Params);
 
+    // MCP identity commands
+    TSharedPtr<FJsonObject> HandleFindActorByMcpId(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetActorTransformByMcpId(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleDeleteActorByMcpId(const TSharedPtr<FJsonObject>& Params);
+
+    // Helper
+    AActor* FindActorByMcpId(UWorld* World, const FString& McpId) const;
+
     // Blueprint actor spawning
     TSharedPtr<FJsonObject> HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params);
 }; 

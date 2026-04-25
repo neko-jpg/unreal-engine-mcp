@@ -569,6 +569,21 @@ TSharedPtr<FJsonValue> FEpicUnrealMCPCommonUtils::ActorToJson(AActor* Actor)
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Y));
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
     ActorObject->SetArrayField(TEXT("scale"), ScaleArray);
+
+    TArray<TSharedPtr<FJsonValue>> TagsArray;
+    for (const FName& Tag : Actor->Tags)
+    {
+        TagsArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+    }
+    ActorObject->SetArrayField(TEXT("tags"), TagsArray);
+
+    FString StaticMeshPath;
+    UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetComponentByClass(UStaticMeshComponent::StaticClass()));
+    if (MeshComp && MeshComp->GetStaticMesh())
+    {
+        StaticMeshPath = MeshComp->GetStaticMesh()->GetPathName();
+    }
+    ActorObject->SetStringField(TEXT("static_mesh"), StaticMeshPath);
     
     return MakeShared<FJsonValueObject>(ActorObject);
 }
@@ -604,6 +619,21 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::ActorToJsonObject(AActor* Act
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Y));
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
     ActorObject->SetArrayField(TEXT("scale"), ScaleArray);
+
+    TArray<TSharedPtr<FJsonValue>> TagsArray;
+    for (const FName& Tag : Actor->Tags)
+    {
+        TagsArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+    }
+    ActorObject->SetArrayField(TEXT("tags"), TagsArray);
+
+    FString StaticMeshPath;
+    UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetComponentByClass(UStaticMeshComponent::StaticClass()));
+    if (MeshComp && MeshComp->GetStaticMesh())
+    {
+        StaticMeshPath = MeshComp->GetStaticMesh()->GetPathName();
+    }
+    ActorObject->SetStringField(TEXT("static_mesh"), StaticMeshPath);
     
     return ActorObject;
 }

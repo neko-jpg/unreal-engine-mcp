@@ -75,9 +75,11 @@ def spawn_actor(
     location: Optional[List[float]] = None,
     rotation: Optional[List[float]] = None,
     scale: Optional[List[float]] = None,
-    static_mesh: Optional[str] = None
+    static_mesh: Optional[str] = None,
+    mcp_id: Optional[str] = None,
+    tags: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    """Spawn an actor by type and name."""
+    """Spawn an actor by type and name. Optionally assign an mcp_id tag and additional tags for scene sync identity."""
     try:
         validate_string(type, "type")
         validate_string(name, "name")
@@ -105,6 +107,10 @@ def spawn_actor(
             params["scale"] = scale
         if static_mesh is not None:
             params["static_mesh"] = static_mesh
+        if mcp_id is not None:
+            params["mcp_id"] = mcp_id
+        if tags is not None:
+            params["tags"] = tags
 
         return safe_spawn_actor(unreal, params, auto_unique_name=False)
     except Exception as e:
@@ -152,11 +158,11 @@ def batch_spawn_actors(
     actors: List[Dict[str, Any]],
     dry_run: bool = False
 ) -> Dict[str, Any]:
-    """Spawn multiple actors in a single call. Each actor dict should have 'name', 'type', and optionally 'location', 'rotation', 'scale', 'static_mesh'.
+    """Spawn multiple actors in a single call. Each actor dict should have 'name', 'type', and optionally 'location', 'rotation', 'scale', 'static_mesh', 'mcp_id', 'tags'.
 
     Example:
         actors = [
-            {"name": "Wall_001", "type": "StaticMeshActor", "location": [0,0,0], "static_mesh": "/Engine/BasicShapes/Cube.Cube"},
+            {"name": "Wall_001", "type": "StaticMeshActor", "location": [0,0,0], "static_mesh": "/Engine/BasicShapes/Cube.Cube", "mcp_id": "wall_001", "tags": ["managed_by_mcp"]},
             {"name": "Wall_002", "type": "StaticMeshActor", "location": [100,0,0]}
         ]
     """
@@ -185,6 +191,12 @@ def batch_spawn_actors(
             mesh = actor_def.get("static_mesh")
             if mesh is not None:
                 mesh = validate_unreal_path(mesh, f"actors[{i}].static_mesh")
+            mcp_id_val = actor_def.get("mcp_id")
+            if mcp_id_val is not None:
+                mcp_id_val = validate_string(mcp_id_val, f"actors[{i}].mcp_id")
+            tags_val = actor_def.get("tags")
+            if tags_val is not None and not isinstance(tags_val, list):
+                return make_error_response(f"actors[{i}].tags must be a list of strings")
         except ValidationError as e:
             return make_validation_error_response_from_exception(e)
         validated.append({
@@ -194,6 +206,8 @@ def batch_spawn_actors(
             "rotation": rot,
             "scale": scl,
             "static_mesh": mesh,
+            "mcp_id": mcp_id_val,
+            "tags": tags_val,
         })
 
     if dry_run:
@@ -221,6 +235,10 @@ def batch_spawn_actors(
             params["scale"] = actor_def["scale"]
         if actor_def["static_mesh"] is not None:
             params["static_mesh"] = actor_def["static_mesh"]
+        if actor_def.get("mcp_id") is not None:
+            params["mcp_id"] = actor_def["mcp_id"]
+        if actor_def.get("tags") is not None:
+            params["tags"] = actor_def["tags"]
         try:
             resp = safe_spawn_actor(unreal, params)
             if resp and is_success_response(resp):
@@ -242,3 +260,76 @@ def batch_spawn_actors(
     else:
         result["message"] = f"Successfully spawned all {len(spawned)} actors."
     return result
+
+
+@mcp.tool()
+def find_actor_by_mcp_id(mcp_id: str) -> Dict[str, Any]:
+    """Find an actor by its mcp_id tag. Returns the actor details or an error if not found or multiple matches exist."""
+    try:
+        validate_string(mcp_id, "mcp_id")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+
+    try:
+        response = unreal.send_command("find_actor_by_mcp_id", {"mcp_id": mcp_id})
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"find_actor_by_mcp_id error: {e}")
+        return make_error_response(str(e))
+
+
+@mcp.tool()
+def set_actor_transform_by_mcp_id(
+    mcp_id: str,
+    location: Optional[List[float]] = None,
+    rotation: Optional[List[float]] = None,
+    scale: Optional[List[float]] = None
+) -> Dict[str, Any]:
+    """Set the transform of an actor identified by its mcp_id tag. More stable than name-based transform."""
+    try:
+        validate_string(mcp_id, "mcp_id")
+        validate_vector3(location, "location", allow_none=True)
+        validate_vector3(rotation, "rotation", allow_none=True)
+        validate_vector3(scale, "scale", allow_none=True)
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+
+    try:
+        params = {"mcp_id": mcp_id}
+        if location is not None:
+            params["location"] = location
+        if rotation is not None:
+            params["rotation"] = rotation
+        if scale is not None:
+            params["scale"] = scale
+
+        response = unreal.send_command("set_actor_transform_by_mcp_id", params)
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"set_actor_transform_by_mcp_id error: {e}")
+        return make_error_response(str(e))
+
+
+@mcp.tool()
+def delete_actor_by_mcp_id(mcp_id: str) -> Dict[str, Any]:
+    """Delete an actor by its mcp_id tag. Idempotent: returns success if actor is already missing."""
+    try:
+        validate_string(mcp_id, "mcp_id")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+
+    try:
+        response = unreal.send_command("delete_actor_by_mcp_id", {"mcp_id": mcp_id})
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"delete_actor_by_mcp_id error: {e}")
+        return make_error_response(str(e))

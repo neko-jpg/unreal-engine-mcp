@@ -83,9 +83,24 @@ venv.bak/
 
 # Project specific files
 MCPGameProject/Config/DefaultEditorPerProjectUserSettings.ini
+tmp/
+scratch/
+.surreal/
+surreal.exe
+tools/surrealdb/
+FlopperamUnrealMCP 5.7/Content/NewMap.umap
+rust/**/target/
+scripts/__pycache__/
 
 # Cursor
 .cursor/mcp.json
+
+# OpenCode local dependencies/cache
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
+.opencode/.gitignore
 
 # Visual Studio
 .vs
