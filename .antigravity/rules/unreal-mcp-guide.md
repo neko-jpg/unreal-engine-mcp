@@ -1,36 +1,41 @@
-# Unreal Engine MCP 操作ガイド (Antigravity版)
+# Unreal Engine MCP Operation Guide (Antigravity Edition)
 
-このガイドは、アンチグラビティ（私）が Unreal Engine MCP ツールを正確かつ効果的に使用するためのルールをまとめたものです。
+## 1. Basic Rules
 
-## 1. 基本ルール
-- **アクター名の管理**: `spawn_actor` などの実行後、レスポンスに含まれる `name` (実際のアクター名) を必ず取得し、以降の操作（移動、マテリアル変更、削除など）に使用してください。
-- **バッチ操作**: 多数のアクターを生成する場合は、ループで `spawn_actor` を呼ぶのではなく、可能な限り `batch_spawn_actors` (実装されている場合) を検討してください。
+* **Actor Name Management**: After executing commands such as `spawn_actor`, always retrieve the `name` (the actual actor name) included in the response. Use this name for all subsequent operations (movement, material changes, deletion, etc.).
+* **Batch Operations**: When spawning a large number of actors, avoid calling `spawn_actor` in a loop. Instead, use `batch_spawn_actors` (if implemented) whenever possible.
 
-## 2. 標準パラメータ
+## 2. Standard Parameters
 
-### 色指定 (RGBA)
-色は `[R, G, B, A]` のリストで、各値は `0.0` から `1.0` の範囲で指定します。
-- **赤**: `[1.0, 0.0, 0.0, 1.0]`
-- **緑**: `[0.0, 1.0, 0.0, 1.0]`
-- **青**: `[0.0, 0.0, 1.0, 1.0]`
-- **白**: `[1.0, 1.0, 1.0, 1.0]`
-- **黒**: `[0.0, 0.0, 0.0, 1.0]`
-- **紫**: `[0.5, 0.0, 1.0, 1.0]`
+### Color Specification (RGBA)
 
-### 標準メッシュパス
-- **球体 (Sphere)**: `/Engine/BasicShapes/Sphere.Sphere`
-- **立方体 (Cube)**: `/Engine/BasicShapes/Cube.Cube`
-- **円柱 (Cylinder)**: `/Engine/BasicShapes/Cylinder.Cylinder`
-- **平面 (Plane)**: `/Engine/BasicShapes/Plane.Plane`
+Colors are specified as a list `[R, G, B, A]`, where each value ranges from `0.0` to `1.0`.
 
-## 3. 物理設定 (Physics)
-物理挙動を有効にする場合は、以下のパラメータを推奨します。
-- `simulate_physics`: `True`
-- `gravity_enabled`: `True`
-- `linear_damping`: `0.1` (自然な弾みを出すため)
-- `angular_damping`: `0.1`
+* **Red**: `[1.0, 0.0, 0.0, 1.0]`
+* **Green**: `[0.0, 1.0, 0.0, 1.0]`
+* **Blue**: `[0.0, 0.0, 1.0, 1.0]`
+* **White**: `[1.0, 1.0, 1.0, 1.0]`
+* **Black**: `[0.0, 0.0, 0.0, 1.0]`
+* **Purple**: `[0.5, 0.0, 1.0, 1.0]`
 
-## 4. トラブルシューティング
-- **接続エラー**: Unreal Editor が起動しており、プラグインが有効で、TCPポート `55557` (または設定されたポート) が開放されているか確認してください。
-- **スケールが 0**: 生成時にスケールを明示的に指定していないか、アクター名の指定が間違っている可能性があります。
-- **名前の衝突**: 新しいアクターを生成する際は、`MySphere_01` のように一意な名前を生成するか、エンジン側の自動命名に任せて返り値を確認してください。
+### Standard Mesh Paths
+
+* **Sphere**: `/Engine/BasicShapes/Sphere.Sphere`
+* **Cube**: `/Engine/BasicShapes/Cube.Cube`
+* **Cylinder**: `/Engine/BasicShapes/Cylinder.Cylinder`
+* **Plane**: `/Engine/BasicShapes/Plane.Plane`
+
+## 3. Physics Settings
+
+To enable physical behavior, the following parameters are recommended:
+
+* `simulate_physics`: `True`
+* `gravity_enabled`: `True`
+* `linear_damping`: `0.1` (for natural bouncing behavior)
+* `angular_damping`: `0.1`
+
+## 4. Troubleshooting
+
+* **Connection Errors**: Ensure Unreal Editor is running, the plugin is enabled, and TCP port `55557` (or the configured port) is open.
+* **Scale is 0**: Check whether the scale was explicitly set to zero during spawning, or if the actor name is incorrect.
+* **Name Conflicts**: When spawning new actors, use unique names such as `MySphere_01`, or rely on the engine’s auto-naming and confirm via the response.
