@@ -8,6 +8,7 @@ import math
 from typing import List, Dict, Any, Tuple
 import logging
 import random
+from utils.responses import is_success_response
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def _build_main_mansion_body(unreal, name_prefix: str, location: List[float],
             "scale": [main_width/100, main_depth/100, wall_thickness/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if floor_result and floor_result.get("status") == "success":
+        if floor_result and is_success_response(floor_result):
             all_actors.append(floor_result.get("result"))
 
         # Build walls around perimeter
@@ -163,7 +164,7 @@ def _build_perimeter_walls(unreal, name_prefix: str, location: List[float],
         "scale": [width/100, wall_thickness/100, floor_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if front_wall and front_wall.get("status") == "success":
+    if front_wall and is_success_response(front_wall):
         all_actors.append(front_wall.get("result"))
 
     # Back wall (facing north)
@@ -174,7 +175,7 @@ def _build_perimeter_walls(unreal, name_prefix: str, location: List[float],
         "scale": [width/100, wall_thickness/100, floor_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if back_wall and back_wall.get("status") == "success":
+    if back_wall and is_success_response(back_wall):
         all_actors.append(back_wall.get("result"))
 
     # Left wall (facing west)
@@ -185,7 +186,7 @@ def _build_perimeter_walls(unreal, name_prefix: str, location: List[float],
         "scale": [wall_thickness/100, depth/100, floor_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if left_wall and left_wall.get("status") == "success":
+    if left_wall and is_success_response(left_wall):
         all_actors.append(left_wall.get("result"))
 
     # Right wall (facing east)
@@ -196,7 +197,7 @@ def _build_perimeter_walls(unreal, name_prefix: str, location: List[float],
         "scale": [wall_thickness/100, depth/100, floor_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if right_wall and right_wall.get("status") == "success":
+    if right_wall and is_success_response(right_wall):
         all_actors.append(right_wall.get("result"))
 
 
@@ -223,7 +224,7 @@ def _add_realistic_windows(unreal, name_prefix: str, location: List[float],
             "scale": [window_width/100, 0.2, window_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if window_result and window_result.get("status") == "success":
+        if window_result and is_success_response(window_result):
             all_actors.append(window_result.get("result"))
 
     # Windows on back wall
@@ -239,7 +240,7 @@ def _add_realistic_windows(unreal, name_prefix: str, location: List[float],
             "scale": [window_width/100, 0.2, window_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if window_result and window_result.get("status") == "success":
+        if window_result and is_success_response(window_result):
             all_actors.append(window_result.get("result"))
 
     # Windows on side walls
@@ -258,7 +259,7 @@ def _add_realistic_windows(unreal, name_prefix: str, location: List[float],
             "scale": [0.2, window_width/100, window_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if window_result and window_result.get("status") == "success":
+        if window_result and is_success_response(window_result):
             all_actors.append(window_result.get("result"))
 
     # Right wall windows
@@ -274,7 +275,7 @@ def _add_realistic_windows(unreal, name_prefix: str, location: List[float],
             "scale": [0.2, window_width/100, window_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if window_result and window_result.get("status") == "success":
+        if window_result and is_success_response(window_result):
             all_actors.append(window_result.get("result"))
 
 
@@ -325,7 +326,7 @@ def _build_mansion_wing_realistic(unreal, name_prefix: str, location: List[float
             "scale": [wing_length/100, wing_width/100, wall_thickness/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if floor_result and floor_result.get("status") == "success":
+        if floor_result and is_success_response(floor_result):
             all_actors.append(floor_result.get("result"))
 
         # Build wing walls
@@ -358,7 +359,7 @@ def _build_mansion_entrances(unreal, name_prefix: str, location: List[float],
         "scale": [doorway_width/100, 0.3, floor_height * 0.8/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if entrance_result and entrance_result.get("status") == "success":
+    if entrance_result and is_success_response(entrance_result):
         all_actors.append(entrance_result.get("result"))
 
     # Side entrances for wings
@@ -385,7 +386,7 @@ def _build_mansion_entrances(unreal, name_prefix: str, location: List[float],
             "scale": [doorway_width/100 * 0.8, 0.2, floor_height * 0.7/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wing_entrance_result and wing_entrance_result.get("status") == "success":
+        if wing_entrance_result and is_success_response(wing_entrance_result):
             all_actors.append(wing_entrance_result.get("result"))
 
 
@@ -411,7 +412,7 @@ def _build_mansion_roofs(unreal, name_prefix: str, location: List[float],
         "scale": [main_width/100 * 1.1, main_depth/100 * 1.1, roof_height/100],
         "static_mesh": "/Engine/BasicShapes/Wedge.Wedge"
     })
-    if main_roof_result and main_roof_result.get("status") == "success":
+    if main_roof_result and is_success_response(main_roof_result):
         all_actors.append(main_roof_result.get("result"))
 
     # Wing roofs
@@ -443,7 +444,7 @@ def _build_mansion_roofs(unreal, name_prefix: str, location: List[float],
             "scale": [wing_length/100 * 1.1, wing_width/100 * 1.1, roof_height/100 * 0.8],
             "static_mesh": "/Engine/BasicShapes/Wedge.Wedge"
         })
-        if wing_roof_result and wing_roof_result.get("status") == "success":
+        if wing_roof_result and is_success_response(wing_roof_result):
             all_actors.append(wing_roof_result.get("result"))
 
 
@@ -469,7 +470,7 @@ def _build_grand_staircase(unreal, name_prefix: str, location: List[float],
         "scale": [staircase_width/100, staircase_depth/100, staircase_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if staircase_result and staircase_result.get("status") == "success":
+    if staircase_result and is_success_response(staircase_result):
         all_actors.append(staircase_result.get("result"))
 
     # Individual staircase steps
@@ -488,7 +489,7 @@ def _build_grand_staircase(unreal, name_prefix: str, location: List[float],
             "scale": [staircase_width/100, step_depth/100, staircase_height/total_steps/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if step_result and step_result.get("status") == "success":
+        if step_result and is_success_response(step_result):
             all_actors.append(step_result.get("result"))
 
 
@@ -517,7 +518,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
         "scale": [deck_width/100, deck_depth/100, deck_thickness/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if deck_result and deck_result.get("status") == "success":
+    if deck_result and is_success_response(deck_result):
         all_actors.append(deck_result.get("result"))
     
     # Support stilts/pillars - connect from house ceiling (underside of roof)
@@ -547,7 +548,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
             "scale": [1.2, 1.2, stilt_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if stilt_result and stilt_result.get("status") == "success":
+        if stilt_result and is_success_response(stilt_result):
             all_actors.append(stilt_result.get("result"))
     
     # Deck railings around perimeter
@@ -577,7 +578,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
             "scale": [0.3, 0.3, railing_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if railing_result and railing_result.get("status") == "success":
+        if railing_result and is_success_response(railing_result):
             all_actors.append(railing_result.get("result"))
     
     # Bar counter
@@ -591,7 +592,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
         "scale": [8.0, 3.0, 2.4],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if bar_result and bar_result.get("status") == "success":
+    if bar_result and is_success_response(bar_result):
         all_actors.append(bar_result.get("result"))
     
     # Lounge seating areas
@@ -611,7 +612,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
             "scale": [2.5, 2.5, 0.8],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if seating_result and seating_result.get("status") == "success":
+        if seating_result and is_success_response(seating_result):
             all_actors.append(seating_result.get("result"))
     
     # Interior access to deck (access via mansion's internal stairs)
@@ -631,7 +632,7 @@ def _build_rooftop_bar_deck(unreal, name_prefix: str, location: List[float],
             "scale": [4.0, 4.0, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if umbrella_result and umbrella_result.get("status") == "success":
+        if umbrella_result and is_success_response(umbrella_result):
             all_actors.append(umbrella_result.get("result"))
 
 
@@ -689,7 +690,7 @@ def _build_driveway(unreal, name_prefix: str, location: List[float],
             "scale": [4.5, 4.5, 0.25],  # Much wider and thicker driveway
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if driveway_result and driveway_result.get("status") == "success":
+        if driveway_result and is_success_response(driveway_result):
             all_actors.append(driveway_result.get("result"))
 
     # Build long straight approach road leading to the circular driveway
@@ -707,7 +708,7 @@ def _build_driveway(unreal, name_prefix: str, location: List[float],
             "scale": [approach_road_width/100, 3.0, 0.15],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if road_result and road_result.get("status") == "success":
+        if road_result and is_success_response(road_result):
             all_actors.append(road_result.get("result"))
 
     # Add driveway connecting paths from circular to main entrance
@@ -725,7 +726,7 @@ def _build_driveway(unreal, name_prefix: str, location: List[float],
                 "scale": [3.0, 1.5, 0.15],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if connect_result and connect_result.get("status") == "success":
+            if connect_result and is_success_response(connect_result):
                 all_actors.append(connect_result.get("result"))
 
 
@@ -752,7 +753,7 @@ def _build_front_gates(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, 2.0, gate_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if pillar_result and pillar_result.get("status") == "success":
+        if pillar_result and is_success_response(pillar_result):
             all_actors.append(pillar_result.get("result"))
 
     # Gate doors
@@ -769,7 +770,7 @@ def _build_front_gates(unreal, name_prefix: str, location: List[float],
             "scale": [0.3, gate_width/100 * 0.4, gate_height/100 * 1.2],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if gate_result and gate_result.get("status") == "success":
+        if gate_result and is_success_response(gate_result):
             all_actors.append(gate_result.get("result"))
 
 
@@ -797,7 +798,7 @@ def _build_gardens(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, 1.0],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if hedge_result and hedge_result.get("status") == "success":
+        if hedge_result and is_success_response(hedge_result):
             all_actors.append(hedge_result.get("result"))
 
     # Flower beds
@@ -817,7 +818,7 @@ def _build_gardens(unreal, name_prefix: str, location: List[float],
             "scale": [4.0, 4.0, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if bed_result and bed_result.get("status") == "success":
+        if bed_result and is_success_response(bed_result):
             all_actors.append(bed_result.get("result"))
 
 
@@ -844,7 +845,7 @@ def _build_fountains(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, 2.0],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if base_result and base_result.get("status") == "success":
+        if base_result and is_success_response(base_result):
             all_actors.append(base_result.get("result"))
 
         # Fountain statue/ornament
@@ -856,7 +857,7 @@ def _build_fountains(unreal, name_prefix: str, location: List[float],
             "scale": [1.5, 1.5, 3.0],
             "static_mesh": "/Engine/BasicShapes/Cone.Cone"
         })
-        if statue_result and statue_result.get("status") == "success":
+        if statue_result and is_success_response(statue_result):
             all_actors.append(statue_result.get("result"))
 
         # Water basin
@@ -868,7 +869,7 @@ def _build_fountains(unreal, name_prefix: str, location: List[float],
             "scale": [4.0, 4.0, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if basin_result and basin_result.get("status") == "success":
+        if basin_result and is_success_response(basin_result):
             all_actors.append(basin_result.get("result"))
 
 
@@ -892,7 +893,7 @@ def _build_garage(unreal, name_prefix: str, location: List[float],
         "scale": [6.0, 8.0, layout["floor_height"]/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if garage_result and garage_result.get("status") == "success":
+    if garage_result and is_success_response(garage_result):
         all_actors.append(garage_result.get("result"))
 
     # Garage doors
@@ -909,7 +910,7 @@ def _build_garage(unreal, name_prefix: str, location: List[float],
             "scale": [2.5, 0.2, 2.5],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if door_result and door_result.get("status") == "success":
+        if door_result and is_success_response(door_result):
             all_actors.append(door_result.get("result"))
 
     # Luxury cars
@@ -926,7 +927,7 @@ def _build_garage(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 1.5, 1.0],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if car_result and car_result.get("status") == "success":
+        if car_result and is_success_response(car_result):
             all_actors.append(car_result.get("result"))
 
 
@@ -969,7 +970,7 @@ def _build_ballroom(unreal, name_prefix: str, location: List[float],
         "scale": [wing_width/100 * 0.8, wing_width/100 * 0.8, floor_height/100 * 2],
         "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
     })
-    if ballroom_result and ballroom_result.get("status") == "success":
+    if ballroom_result and is_success_response(ballroom_result):
         all_actors.append(ballroom_result.get("result"))
 
     # Grand chandelier
@@ -981,7 +982,7 @@ def _build_ballroom(unreal, name_prefix: str, location: List[float],
         "scale": [2.0, 2.0, 3.0],
         "static_mesh": "/Engine/BasicShapes/Sphere.Sphere"
     })
-    if chandelier_result and chandelier_result.get("status") == "success":
+    if chandelier_result and is_success_response(chandelier_result):
         all_actors.append(chandelier_result.get("result"))
 
 
@@ -1005,7 +1006,7 @@ def _build_dining_room(unreal, name_prefix: str, location: List[float],
         "scale": [4.0, 6.0, floor_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if dining_result and dining_result.get("status") == "success":
+    if dining_result and is_success_response(dining_result):
         all_actors.append(dining_result.get("result"))
 
     # Grand dining table
@@ -1017,7 +1018,7 @@ def _build_dining_room(unreal, name_prefix: str, location: List[float],
         "scale": [3.0, 1.0, 0.3],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if table_result and table_result.get("status") == "success":
+    if table_result and is_success_response(table_result):
         all_actors.append(table_result.get("result"))
 
 
@@ -1041,7 +1042,7 @@ def _build_library(unreal, name_prefix: str, location: List[float],
         "scale": [5.0, 4.0, floor_height/100 * 2],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if library_result and library_result.get("status") == "success":
+    if library_result and is_success_response(library_result):
         all_actors.append(library_result.get("result"))
 
     # Bookshelves
@@ -1060,7 +1061,7 @@ def _build_library(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, 0.5, floor_height/100 * 2],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if shelf_result and shelf_result.get("status") == "success":
+        if shelf_result and is_success_response(shelf_result):
             all_actors.append(shelf_result.get("result"))
 
 
@@ -1097,7 +1098,7 @@ def _build_bedrooms(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, floor_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if bedroom_result and bedroom_result.get("status") == "success":
+        if bedroom_result and is_success_response(bedroom_result):
             all_actors.append(bedroom_result.get("result"))
 
         # King-sized bed
@@ -1109,5 +1110,5 @@ def _build_bedrooms(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, 1.5, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if bed_result and bed_result.get("status") == "success":
+        if bed_result and is_success_response(bed_result):
             all_actors.append(bed_result.get("result"))

@@ -7,9 +7,9 @@ Covers:
 - Strategies in generate_unique_name (base -> session suffix -> counter -> UUID fallback)
 - Do not reuse names already registered in _known_actors
 - mark_actor_created / remove_actor / clear_actor_cache
-- safe_spawn_actor: includes result.final_name and normalizes already-exists conflicts
+- safe_spawn_actor: includes final_name and original_name at top level
 - safe_delete_actor: cache removal
-- find_actors_by_name response shapes (top-level actors / result.actors)
+- find_actors_by_name response shapes (top-level actors after normalization)
 """
 
 import json
@@ -26,6 +26,7 @@ from helpers.actor_name_manager import (
     clear_actor_cache,
     get_global_actor_name_manager,
 )
+from utils.responses import is_success_response
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +45,6 @@ class TestGenerateUniqueName:
 
     def test_unused_name_returned_as_is(self):
         mgr = ActorNameManager()
-        # Unreal is not connected, so _actor_exists is effectively bypassed.
         name = mgr.generate_unique_name("MyActor")
         assert name == "MyActor"
 
@@ -57,14 +57,12 @@ class TestGenerateUniqueName:
     def test_multiple_conflicts_increment_counter(self):
         mgr = ActorNameManager()
         mgr.mark_actor_created("MyActor")
-        # Cache the session-suffixed variant as well to force counter strategy.
         session_name = f"MyActor_{mgr._session_id}"
         mgr.mark_actor_created(session_name)
         name1 = mgr.generate_unique_name("MyActor")
         name2 = mgr.generate_unique_name("MyActor")
         assert name1 != "MyActor"
         assert name2 != name1
-        # Counter strategy should produce names like "MyActor_1", "MyActor_2".
         assert "MyActor_" in name1
         assert "MyActor_" in name2
 
@@ -85,7 +83,6 @@ class TestGenerateUniqueName:
         mgr.mark_actor_created("ActorA")
         mgr._actor_counters["x"] = 5
         anm.clear_actor_cache()
-        # The autouse fixture recreates the singleton, so verify a fresh state.
         assert "ActorA" not in anm._global_actor_name_manager._known_actors
         assert len(anm._global_actor_name_manager._actor_counters) == 0
 
@@ -93,79 +90,84 @@ class TestGenerateUniqueName:
 class TestSafeSpawnActor:
     def test_success_includes_final_name(self, fake_conn_factory):
         fake_conn = fake_conn_factory()
-        fake_conn.responses["spawn_actor"] = {
-            "status": "success", "result": {"name": "Hero"}
-        }
+        fake_conn.responses["spawn_actor"] = {"success": True, "name": "Hero"}
         resp = safe_spawn_actor(fake_conn, {"name": "Hero"})
-        assert resp["result"]["final_name"] == "Hero"
-        assert resp["result"]["original_name"] == "Hero"
+        assert resp["final_name"] == "Hero"
+        assert resp["original_name"] == "Hero"
 
-    def test_already_exists_normalized_to_success(self, fake_conn_factory):
+    def test_already_exists_returns_error_when_auto_unique_disabled(self, fake_conn_factory):
         fake_conn = fake_conn_factory()
-        fake_conn.responses["spawn_actor"] = {
-            "status": "error", "error": "already exists: Hero"
-        }
-        resp = safe_spawn_actor(fake_conn, {"name": "Hero"})
-        assert resp["status"] == "success"
-        assert resp["result"]["concurrent"] is True
+        fake_conn.responses["spawn_actor"] = {"success": False, "error": "already exists: Hero"}
+        resp = safe_spawn_actor(fake_conn, {"name": "Hero"}, auto_unique_name=False)
+        assert resp["success"] is False
+        assert "already exists" in resp.get("error", "")
+
+    def test_already_exists_retries_with_unique_name(self, fake_conn_factory):
+        fake_conn = fake_conn_factory()
+        clear_actor_cache()
+        mgr = get_global_actor_name_manager()
+        mgr.mark_actor_created("Hero")
+        call_count = [0]
+
+        def send_command_with_exists(command, params=None):
+            call_count[0] += 1
+            if command == "find_actors_by_name":
+                return {"success": True, "actors": [{"name": "Hero"}]}
+            if call_count[0] <= 2:
+                return {"success": False, "error": "already exists: Hero"}
+            return {"success": True, "name": "Hero_1"}
+
+        fake_conn.send_command = send_command_with_exists
+        resp = safe_spawn_actor(fake_conn, {"name": "Hero"}, auto_unique_name=True)
+        assert is_success_response(resp)
 
     def test_auto_unique_name_enabled(self, fake_conn_factory):
         fake_conn = fake_conn_factory()
-        fake_conn.responses["spawn_actor"] = {"status": "success", "result": {}}
+        fake_conn.responses["spawn_actor"] = {"success": True, "name": "Hero_1"}
         clear_actor_cache()
-        # Mark in cache so _actor_exists returns True and the name is uniquified.
         mgr = get_global_actor_name_manager()
         mgr.mark_actor_created("Hero")
         resp = safe_spawn_actor(fake_conn, {"name": "Hero"}, auto_unique_name=True)
-        # Name should be uniquified.
-        assert resp["result"]["final_name"] != "Hero"
-        # send_command includes spawn_actor once and find_actors_by_name once (inside _actor_exists).
+        assert resp["final_name"] != "Hero"
         assert any(h["command"] == "spawn_actor" for h in fake_conn.history)
 
     def test_top_level_actors_response_structure(self, fake_conn_factory):
-        """Top-level actors format from find_actors_by_name."""
         fake_conn = fake_conn_factory()
         fake_conn.responses["find_actors_by_name"] = {
-            "status": "success",
+            "success": True,
             "actors": [{"name": "Hero"}, {"name": "Villain"}],
         }
         mgr = get_global_actor_name_manager()
         exists = mgr._actor_exists("Hero", fake_conn)
-        # _actor_exists should return True for an exact match.
         assert exists is True
-        # The actor should be added to cache.
         assert "Hero" in mgr._known_actors
 
     def test_result_actors_response_structure(self, fake_conn_factory):
-        """result.actors format from find_actors_by_name."""
         fake_conn = fake_conn_factory()
         fake_conn.responses["find_actors_by_name"] = {
-            "status": "success",
-            "result": {"actors": [{"name": "Hero"}]},
+            "success": True,
+            "actors": [{"name": "Hero"}],
         }
         mgr = get_global_actor_name_manager()
         exists = mgr._actor_exists("Hero", fake_conn)
-        # Current implementation checks response.get("actors").
-        # If top-level actors is missing, this shape may return False.
-        # This test documents current behavior (locked in by contract tests).
         assert exists is True or exists is False
 
 
 class TestSafeDeleteActor:
     def test_success_removes_from_cache(self, fake_conn_factory):
         fake_conn = fake_conn_factory()
-        fake_conn.responses["delete_actor"] = {"status": "success"}
+        fake_conn.responses["delete_actor"] = {"success": True}
         mgr = get_global_actor_name_manager()
         mgr.mark_actor_created("Hero")
         resp = safe_delete_actor(fake_conn, "Hero")
-        assert resp["status"] == "success"
+        assert is_success_response(resp)
         assert "Hero" not in mgr._known_actors
 
     def test_failure_does_not_remove_cache(self, fake_conn_factory):
         fake_conn = fake_conn_factory()
-        fake_conn.responses["delete_actor"] = {"status": "error", "error": "not found"}
+        fake_conn.responses["delete_actor"] = {"success": False, "error": "not found"}
         mgr = get_global_actor_name_manager()
         mgr.mark_actor_created("Hero")
         resp = safe_delete_actor(fake_conn, "Hero")
-        assert resp["status"] == "error"
+        assert not is_success_response(resp)
         assert "Hero" in mgr._known_actors

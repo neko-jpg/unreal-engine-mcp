@@ -147,7 +147,7 @@ class TestSendCommandRetry:
 
         with patch.object(conn, "_create_socket", side_effect=side), patch("time.sleep"):
             response = conn.send_command("spawn_actor", {"name": "A"})
-        assert response["status"] == "success"
+        assert response["success"] is True
         assert len(created) == 2
 
     def test_send_command_does_not_retry_on_unexpected_exception(self, fake_socket_factory):
@@ -160,7 +160,7 @@ class TestSendCommandRetry:
         with patch.object(conn, "_create_socket", return_value=fake):
             with patch.object(conn, "connect", side_effect=boom):
                 response = conn.send_command("spawn_actor", {})
-        assert response["status"] == "error"
+        assert response["success"] is False
         assert "boom" in response.get("error", "")
 
     def test_send_command_returns_error_after_max_retries(self, fake_socket_factory):
@@ -168,7 +168,7 @@ class TestSendCommandRetry:
         fail = fake_socket_factory(raise_on_connect=ConnectionRefusedError("refused"))
         with patch.object(conn, "_create_socket", return_value=fail), patch("time.sleep"):
             response = conn.send_command("spawn_actor", {})
-        assert response["status"] == "error"
+        assert response["success"] is False
         assert "failed after" in response.get("error", "").lower()
 
 
@@ -196,13 +196,13 @@ class TestSendCommandOnce:
         sent = json.loads(fake._last_sent.decode("utf-8"))
         assert sent["params"] == {}
 
-    def test_error_response_returned_as_is(self, fake_socket_factory):
+    def test_error_response_normalized_to_standard_format(self, fake_socket_factory):
         conn = UnrealConnection()
         payload = json.dumps({"status": "error", "error": "not found"}).encode("utf-8") + b"\n"
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             resp = conn._send_command_once("my_cmd", {}, 0)
-        assert resp["status"] == "error"
+        assert resp["success"] is False
         assert resp["error"] == "not found"
 
     def test_legacy_success_false_normalized_to_error(self, fake_socket_factory):
@@ -211,7 +211,7 @@ class TestSendCommandOnce:
         fake = fake_socket_factory(response_payloads=[payload])
         with patch.object(conn, "_create_socket", return_value=fake):
             resp = conn._send_command_once("my_cmd", {}, 0)
-        assert resp["status"] == "error"
+        assert resp["success"] is False
         assert resp["error"] == "legacy fail"
 
 
@@ -268,7 +268,7 @@ class TestSendCommandErrors:
         fake = fake_socket_factory(raise_on_connect=socket.timeout("timed out"))
         with patch.object(conn, "_create_socket", return_value=fake), patch("time.sleep"):
             response = conn.send_command("spawn_actor", {})
-        assert response["status"] == "error"
+        assert response["success"] is False
         assert "timed out" in response["error"].lower() or "timeout" in response["error"].lower()
 
     def test_os_error_on_connect(self, fake_socket_factory):
@@ -276,7 +276,7 @@ class TestSendCommandErrors:
         fake = fake_socket_factory(raise_on_connect=OSError("bad file descriptor"))
         with patch.object(conn, "_create_socket", return_value=fake), patch("time.sleep"):
             response = conn.send_command("spawn_actor", {})
-        assert response["status"] == "error"
+        assert response["success"] is False
 
     def test_json_decode_error(self, fake_socket_factory):
         conn = UnrealConnection()

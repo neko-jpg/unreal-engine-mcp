@@ -103,10 +103,12 @@ def server_module():
 
 
 def test_actor_lifecycle_flow(unreal_editor_process, server_module):
+    from utils.responses import is_success_response
+
     actor_name = f"MCPPyActor_{uuid4().hex[:8]}"
 
     spawn_result = server_module.spawn_actor("StaticMeshActor", actor_name, location=[0, 0, 100])
-    assert spawn_result["status"] == "success"
+    assert is_success_response(spawn_result)
 
     transform_result = server_module.set_actor_transform(
         actor_name,
@@ -114,21 +116,23 @@ def test_actor_lifecycle_flow(unreal_editor_process, server_module):
         rotation=[0, 45, 0],
         scale=[1.25, 1.25, 1.25],
     )
-    assert transform_result["status"] == "success"
+    assert is_success_response(transform_result)
 
     find_result = server_module.find_actors_by_name(actor_name)
-    assert find_result["status"] == "success"
-    assert any(actor["name"] == actor_name for actor in find_result["result"]["actors"])
+    assert is_success_response(find_result)
+    assert any(actor["name"] == actor_name for actor in find_result.get("actors", []))
 
     delete_result = server_module.delete_actor(actor_name)
-    assert delete_result["status"] == "success"
+    assert is_success_response(delete_result)
 
 
 def test_blueprint_graph_flow(unreal_editor_process, server_module):
+    from utils.responses import is_success_response
+
     blueprint_name = f"MCPPyBlueprint_{uuid4().hex[:8]}"
 
     create_bp = server_module.create_blueprint(blueprint_name, parent_class="Actor")
-    assert create_bp["status"] == "success"
+    assert is_success_response(create_bp)
 
     create_var = server_module.create_variable(
         blueprint_name,
@@ -166,10 +170,12 @@ def test_blueprint_graph_flow(unreal_editor_process, server_module):
     assert connect["success"] is True
 
     analysis = server_module.analyze_blueprint_graph(blueprint_name)
-    assert analysis["status"] == "success"
+    assert is_success_response(analysis)
 
 
 def test_blueprint_physics_actor_flow(unreal_editor_process, server_module):
+    from utils.responses import is_success_response
+
     actor_name = f"MCPPhysicsActor_{uuid4().hex[:8]}"
 
     spawn_result = server_module.spawn_physics_blueprint_actor(
@@ -178,7 +184,7 @@ def test_blueprint_physics_actor_flow(unreal_editor_process, server_module):
         mass=100.0,
         simulate_physics=True,
     )
-    assert spawn_result["status"] == "success"
+    assert is_success_response(spawn_result)
 
     delete_result = server_module.delete_actor(actor_name)
-    assert delete_result["status"] == "success"
+    assert is_success_response(delete_result)

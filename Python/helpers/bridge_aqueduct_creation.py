@@ -9,6 +9,7 @@ import math
 import logging
 from typing import List, Dict, Any, Tuple
 from .actor_name_manager import safe_spawn_actor
+from utils.responses import is_success_response
 
 logger = logging.getLogger("BridgeAqueductCreation")
 
@@ -123,7 +124,7 @@ def build_suspension_bridge_structure(
             "static_mesh": tower_mesh
         }
         resp = safe_spawn_actor(unreal, base_params)
-        if resp and resp.get("status") == "success":
+        if resp and is_success_response(resp):
             all_actors.append(resp)
             counts["towers"] += 1
             
@@ -136,7 +137,7 @@ def build_suspension_bridge_structure(
             "static_mesh": tower_mesh
         }
         resp = safe_spawn_actor(unreal, main_shaft_params)
-        if resp and resp.get("status") == "success":
+        if resp and is_success_response(resp):
             all_actors.append(resp)
             counts["towers"] += 1
             
@@ -152,7 +153,7 @@ def build_suspension_bridge_structure(
             "static_mesh": tower_mesh
         }
         resp = safe_spawn_actor(unreal, top_params)
-        if resp and resp.get("status") == "success":
+        if resp and is_success_response(resp):
             all_actors.append(resp)
             counts["towers"] += 1
             
@@ -172,7 +173,7 @@ def build_suspension_bridge_structure(
                 "static_mesh": tower_mesh
             }
             resp = safe_spawn_actor(unreal, attachment_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["towers"] += 1
     
@@ -219,7 +220,7 @@ def build_suspension_bridge_structure(
                 "static_mesh": cable_mesh
             }
             resp = safe_spawn_actor(unreal, cable_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["cable_segments"] += 1
     
@@ -244,7 +245,7 @@ def build_suspension_bridge_structure(
                 "static_mesh": deck_mesh
             }
             resp = safe_spawn_actor(unreal, deck_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["deck_segments"] += 1
     
@@ -284,7 +285,7 @@ def build_suspension_bridge_structure(
                 "static_mesh": suspender_mesh
             }
             resp = safe_spawn_actor(unreal, suspender_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["suspenders"] += 1
     
@@ -405,7 +406,7 @@ def build_aqueduct_structure(
                 "static_mesh": pier_mesh
             }
             resp = safe_spawn_actor(unreal, pier_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["piers"] += 1
         
@@ -450,7 +451,7 @@ def build_aqueduct_structure(
                     "static_mesh": arch_mesh
                 }
                 resp = safe_spawn_actor(unreal, arch_params)
-                if resp and resp.get("status") == "success":
+                if resp and is_success_response(resp):
                     all_actors.append(resp)
                     counts["arch_segments"] += 1
     
@@ -476,7 +477,7 @@ def build_aqueduct_structure(
                 "static_mesh": deck_mesh
             }
             resp = safe_spawn_actor(unreal, deck_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 counts["deck_segments"] += 1
                 
@@ -498,7 +499,7 @@ def build_aqueduct_structure(
                 "static_mesh": deck_mesh
             }
             resp = safe_spawn_actor(unreal, wall_params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 all_actors.append(resp)
                 # Count as deck segments for simplicity
                 counts["deck_segments"] += 1

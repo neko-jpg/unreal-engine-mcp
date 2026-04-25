@@ -3,6 +3,7 @@
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.responses import make_error_response, is_success_response, is_error_response  # noqa: F401  re-export
 
 MAX_ACTORS_PER_BATCH = 500
 MAX_WORLD_EXTENT = 1000000.0
@@ -145,10 +146,10 @@ def validate_unreal_path(value: Any, field_name: str) -> str:
 
 
 def make_validation_error_response(error: ValidationError) -> Dict[str, Any]:
-    return {"success": False, "message": f"Validation error: {error.field}: {error.message}"}
+    return make_error_response(f"Validation error: {error.field}: {error.message}")
 
 
 def make_validation_error_response_from_exception(exc: Exception) -> Dict[str, Any]:
     if isinstance(exc, ValidationError):
         return make_validation_error_response(exc)
-    return {"success": False, "message": str(exc)}
+    return make_error_response(str(exc))

@@ -6,6 +6,7 @@ Contains logic for building complex castle fortresses with walls, towers, and vi
 import math
 from typing import List, Dict, Any, Tuple
 import logging
+from utils.responses import is_success_response
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, wall_thickness/100, wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
         
         # Dense battlements
@@ -104,7 +105,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
                 "scale": [1.0, wall_thickness/100, 1.0],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if battlement_result and battlement_result.get("status") == "success":
+            if battlement_result and is_success_response(battlement_result):
                 all_actors.append(battlement_result.get("result"))
     
     # South wall
@@ -118,7 +119,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, wall_thickness/100, wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
         
         if i % 2 == 0:
@@ -130,7 +131,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
                 "scale": [1.0, wall_thickness/100, 1.0],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if battlement_result and battlement_result.get("status") == "success":
+            if battlement_result and is_success_response(battlement_result):
                 all_actors.append(battlement_result.get("result"))
     
     # East wall
@@ -144,7 +145,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [wall_thickness/100, 2.0, wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
     
     # West wall with main gate
@@ -160,7 +161,7 @@ def build_outer_bailey_walls(unreal, name_prefix: str, location: List[float],
                 "scale": [wall_thickness/100, 2.0, wall_height/100],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if wall_result and wall_result.get("status") == "success":
+            if wall_result and is_success_response(wall_result):
                 all_actors.append(wall_result.get("result"))
 
 
@@ -185,7 +186,7 @@ def build_inner_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, wall_thickness/100, inner_wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
     
     # Inner South wall
@@ -199,7 +200,7 @@ def build_inner_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, wall_thickness/100, inner_wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
     
     # Inner East and West walls
@@ -215,7 +216,7 @@ def build_inner_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [wall_thickness/100, 2.0, inner_wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
         
         # West inner wall
@@ -227,7 +228,7 @@ def build_inner_bailey_walls(unreal, name_prefix: str, location: List[float],
             "scale": [wall_thickness/100, 2.0, inner_wall_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if wall_result and wall_result.get("status") == "success":
+        if wall_result and is_success_response(wall_result):
             all_actors.append(wall_result.get("result"))
 
 
@@ -257,7 +258,7 @@ def build_gate_complex(unreal, name_prefix: str, location: List[float],
             "scale": [4.0, 4.0, tower_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if gate_tower_result and gate_tower_result.get("status") == "success":
+        if gate_tower_result and is_success_response(gate_tower_result):
             all_actors.append(gate_tower_result.get("result"))
         
         # Massive tower tops
@@ -273,7 +274,7 @@ def build_gate_complex(unreal, name_prefix: str, location: List[float],
             "scale": [5.0, 5.0, 0.8],
             "static_mesh": "/Engine/BasicShapes/Cone.Cone"
         })
-        if tower_top_result and tower_top_result.get("status") == "success":
+        if tower_top_result and is_success_response(tower_top_result):
             all_actors.append(tower_top_result.get("result"))
     
     # BARBICAN (outer gate structure)
@@ -285,7 +286,7 @@ def build_gate_complex(unreal, name_prefix: str, location: List[float],
         "scale": [8.0, 12.0, wall_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if barbican_result and barbican_result.get("status") == "success":
+    if barbican_result and is_success_response(barbican_result):
         all_actors.append(barbican_result.get("result"))
     
     # Main Portcullis (gate)
@@ -297,7 +298,7 @@ def build_gate_complex(unreal, name_prefix: str, location: List[float],
         "scale": [0.5, 12.0, 8.0],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if portcullis_result and portcullis_result.get("status") == "success":
+    if portcullis_result and is_success_response(portcullis_result):
         all_actors.append(portcullis_result.get("result"))
     
     # Inner gate for inner bailey
@@ -309,7 +310,7 @@ def build_gate_complex(unreal, name_prefix: str, location: List[float],
         "scale": [0.5, 8.0, 6.0],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if inner_portcullis_result and inner_portcullis_result.get("status") == "success":
+    if inner_portcullis_result and is_success_response(inner_portcullis_result):
         all_actors.append(inner_portcullis_result.get("result"))
 
 
@@ -344,7 +345,7 @@ def build_corner_towers(unreal, name_prefix: str, location: List[float],
             "scale": [6.0, 6.0, 3.0],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_base_result and tower_base_result.get("status") == "success":
+        if tower_base_result and is_success_response(tower_base_result):
             all_actors.append(tower_base_result.get("result"))
         
         # MASSIVE Main tower
@@ -356,7 +357,7 @@ def build_corner_towers(unreal, name_prefix: str, location: List[float],
             "scale": [5.0, 5.0, tower_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_result and tower_result.get("status") == "success":
+        if tower_result and is_success_response(tower_result):
             all_actors.append(tower_result.get("result"))
         
         # HUGE Tower top (cone roof)
@@ -369,7 +370,7 @@ def build_corner_towers(unreal, name_prefix: str, location: List[float],
                 "scale": [6.0, 6.0, 2.5],
                 "static_mesh": "/Engine/BasicShapes/Cone.Cone"
             })
-            if tower_top_result and tower_top_result.get("status") == "success":
+            if tower_top_result and is_success_response(tower_top_result):
                 all_actors.append(tower_top_result.get("result"))
         
         # Multiple levels of tower windows (5 levels instead of 3)
@@ -387,7 +388,7 @@ def build_corner_towers(unreal, name_prefix: str, location: List[float],
                     "scale": [0.3, 0.5, 0.8],
                     "static_mesh": "/Engine/BasicShapes/Cube.Cube"
                 })
-                if window_result and window_result.get("status") == "success":
+                if window_result and is_success_response(window_result):
                     all_actors.append(window_result.get("result"))
 
 
@@ -412,7 +413,7 @@ def build_inner_corner_towers(unreal, name_prefix: str, location: List[float],
             "scale": [8.0, 8.0, 4.0],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_base_result and tower_base_result.get("status") == "success":
+        if tower_base_result and is_success_response(tower_base_result):
             all_actors.append(tower_base_result.get("result"))
         
         # GIGANTIC Main inner tower
@@ -425,7 +426,7 @@ def build_inner_corner_towers(unreal, name_prefix: str, location: List[float],
             "scale": [6.0, 6.0, inner_tower_height/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_result and tower_result.get("status") == "success":
+        if tower_result and is_success_response(tower_result):
             all_actors.append(tower_result.get("result"))
         
         # MASSIVE Tower top
@@ -437,7 +438,7 @@ def build_inner_corner_towers(unreal, name_prefix: str, location: List[float],
             "scale": [8.0, 8.0, 3.0],
             "static_mesh": "/Engine/BasicShapes/Cone.Cone"
         })
-        if tower_top_result and tower_top_result.get("status") == "success":
+        if tower_top_result and is_success_response(tower_top_result):
             all_actors.append(tower_top_result.get("result"))
 
 
@@ -462,7 +463,7 @@ def build_intermediate_towers(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, tower_height * 0.8/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_result and tower_result.get("status") == "success":
+        if tower_result and is_success_response(tower_result):
             all_actors.append(tower_result.get("result"))
     
     # South wall intermediate towers
@@ -476,7 +477,7 @@ def build_intermediate_towers(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, tower_height * 0.8/100],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if tower_result and tower_result.get("status") == "success":
+        if tower_result and is_success_response(tower_result):
             all_actors.append(tower_result.get("result"))
 
 
@@ -502,7 +503,7 @@ def build_central_keep(unreal, name_prefix: str, location: List[float],
         "scale": [keep_width/100, keep_depth/100, keep_height/100],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if keep_base_result and keep_base_result.get("status") == "success":
+    if keep_base_result and is_success_response(keep_base_result):
         all_actors.append(keep_base_result.get("result"))
     
     # GIGANTIC central Keep spire/tower
@@ -516,7 +517,7 @@ def build_central_keep(unreal, name_prefix: str, location: List[float],
         "scale": [4.0, 4.0, keep_spire_height / 100.0],
         "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
     })
-    if keep_tower_result and keep_tower_result.get("status") == "success":
+    if keep_tower_result and is_success_response(keep_tower_result):
         all_actors.append(keep_tower_result.get("result"))
     
     # ENORMOUS Great Hall (throne room)
@@ -528,7 +529,7 @@ def build_central_keep(unreal, name_prefix: str, location: List[float],
         "scale": [keep_width/100 * 0.8, keep_depth/100 * 0.5, 6.0],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if great_hall_result and great_hall_result.get("status") == "success":
+    if great_hall_result and is_success_response(great_hall_result):
         all_actors.append(great_hall_result.get("result"))
     
     # Additional keep towers (4 corner towers of the keep)
@@ -549,7 +550,7 @@ def build_central_keep(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 3.0, keep_height/100 * 0.8],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if keep_corner_tower_result and keep_corner_tower_result.get("status") == "success":
+        if keep_corner_tower_result and is_success_response(keep_corner_tower_result):
             all_actors.append(keep_corner_tower_result.get("result"))
 
 
@@ -586,7 +587,7 @@ def build_courtyard_complex(unreal, name_prefix: str, location: List[float],
             "scale": scale,
             "static_mesh": mesh_type
         })
-        if building_result and building_result.get("status") == "success":
+        if building_result and is_success_response(building_result):
             all_actors.append(building_result.get("result"))
 
 
@@ -630,7 +631,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
                 "scale": [annex_width/100, annex_depth/100, annex_height/100],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if result and result.get("status") == "success":
+            if result and is_success_response(result):
                 all_actors.append(result.get("result"))
 
             # Add a doorway arch on each annex
@@ -645,7 +646,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
                 "scale": [1.0, 0.6, 2.4],
                 "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
             })
-            if arch and arch.get("status") == "success":
+            if arch and is_success_response(arch):
                 all_actors.append(arch.get("result"))
 
             # Next annex position
@@ -667,7 +668,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
                 "scale": [4.0, walkway_width/100, walkway_height/100],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if res and res.get("status") == "success":
+            if res and is_success_response(res):
                 all_actors.append(res.get("result"))
 
     # East and West walkways
@@ -684,7 +685,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
                 "scale": [walkway_width/100, 4.0, walkway_height/100],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if res and res.get("status") == "success":
+            if res and is_success_response(res):
                 all_actors.append(res.get("result"))
 
     # Build annex rows along each wall
@@ -714,7 +715,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
             "scale": [annex_depth/100, annex_width/100, annex_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if res and res.get("status") == "success":
+        if res and is_success_response(res):
             all_actors.append(res.get("result"))
 
         # East wall
@@ -725,7 +726,7 @@ def build_bailey_annexes(unreal, name_prefix: str, location: List[float],
             "scale": [annex_depth/100, annex_width/100, annex_height/100],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if res and res.get("status") == "success":
+        if res and is_success_response(res):
             all_actors.append(res.get("result"))
 
 
@@ -757,7 +758,7 @@ def build_siege_weapons(unreal, name_prefix: str, location: List[float],
             "scale": [4.0, 3.0, 1.0],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if catapult_base_result and catapult_base_result.get("status") == "success":
+        if catapult_base_result and is_success_response(catapult_base_result):
             all_actors.append(catapult_base_result.get("result"))
         
         # MASSIVE Catapult arm
@@ -770,7 +771,7 @@ def build_siege_weapons(unreal, name_prefix: str, location: List[float],
             "scale": [0.4, 0.4, 6.0],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if catapult_arm_result and catapult_arm_result.get("status") == "success":
+        if catapult_arm_result and is_success_response(catapult_arm_result):
             all_actors.append(catapult_arm_result.get("result"))
         
         # MASSIVE Ammunition pile
@@ -783,7 +784,7 @@ def build_siege_weapons(unreal, name_prefix: str, location: List[float],
                 "scale": [0.6, 0.6, 0.6],
                 "static_mesh": "/Engine/BasicShapes/Sphere.Sphere"
             })
-            if ammo_result and ammo_result.get("status") == "success":
+            if ammo_result and is_success_response(ammo_result):
                 all_actors.append(ammo_result.get("result"))
     
     # MASSIVE Ballista on towers
@@ -798,7 +799,7 @@ def build_siege_weapons(unreal, name_prefix: str, location: List[float],
             "scale": [0.5, 3.0, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if ballista_result and ballista_result.get("status") == "success":
+        if ballista_result and is_success_response(ballista_result):
             all_actors.append(ballista_result.get("result"))
 
 
@@ -833,7 +834,7 @@ def build_village_settlement(unreal, name_prefix: str, location: List[float],
                 "scale": [3.0, 2.5, 2.0],
                 "static_mesh": "/Engine/BasicShapes/Cube.Cube"
             })
-            if house_result and house_result.get("status") == "success":
+            if house_result and is_success_response(house_result):
                 all_actors.append(house_result.get("result"))
             
             # House roof
@@ -846,7 +847,7 @@ def build_village_settlement(unreal, name_prefix: str, location: List[float],
                 "scale": [3.5, 3.0, 0.8],
                 "static_mesh": "/Engine/BasicShapes/Cone.Cone"
             })
-            if roof_result and roof_result.get("status") == "success":
+            if roof_result and is_success_response(roof_result):
                 all_actors.append(roof_result.get("result"))
     
     # OUTER ring of houses
@@ -866,7 +867,7 @@ def build_village_settlement(unreal, name_prefix: str, location: List[float],
             "scale": [2.5, 2.0, 2.0],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if house_result and house_result.get("status") == "success":
+        if house_result and is_success_response(house_result):
             all_actors.append(house_result.get("result"))
         
         roof_name = f"{name_prefix}_OuterVillageRoof_{i}"
@@ -878,7 +879,7 @@ def build_village_settlement(unreal, name_prefix: str, location: List[float],
             "scale": [3.0, 2.5, 0.6],
             "static_mesh": "/Engine/BasicShapes/Cone.Cone"
         })
-        if roof_result and roof_result.get("status") == "success":
+        if roof_result and is_success_response(roof_result):
             all_actors.append(roof_result.get("result"))
     
     # Build market area and workshops
@@ -907,7 +908,7 @@ def _build_market_area(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, 1.5, 1.5],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if stall_result and stall_result.get("status") == "success":
+        if stall_result and is_success_response(stall_result):
             all_actors.append(stall_result.get("result"))
         
         # Stall canopy
@@ -919,7 +920,7 @@ def _build_market_area(unreal, name_prefix: str, location: List[float],
             "scale": [2.5, 2.0, 0.1],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if canopy_result and canopy_result.get("status") == "success":
+        if canopy_result and is_success_response(canopy_result):
             all_actors.append(canopy_result.get("result"))
 
 
@@ -951,7 +952,7 @@ def _build_workshops(unreal, name_prefix: str, location: List[float],
             "scale": [2.0, 1.8, 1.6],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if workshop_result and workshop_result.get("status") == "success":
+        if workshop_result and is_success_response(workshop_result):
             all_actors.append(workshop_result.get("result"))
 
 
@@ -976,7 +977,7 @@ def build_drawbridge_and_moat(unreal, name_prefix: str, location: List[float],
         "scale": [12.0 * scale_factor, 10.0 * scale_factor, 0.3],
         "static_mesh": "/Engine/BasicShapes/Cube.Cube"
     })
-    if drawbridge_result and drawbridge_result.get("status") == "success":
+    if drawbridge_result and is_success_response(drawbridge_result):
         all_actors.append(drawbridge_result.get("result"))
     
     # Add MASSIVE moat around castle
@@ -997,7 +998,7 @@ def build_drawbridge_and_moat(unreal, name_prefix: str, location: List[float],
             "scale": [moat_width/100, moat_width/100, 0.1],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if moat_result and moat_result.get("status") == "success":
+        if moat_result and is_success_response(moat_result):
             all_actors.append(moat_result.get("result"))
 
 
@@ -1034,7 +1035,7 @@ def add_decorative_flags(unreal, name_prefix: str, location: List[float],
             "scale": [0.05, 0.05, 3.0],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if pole_result and pole_result.get("status") == "success":
+        if pole_result and is_success_response(pole_result):
             all_actors.append(pole_result.get("result"))
         
         # Flag
@@ -1046,5 +1047,5 @@ def add_decorative_flags(unreal, name_prefix: str, location: List[float],
             "scale": [0.05, 2.0, 1.5],
             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
         })
-        if flag_result and flag_result.get("status") == "success":
+        if flag_result and is_success_response(flag_result):
             all_actors.append(flag_result.get("result"))

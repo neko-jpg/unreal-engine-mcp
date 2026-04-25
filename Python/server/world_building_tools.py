@@ -12,6 +12,7 @@ from server.validation import (
     validate_positive_int, validate_unreal_path, MAX_ACTORS_PER_BATCH,
     ValidationError, make_validation_error_response_from_exception,
 )
+from utils.responses import make_error_response, is_success_response
 from server.actor_tools import batch_spawn_actors
 from helpers.infrastructure_creation import (
     _create_street_grid, _create_street_lights, _create_town_vehicles,
@@ -93,7 +94,7 @@ def create_pyramid(
         return result
     except Exception as e:
         logger.error(f"create_pyramid error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -149,7 +150,7 @@ def create_wall(
         return result
     except Exception as e:
         logger.error(f"create_wall error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -168,7 +169,7 @@ def create_tower(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
         spawned = []
         scale = block_size / 100.0
 
@@ -194,7 +195,7 @@ def create_tower(
                         "static_mesh": mesh
                     }
                     resp = safe_spawn_actor(unreal, params)
-                    if resp and resp.get("status") == "success":
+                    if resp and is_success_response(resp):
                         spawned.append(resp)
 
             elif tower_style == "tapered":
@@ -227,8 +228,8 @@ def create_tower(
                             "scale": [scale, scale, scale],
                             "static_mesh": mesh
                         }
-                        resp = unreal.send_command("spawn_actor", params)
-                        if resp:
+                        resp = safe_spawn_actor(unreal, params)
+                        if resp and is_success_response(resp):
                             spawned.append(resp)
 
             else:  # square tower
@@ -260,11 +261,10 @@ def create_tower(
                             "scale": [scale, scale, scale],
                             "static_mesh": mesh
                         }
-                        resp = unreal.send_command("spawn_actor", params)
-                        if resp:
+                        resp = safe_spawn_actor(unreal, params)
+                        if resp and is_success_response(resp):
                             spawned.append(resp)
 
-            # Add decorative elements every few levels
             if level % 3 == 2 and level < height - 1:
                 for corner in range(4):
                     angle = corner * math.pi / 2
@@ -280,13 +280,13 @@ def create_tower(
                         "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
                     }
                     resp = safe_spawn_actor(unreal, params)
-                    if resp and resp.get("status") == "success":
+                    if resp and is_success_response(resp):
                         spawned.append(resp)
 
         return {"success": True, "actors": spawned, "tower_style": tower_style}
     except Exception as e:
         logger.error(f"create_tower error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -305,7 +305,7 @@ def create_staircase(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
         spawned = []
         sx, sy, sz = step_size
         for i in range(steps):
@@ -320,12 +320,12 @@ def create_staircase(
                 "static_mesh": mesh
             }
             resp = safe_spawn_actor(unreal, params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 spawned.append(resp)
         return {"success": True, "actors": spawned}
     except Exception as e:
         logger.error(f"create_staircase error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -344,13 +344,13 @@ def construct_house(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         return build_house(unreal, width, depth, height, location, name_prefix, mesh, house_style)
 
     except Exception as e:
         logger.error(f"construct_house error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -365,7 +365,7 @@ def construct_mansion(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {mansion_scale} mansion")
         all_actors = []
@@ -398,7 +398,7 @@ def construct_mansion(
 
     except Exception as e:
         logger.error(f"construct_mansion error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -415,7 +415,7 @@ def create_arch(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
         spawned = []
         angle_step = math.pi / segments
         scale = radius / 300.0 / 2
@@ -432,12 +432,12 @@ def create_arch(
                 "static_mesh": mesh
             }
             resp = safe_spawn_actor(unreal, params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 spawned.append(resp)
         return {"success": True, "actors": spawned}
     except Exception as e:
         logger.error(f"create_arch error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -478,8 +478,8 @@ def spawn_physics_blueprint_actor(
 
             if color is not None:
                 color_result = set_mesh_material_color(bp_name, "Mesh", color)
-                if not color_result.get("success", False):
-                    logger.warning(f"Failed to set color {color} for {bp_name}: {color_result.get('message', 'Unknown error')}")
+                if not is_success_response(color_result):
+                    logger.warning(f"Failed to set color {color} for {bp_name}: {color_result.get('error', 'Unknown error')}")
 
         # Import compile_blueprint locally to avoid circular import
         from server.blueprint_tools import compile_blueprint
@@ -496,7 +496,7 @@ def spawn_physics_blueprint_actor(
         )
 
         # Ensure proper scale is set on the spawned actor
-        if result.get("success", False):
+        if is_success_response(result):
             spawned_name = (
                 result.get("final_name")
                 or result.get("name")
@@ -511,13 +511,13 @@ def spawn_physics_blueprint_actor(
         return result
     except Exception as e:
         logger.error(f"spawn_physics_blueprint_actor  error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
 def create_maze(
-    rows: int = 8,
-    cols: int = 8,
+    rows: int = 4,
+    cols: int = 4,
     cell_size: float = 300.0,
     wall_height: int = 3,
     location: Optional[List[float]] = None
@@ -535,28 +535,23 @@ def create_maze(
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        estimated_actors = (rows * 2 + 1) * (cols * 2 + 1) * wall_height + 2
-        if estimated_actors > MAX_ACTORS_PER_BATCH:
-            return {
-                "success": False,
-                "message": (
-                    f"Estimated {estimated_actors} actors exceeds limit of {MAX_ACTORS_PER_BATCH}. "
-                    f"Reduce rows, cols, or wall_height."
-                ),
-                "estimated_actor_count": estimated_actors,
-                "max_actors": MAX_ACTORS_PER_BATCH,
-            }
+        max_wall_estimate = (rows * 2 + 1) * (cols * 2 + 1) * wall_height + 2
+        if max_wall_estimate > MAX_ACTORS_PER_BATCH:
+            return make_error_response(
+                f"Maximum possible actors {max_wall_estimate} exceeds limit of {MAX_ACTORS_PER_BATCH}. "
+                f"Reduce rows, cols, or wall_height.",
+                max_possible_actor_count=max_wall_estimate,
+                max_actors=MAX_ACTORS_PER_BATCH,
+            )
 
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         spawned = []
 
-        # Initialize maze grid - True means wall, False means open
         maze = [[True for _ in range(cols * 2 + 1)] for _ in range(rows * 2 + 1)]
 
-        # Recursive backtracking maze generation
         def carve_path(row, col):
             maze[row * 2 + 1][col * 2 + 1] = False
             directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
@@ -569,14 +564,25 @@ def create_maze(
                     maze[row * 2 + 1 + dr][col * 2 + 1 + dc] = False
                     carve_path(new_row, new_col)
 
-        # Start carving from top-left corner
         carve_path(0, 0)
 
-        # Create entrance and exit
         maze[1][0] = False
         maze[rows * 2 - 1][cols * 2] = False
 
-        # Build the actual maze in Unreal
+        actual_wall_cells = sum(
+            1 for r in range(rows * 2 + 1)
+            for c in range(cols * 2 + 1)
+            if maze[r][c]
+        )
+        estimated_actors = actual_wall_cells * wall_height + 2
+        if estimated_actors > MAX_ACTORS_PER_BATCH:
+            return make_error_response(
+                f"Maze would produce {estimated_actors} actors, exceeding limit of {MAX_ACTORS_PER_BATCH}. "
+                f"Reduce wall_height or maze dimensions.",
+                estimated_actor_count=estimated_actors,
+                max_actors=MAX_ACTORS_PER_BATCH,
+            )
+
         maze_height = rows * 2 + 1
         maze_width = cols * 2 + 1
 
@@ -597,7 +603,7 @@ def create_maze(
                             "static_mesh": "/Engine/BasicShapes/Cube.Cube"
                         }
                         resp = safe_spawn_actor(unreal, params)
-                        if resp and resp.get("status") == "success":
+                        if resp and is_success_response(resp):
                             spawned.append(resp)
 
         # Add entrance and exit markers
@@ -610,7 +616,7 @@ def create_maze(
             "scale": [0.5, 0.5, 0.5],
             "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
         })
-        if entrance_marker and entrance_marker.get("status") == "success":
+        if entrance_marker and is_success_response(entrance_marker):
             spawned.append(entrance_marker)
 
         exit_marker = safe_spawn_actor(unreal, {
@@ -622,20 +628,20 @@ def create_maze(
             "scale": [0.5, 0.5, 0.5],
             "static_mesh": "/Engine/BasicShapes/Sphere.Sphere"
         })
-        if exit_marker and exit_marker.get("status") == "success":
+        if exit_marker and is_success_response(exit_marker):
             spawned.append(exit_marker)
 
         return {
             "success": True,
             "actors": spawned,
             "maze_size": f"{rows}x{cols}",
-            "wall_count": len([block for block in spawned if "Wall" in block.get("name", "")]),
+            "wall_count": actual_wall_cells,
             "entrance": "Left side (cylinder marker)",
             "exit": "Right side (sphere marker)"
         }
     except Exception as e:
         logger.error(f"create_maze error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -655,7 +661,7 @@ def create_town(
 
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {town_size} town with {building_density} density at {location}")
 
@@ -718,7 +724,7 @@ def create_town(
                     building_count
                 )
 
-                if building_result.get("status") == "success":
+                if is_success_response(building_result):
                     all_spawned.extend(building_result.get("actors", []))
                     building_count += 1
 
@@ -781,7 +787,7 @@ def create_town(
 
     except Exception as e:
         logger.error(f"create_town error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -799,7 +805,7 @@ def create_castle_fortress(
             location = [0.0, 0.0, 0.0]
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {castle_size} {architectural_style} castle fortress")
         all_actors = []
@@ -845,7 +851,7 @@ def create_castle_fortress(
 
     except Exception as e:
         logger.error(f"create_castle_fortress error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -872,7 +878,7 @@ def create_suspension_bridge(
 
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating suspension bridge: span={span_length}, width={deck_width}, height={tower_height}")
 
@@ -943,7 +949,7 @@ def create_suspension_bridge(
 
     except Exception as e:
         logger.error(f"create_suspension_bridge error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -970,7 +976,7 @@ def create_aqueduct(
 
         unreal = get_unreal_connection()
         if not unreal:
-            return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating aqueduct: {arches} arches, {tiers} tiers, radius={arch_radius}")
 
@@ -1047,4 +1053,4 @@ def create_aqueduct(
 
     except Exception as e:
         logger.error(f"create_aqueduct error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))

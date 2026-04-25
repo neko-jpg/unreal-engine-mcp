@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, Optional, List
 from mcp.server.fastmcp import FastMCP
 
+from utils.responses import make_error_response
+
 
 def configure_logging():
     """Configure file logging only if no handlers exist yet."""
@@ -141,7 +143,7 @@ class UnrealConnection:
             logger.debug("Disconnected from Unreal Engine")
 
     def _get_timeout_for_command(self, command_type: str) -> int:
-        if any(large_cmd in command_type for large_cmd in self.LARGE_OPERATION_COMMANDS):
+        if command_type in self.LARGE_OPERATION_COMMANDS:
             return self.LARGE_OP_RECV_TIMEOUT
         return self.DEFAULT_RECV_TIMEOUT
 
@@ -207,8 +209,47 @@ class UnrealConnection:
             except Exception as e:
                 logger.error(f"Unexpected error sending command: {e}")
                 self.disconnect()
-                return {"status": "error", "error": str(e)}
-        return {"status": "error", "error": f"Command failed after {self.MAX_RETRIES + 1} attempts: {last_error}"}
+                return make_error_response(str(e))
+        return make_error_response(f"Command failed after {self.MAX_RETRIES + 1} attempts: {last_error}")
+
+    @staticmethod
+    def _normalize_response(response: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a C++ bridge response into a consistent envelope.
+
+        The C++ bridge returns one of three shapes:
+        1. ``{"status": "success", "result": {…}}`` — normal success
+        2. ``{"status": "error", "error": "…"}`` — bridge-reported error
+        3. ``{"success": false, "error": "…"}`` — legacy inner error
+
+        After normalization the response always has:
+        - ``success``: bool  (True on success, False on error)
+        - ``error``: str     (present on error only)
+        - All data fields from ``result`` are promoted to top-level (on success)
+        """
+        if response.get("status") == "error":
+            error_msg = response.get("error") or response.get("message") or "Unknown error"
+            return make_error_response(error_msg)
+
+        if response.get("success") is False:
+            error_msg = response.get("error") or response.get("message") or "Unknown error"
+            return make_error_response(error_msg)
+
+        if response.get("status") == "success":
+            result_data = response.get("result")
+            if isinstance(result_data, dict):
+                normalized: Dict[str, Any] = {"success": True}
+                for key, value in result_data.items():
+                    if key != "success":
+                        normalized[key] = value
+                if "name" in result_data or "actors" in result_data or "deleted_actor" in result_data:
+                    pass
+                return normalized
+            return {"success": True}
+
+        if response.get("success") is True and "status" not in response:
+            return response
+
+        return response
 
     def _send_command_once(self, command: str, params: Dict[str, Any], attempt: int) -> Dict[str, Any]:
         with self._lock:
@@ -232,18 +273,10 @@ class UnrealConnection:
                     logger.debug(f"Raw response: {response_data[:500]}")
                     raise ValueError(f"Invalid JSON response: {e}")
                 logger.info(f"Command {command} completed successfully")
-                if response.get("status") == "error":
-                    error_msg = response.get("error") or response.get("message", "Unknown error")
+                response = self._normalize_response(response)
+                if not response.get("success"):
+                    error_msg = response.get("error", "Unknown error")
                     logger.warning(f"Unreal returned error: {error_msg}")
-                elif response.get("success") is False:
-                    error_msg = response.get("error") or response.get("message", "Unknown error")
-                    response = {"status": "error", "error": error_msg}
-                    logger.warning(f"Unreal returned failure: {error_msg}")
-                elif response.get("status") == "success" and isinstance(response.get("result"), dict):
-                    result_data = response["result"]
-                    response.setdefault("success", result_data.get("success", True))
-                    for key, value in result_data.items():
-                        response.setdefault(key, value)
                 return response
             finally:
                 self._close_socket_unsafe()

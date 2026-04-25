@@ -116,8 +116,8 @@ class FakeUnrealConnection:
             return self.responses[key]
         if command in self.responses:
             return self.responses[command]
-        # Default success for unknown commands
-        return {"status": "success", "result": {}}
+        # Default success for unknown commands (normalized format)
+        return {"success": True}
 
     def clear_history(self):
         self.history.clear()

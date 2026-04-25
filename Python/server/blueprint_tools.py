@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from server.core import mcp, get_unreal_connection
+from utils.responses import make_error_response, is_success_response
 
 logger = logging.getLogger("UnrealMCP_Advanced")
 
@@ -13,7 +14,7 @@ def create_blueprint(name: str, parent_class: str) -> Dict[str, Any]:
     """Create a new Blueprint class."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -21,10 +22,10 @@ def create_blueprint(name: str, parent_class: str) -> Dict[str, Any]:
             "parent_class": parent_class
         }
         response = unreal.send_command("create_blueprint", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"create_blueprint error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -48,7 +49,7 @@ def add_component_to_blueprint(
         component_properties = {}
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -61,10 +62,10 @@ def add_component_to_blueprint(
             "component_properties": component_properties
         }
         response = unreal.send_command("add_component_to_blueprint", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"add_component_to_blueprint error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -76,7 +77,7 @@ def set_static_mesh_properties(
     """Set static mesh properties on a StaticMeshComponent."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -85,10 +86,10 @@ def set_static_mesh_properties(
             "static_mesh": static_mesh
         }
         response = unreal.send_command("set_static_mesh_properties", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"set_static_mesh_properties error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -104,7 +105,7 @@ def set_physics_properties(
     """Set physics properties on a component."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -117,10 +118,10 @@ def set_physics_properties(
             "angular_damping": angular_damping
         }
         response = unreal.send_command("set_physics_properties", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"set_physics_properties error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -128,15 +129,15 @@ def compile_blueprint(blueprint_name: str) -> Dict[str, Any]:
     """Compile a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {"blueprint_name": blueprint_name}
         response = unreal.send_command("compile_blueprint", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"compile_blueprint error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -154,7 +155,7 @@ def read_blueprint_content(
     """
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -169,7 +170,7 @@ def read_blueprint_content(
         logger.info(f"Reading Blueprint content for: {blueprint_path}")
         response = unreal.send_command("read_blueprint_content", params)
 
-        if response and response.get("success", False):
+        if response and is_success_response(response):
             logger.info(f"Successfully read Blueprint content. Found:")
             if response.get("variables"):
                 logger.info(f"  - {len(response['variables'])} variables")
@@ -180,11 +181,11 @@ def read_blueprint_content(
             if response.get("components"):
                 logger.info(f"  - {len(response['components'])} components")
 
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
 
     except Exception as e:
         logger.error(f"read_blueprint_content error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -201,7 +202,7 @@ def analyze_blueprint_graph(
     """
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -215,7 +216,7 @@ def analyze_blueprint_graph(
         logger.info(f"Analyzing Blueprint graph: {blueprint_path} -> {graph_name}")
         response = unreal.send_command("analyze_blueprint_graph", params)
 
-        if response and response.get("success", False):
+        if response and is_success_response(response):
             graph_data = response.get("graph_data", {})
             logger.info(f"Graph analysis complete:")
             logger.info(f"  - Graph: {graph_data.get('graph_name', 'Unknown')}")
@@ -224,11 +225,11 @@ def analyze_blueprint_graph(
             if graph_data.get('execution_paths'):
                 logger.info(f"  - Execution paths: {len(graph_data['execution_paths'])}")
 
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
 
     except Exception as e:
         logger.error(f"analyze_blueprint_graph error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -242,7 +243,7 @@ def get_blueprint_variable_details(
     """
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -255,11 +256,11 @@ def get_blueprint_variable_details(
             logger.info(f"  - Specific variable: {variable_name}")
 
         response = unreal.send_command("get_blueprint_variable_details", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
 
     except Exception as e:
         logger.error(f"get_blueprint_variable_details error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -274,7 +275,7 @@ def get_blueprint_function_details(
     """
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -288,8 +289,8 @@ def get_blueprint_function_details(
             logger.info(f"  - Specific function: {function_name}")
 
         response = unreal.send_command("get_blueprint_function_details", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
 
     except Exception as e:
         logger.error(f"get_blueprint_function_details error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))

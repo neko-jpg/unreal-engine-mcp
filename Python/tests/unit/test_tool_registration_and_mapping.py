@@ -207,7 +207,7 @@ class TestMutableDefaultArguments:
     Requirement note: add_component_to_blueprint(location=[], rotation=[], scale=[], component_properties={})
     """
 
-    def add_component_to_blueprint_mutable_defaults_not_shared(self):
+    def test_add_component_to_blueprint_mutable_defaults_not_shared(self):
         from tests.conftest import FakeUnrealConnection
         fake_conn = FakeUnrealConnection()
         with _patch_tool_connections(fake_conn):
@@ -311,7 +311,7 @@ class TestPythonToCppCommandMapping:
             f"C++ supports these commands but Python tools never send them: {actual_missing}"
         )
 
-    def test_each_mcp_tool_sends_exactly_one_cpp_command(self):
+    def test_each_mcp_tool_sends_exactly_one_cpp_command(self, fake_conn):
         """Each MCP tool (except world-building orchestrators) should map to exactly one C++ command."""
         skip_tools = {
             "create_pyramid", "create_wall", "create_tower", "create_staircase",
@@ -320,14 +320,49 @@ class TestPythonToCppCommandMapping:
             "create_suspension_bridge", "create_aqueduct",
             "spawn_physics_blueprint_actor",
             "set_mesh_material_color",
+            "batch_spawn_actors",
         }
         registered = self._collect_registered_tool_names()
+        missing = []
         for tool_name in sorted(registered):
             if tool_name in skip_tools:
                 continue
             fn = getattr(srv, tool_name, None)
             if fn is None:
                 continue
+            sig = inspect.signature(fn)
+            kwargs = {}
+            for pname, param in sig.parameters.items():
+                if pname == "random_string":
+                    kwargs[pname] = ""
+                elif pname == "color":
+                    kwargs[pname] = [1.0, 0.0, 0.0, 1.0]
+                elif param.default is not inspect.Parameter.empty:
+                    kwargs[pname] = param.default
+                elif param.annotation == list:
+                    kwargs[pname] = [0.0, 0.0, 0.0]
+                elif param.annotation == str:
+                    kwargs[pname] = "TestName"
+                elif param.annotation == float:
+                    kwargs[pname] = 0.0
+                elif param.annotation == int:
+                    kwargs[pname] = 0
+                elif param.annotation == bool:
+                    kwargs[pname] = True
+                elif param.annotation == dict:
+                    kwargs[pname] = {}
+                else:
+                    kwargs[pname] = "default"
+            fake_conn.clear_history()
+            with _patch_tool_connections(fake_conn):
+                try:
+                    fn(**kwargs)
+                except Exception:
+                    continue
+            commands_sent = [h["command"] for h in fake_conn.history]
+            if not commands_sent:
+                missing.append(tool_name)
+        assert not missing, f"The following tools sent no C++ commands: {missing}"
 
     def test_registered_tools_cover_all_cpp_commands(self):
         """All C++ commands should be reachable through at least one MCP tool."""

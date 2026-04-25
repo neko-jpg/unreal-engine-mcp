@@ -1,0 +1,18 @@
+name: Python checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: uv run python -m compileall .
+      - run: uv run pytest -q

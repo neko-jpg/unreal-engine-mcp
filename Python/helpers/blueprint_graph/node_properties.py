@@ -59,6 +59,7 @@ Read them before implementing new node types!
 import json
 import logging
 from typing import Dict, Any, Optional, List
+from utils.responses import is_success_response
 
 logger = logging.getLogger("BlueprintGraph.NodeProperties")
 
@@ -345,7 +346,7 @@ def set_node_property(
 
         response = unreal_connection.send_command("set_node_property", params)
 
-        if response.get("success"):
+        if is_success_response(response):
             if action is not None:
                 logger.info(
                     f"Successfully performed action '{action}' on node '{node_id}' in {blueprint_name}"

@@ -4,6 +4,26 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-04-25] - Unreal project cleanup and shutdown crash fix
+
+### Fixed
+
+- Fixed an Unreal Editor shutdown crash in `UEpicUnrealMCPBridge::StopServer()` caused by owning `FSocket` instances with `TSharedPtr` while also destroying them through `ISocketSubsystem::DestroySocket()`. The bridge and server runnable now keep socket ownership explicit and release sockets through the Unreal socket subsystem only.
+- Fixed UE 5.7 build errors in undo transaction setup by passing `FText` labels to `FScopedTransaction`, and replaced the unavailable `FIPv4Address::Loopback` reference with an explicitly parsed loopback address.
+- Removed the project startup action that tried to import `StarterContent.upack`; UE 5.7 installs in this environment do not include that feature pack, and this MCP project does not require Starter Content.
+
+### Changed
+
+- Consolidated the local Unreal project copies back to the canonical `FlopperamUnrealMCP/` tree. The duplicate `FlopperamUnrealMCP 5.7/` and `FlopperamUnrealMCP 5.7 - 2/` project copies were local untracked copies and should not be used as source trees.
+
+### Verification
+
+- Verified the crash reports pointed to `EpicUnrealMCPBridge::StopServer()` during `EditorExit` from the duplicate `FlopperamUnrealMCP 5.7 - 2` project path.
+- Built `FlopperamUnrealMCPEditor Win64 Development` with UE 5.7 successfully.
+- Launched the canonical project with UE 5.7, confirmed the MCP bridge initialized, then closed the editor process without a new crash report.
+
+---
+
 ## [2026-04-24] - Safety, batching, and undo support
 
 ### Added

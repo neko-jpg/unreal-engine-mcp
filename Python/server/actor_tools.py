@@ -7,44 +7,46 @@ from server.core import mcp, get_unreal_connection
 from server.validation import (
     validate_vector3, validate_string, validate_unreal_path,
     ValidationError, make_validation_error_response_from_exception,
+    MAX_ACTORS_PER_BATCH,
 )
+from utils.responses import make_error_response, is_success_response
 from helpers.actor_name_manager import safe_spawn_actor, safe_delete_actor
 
 logger = logging.getLogger("UnrealMCP_Advanced")
 
 
 @mcp.tool()
-def get_actors_in_level(random_string: str = "") -> Dict[str, Any]:
+def get_actors_in_level() -> Dict[str, Any]:
     """Get a list of all actors in the current level."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         response = unreal.send_command("get_actors_in_level", {})
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"get_actors_in_level error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
 def find_actors_by_name(pattern: str) -> Dict[str, Any]:
-    """Find actors by name pattern."""
+    """Find actors whose name contains the given pattern (case-insensitive substring match)."""
     try:
         validate_string(pattern, "pattern")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         response = unreal.send_command("find_actors_by_name", {"pattern": pattern})
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"find_actors_by_name error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -56,14 +58,14 @@ def delete_actor(name: str) -> Dict[str, Any]:
         return make_validation_error_response_from_exception(e)
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         response = safe_delete_actor(unreal, name)
         return response
     except Exception as e:
         logger.error(f"delete_actor error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -88,7 +90,7 @@ def spawn_actor(
         return make_validation_error_response_from_exception(e)
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -107,7 +109,7 @@ def spawn_actor(
         return safe_spawn_actor(unreal, params, auto_unique_name=False)
     except Exception as e:
         logger.error(f"spawn_actor error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -127,7 +129,7 @@ def set_actor_transform(
         return make_validation_error_response_from_exception(e)
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {"name": name}
@@ -139,10 +141,10 @@ def set_actor_transform(
             params["scale"] = scale
 
         response = unreal.send_command("set_actor_transform", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"set_actor_transform error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -160,21 +162,20 @@ def batch_spawn_actors(
     """
     from server.validation import validate_positive_int
     if not isinstance(actors, list):
-        return {"success": False, "message": "actors must be a list of actor dictionaries"}
+        return make_error_response("actors must be a list of actor dictionaries")
     if len(actors) == 0:
-        return {"success": False, "message": "actors list must not be empty"}
+        return make_error_response("actors list must not be empty")
     if len(actors) > MAX_ACTORS_PER_BATCH:
-        return {
-            "success": False,
-            "message": f"Requested {len(actors)} actors exceeds batch limit of {MAX_ACTORS_PER_BATCH}",
-            "requested": len(actors),
-            "max_actors": MAX_ACTORS_PER_BATCH,
-        }
+        return make_error_response(
+            f"Requested {len(actors)} actors exceeds batch limit of {MAX_ACTORS_PER_BATCH}",
+            requested=len(actors),
+            max_actors=MAX_ACTORS_PER_BATCH,
+        )
 
     validated = []
     for i, actor_def in enumerate(actors):
         if not isinstance(actor_def, dict):
-            return {"success": False, "message": f"actors[{i}] must be a dictionary, got {type(actor_def).__name__}"}
+            return make_error_response(f"actors[{i}] must be a dictionary, got {type(actor_def).__name__}")
         try:
             name = validate_string(actor_def.get("name"), f"actors[{i}].name")
             actor_type = validate_string(actor_def.get("type"), f"actors[{i}].type")
@@ -206,7 +207,7 @@ def batch_spawn_actors(
 
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     spawned = []
     failed = []
@@ -222,7 +223,7 @@ def batch_spawn_actors(
             params["static_mesh"] = actor_def["static_mesh"]
         try:
             resp = safe_spawn_actor(unreal, params)
-            if resp and resp.get("status") == "success":
+            if resp and is_success_response(resp):
                 spawned.append(resp)
             else:
                 failed.append({"name": actor_def["name"], "reason": str(resp)})
@@ -237,7 +238,7 @@ def batch_spawn_actors(
     }
     if failed:
         result["failed"] = failed
-        result["message"] = f"Spawned {len(spawned)}/{len(validated)} actors. {len(failed)} failed."
+        result["error"] = f"Spawned {len(spawned)}/{len(validated)} actors. {len(failed)} failed."
     else:
         result["message"] = f"Successfully spawned all {len(spawned)} actors."
     return result

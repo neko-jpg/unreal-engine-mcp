@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from server.core import mcp, get_unreal_connection
+from utils.responses import make_error_response
 from helpers.blueprint_graph import node_manager, variable_manager, connector_manager
 from helpers.blueprint_graph import event_manager, node_deleter, node_properties
 from helpers.blueprint_graph import function_manager, function_io
@@ -27,7 +28,7 @@ def add_node(
     """Add a node to a Blueprint graph."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         node_params = {
@@ -59,7 +60,7 @@ def add_node(
 
     except Exception as e:
         logger.error(f"add_node error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -74,7 +75,7 @@ def connect_nodes(
     """Connect two nodes in a Blueprint graph."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = connector_manager.connect_nodes(
@@ -90,7 +91,7 @@ def connect_nodes(
         return result
     except Exception as e:
         logger.error(f"connect_nodes error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -106,7 +107,7 @@ def create_variable(
     """Create a variable in a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = variable_manager.create_variable(
@@ -123,7 +124,7 @@ def create_variable(
         return result
     except Exception as e:
         logger.error(f"create_variable error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -155,7 +156,7 @@ def set_blueprint_variable_properties(
     """Modify properties of an existing Blueprint variable without deleting it."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = variable_manager.set_blueprint_variable_properties(
@@ -188,7 +189,7 @@ def set_blueprint_variable_properties(
         return result
     except Exception as e:
         logger.error(f"set_blueprint_variable_properties error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -201,7 +202,7 @@ def add_event_node(
     """Add an event node to a Blueprint graph."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = event_manager.add_event_node(
@@ -215,7 +216,7 @@ def add_event_node(
         return result
     except Exception as e:
         logger.error(f"add_event_node error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -227,7 +228,7 @@ def delete_node(
     """Delete a node from a Blueprint graph."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = node_deleter.delete_node(
@@ -239,7 +240,7 @@ def delete_node(
         return result
     except Exception as e:
         logger.error(f"delete_node error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -262,7 +263,7 @@ def set_node_property(
     """Set a property on a Blueprint node or perform semantic node editing."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         # Build kwargs for semantic actions
@@ -298,7 +299,7 @@ def set_node_property(
         return result
     except Exception as e:
         logger.error(f"set_node_property error: {e}", exc_info=True)
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -310,7 +311,7 @@ def create_function(
     """Create a new function in a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = function_manager.create_function_handler(
@@ -322,7 +323,7 @@ def create_function(
         return result
     except Exception as e:
         logger.error(f"create_function error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -336,7 +337,7 @@ def add_function_input(
     """Add an input parameter to a Blueprint function."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = function_io.add_function_input_handler(
@@ -350,7 +351,7 @@ def add_function_input(
         return result
     except Exception as e:
         logger.error(f"add_function_input error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -364,7 +365,7 @@ def add_function_output(
     """Add an output parameter to a Blueprint function."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = function_io.add_function_output_handler(
@@ -378,7 +379,7 @@ def add_function_output(
         return result
     except Exception as e:
         logger.error(f"add_function_output error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -389,7 +390,7 @@ def delete_function(
     """Delete a function from a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = function_manager.delete_function_handler(
@@ -400,7 +401,7 @@ def delete_function(
         return result
     except Exception as e:
         logger.error(f"delete_function error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -412,7 +413,7 @@ def rename_function(
     """Rename a function in a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         result = function_manager.rename_function_handler(
@@ -424,4 +425,4 @@ def rename_function(
         return result
     except Exception as e:
         logger.error(f"rename_function error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))

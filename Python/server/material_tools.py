@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from server.core import mcp, get_unreal_connection
+from utils.responses import make_error_response, is_success_response
 
 logger = logging.getLogger("UnrealMCP_Advanced")
 
@@ -16,7 +17,7 @@ def get_available_materials(
     """Get a list of available materials in the project that can be applied to objects."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -24,10 +25,10 @@ def get_available_materials(
             "include_engine_materials": include_engine_materials
         }
         response = unreal.send_command("get_available_materials", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"get_available_materials error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -39,7 +40,7 @@ def apply_material_to_actor(
     """Apply a specific material to an actor in the level."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -48,10 +49,10 @@ def apply_material_to_actor(
             "material_slot": material_slot
         }
         response = unreal.send_command("apply_material_to_actor", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"apply_material_to_actor error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -64,7 +65,7 @@ def apply_material_to_blueprint(
     """Apply a specific material to a component in a Blueprint."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -74,10 +75,10 @@ def apply_material_to_blueprint(
             "material_slot": material_slot
         }
         response = unreal.send_command("apply_material_to_blueprint", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"apply_material_to_blueprint error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -87,15 +88,15 @@ def get_actor_material_info(
     """Get information about the materials currently applied to an actor."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {"actor_name": actor_name}
         response = unreal.send_command("get_actor_material_info", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"get_actor_material_info error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 @mcp.tool()
@@ -106,7 +107,7 @@ def get_blueprint_material_info(
     """Get information about the materials currently applied to a Blueprint component."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
         params = {
@@ -114,10 +115,10 @@ def get_blueprint_material_info(
             "component_name": component_name
         }
         response = unreal.send_command("get_blueprint_material_info", params)
-        return response or {"success": False, "message": "No response from Unreal"}
+        return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"get_blueprint_material_info error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))
 
 
 # Deprecated alias for backwards compatibility; prefer the decorated tool above.
@@ -137,53 +138,66 @@ def set_mesh_material_color(
     """Set material color on a mesh component using the proven color system."""
     unreal = get_unreal_connection()
     if not unreal:
-        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+        return make_error_response("Failed to connect to Unreal Engine")
 
     try:
-        # Validate color format
         if not isinstance(color, list) or len(color) != 4:
-            return {"success": False, "message": "Invalid color format. Must be a list of 4 float values [R, G, B, A]."}
+            return make_error_response("Invalid color format. Must be a list of 4 float values [R, G, B, A].")
 
-        # Ensure all color values are floats between 0 and 1
-        color = [float(min(1.0, max(0.0, val))) for val in color]
+        validated_color = [float(min(1.0, max(0.0, val))) for val in color]
 
-        # Set BaseColor parameter first
-        params_base = {
+        params_primary = {
             "blueprint_name": blueprint_name,
             "component_name": component_name,
-            "color": color,
+            "color": validated_color,
             "material_path": material_path,
-            "parameter_name": "BaseColor",
+            "parameter_name": parameter_name,
             "material_slot": material_slot
         }
-        response_base = unreal.send_command("set_mesh_material_color", params_base)
+        response_primary = unreal.send_command("set_mesh_material_color", params_primary)
 
-        # Set Color parameter second (for maximum compatibility)
-        params_color = {
-            "blueprint_name": blueprint_name,
-            "component_name": component_name,
-            "color": color,
-            "material_path": material_path,
-            "parameter_name": "Color",
-            "material_slot": material_slot
-        }
-        response_color = unreal.send_command("set_mesh_material_color", params_color)
-
-        # Return success if either parameter setting worked
-        if (response_base and response_base.get("status") == "success") or (response_color and response_color.get("status") == "success"):
+        if response_primary and is_success_response(response_primary):
             return {
                 "success": True,
-                "message": f"Color applied successfully to slot {material_slot}: {color}",
-                "base_color_result": response_base,
-                "color_result": response_color,
+                "message": f"Color applied via parameter '{parameter_name}' on slot {material_slot}: {validated_color}",
+                "result": response_primary,
                 "material_slot": material_slot
             }
-        else:
-            return {
-                "success": False,
-                "message": f"Failed to set color parameters on slot {material_slot}. BaseColor: {response_base}, Color: {response_color}"
+
+        fallback_names = []
+        if parameter_name != "BaseColor":
+            fallback_names.append("BaseColor")
+        if parameter_name != "Color":
+            fallback_names.append("Color")
+
+        fallback_results = []
+        for fallback_name in fallback_names:
+            params_fb = {
+                "blueprint_name": blueprint_name,
+                "component_name": component_name,
+                "color": validated_color,
+                "material_path": material_path,
+                "parameter_name": fallback_name,
+                "material_slot": material_slot
             }
+            response_fb = unreal.send_command("set_mesh_material_color", params_fb)
+            fallback_results.append((fallback_name, response_fb))
+            if response_fb and is_success_response(response_fb):
+                return {
+                    "success": True,
+                    "message": f"Color applied via fallback parameter '{fallback_name}' on slot {material_slot}: {validated_color}",
+                    "result": response_fb,
+                    "material_slot": material_slot,
+                    "fallback_used": fallback_name
+                }
+
+        return make_error_response(
+            f"Failed to set color on slot {material_slot}. "
+            f"Primary parameter '{parameter_name}' and all fallbacks failed.",
+            primary_result=response_primary,
+            fallback_results=fallback_results,
+        )
 
     except Exception as e:
         logger.error(f"set_mesh_material_color error: {e}")
-        return {"success": False, "message": str(e)}
+        return make_error_response(str(e))

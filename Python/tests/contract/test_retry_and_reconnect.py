@@ -26,7 +26,7 @@ class TestRetryOnConnectionErrors:
     def test_retry_on_socket_timeout(self, fake_socket_factory):
         conn = UnrealConnection()
         fail = fake_socket_factory(raise_on_connect=TimeoutError("timeout"))
-        ok_payload = _payload({"status": "success", "result": {}})
+        ok_payload = _payload({"success": True})
         ok = fake_socket_factory(response_payloads=[ok_payload])
 
         created = []
@@ -40,12 +40,12 @@ class TestRetryOnConnectionErrors:
             result = conn.send_command("spawn_actor", {})
 
         assert len(created) == 2
-        assert result["status"] == "success"
+        assert result["success"] is True
 
     def test_retry_on_connection_refused(self, fake_socket_factory):
         conn = UnrealConnection()
         fail = fake_socket_factory(raise_on_connect=ConnectionRefusedError("refused"))
-        ok_payload = _payload({"status": "success", "result": {}})
+        ok_payload = _payload({"success": True})
         ok = fake_socket_factory(response_payloads=[ok_payload])
 
         created = []
@@ -59,12 +59,12 @@ class TestRetryOnConnectionErrors:
             result = conn.send_command("delete_actor", {"name": "X"})
 
         assert len(created) == 2
-        assert result["status"] == "success"
+        assert result["success"] is True
 
     def test_retry_on_recv_empty(self, fake_socket_factory):
         conn = UnrealConnection()
         fail = fake_socket_factory(response_payloads=[], close_after_n_recv=1)
-        ok_payload = _payload({"status": "success", "result": {}})
+        ok_payload = _payload({"success": True})
         ok = fake_socket_factory(response_payloads=[ok_payload])
 
         created = []
@@ -78,7 +78,7 @@ class TestRetryOnConnectionErrors:
             result = conn.send_command("set_actor_transform", {"name": "X"})
 
         assert len(created) == 2
-        assert result["status"] == "success"
+        assert result["success"] is True
 
 
 class TestNoRetryOnUnexpectedErrors:
@@ -93,7 +93,7 @@ class TestNoRetryOnUnexpectedErrors:
             with patch.object(conn, "connect", side_effect=boom):
                 result = conn.send_command("spawn_actor", {})
 
-        assert result["status"] == "error"
+        assert result["success"] is False
         assert "boom" in result["error"]
 
     def test_no_retry_on_type_error(self, fake_socket_factory):
@@ -107,7 +107,7 @@ class TestNoRetryOnUnexpectedErrors:
             with patch.object(conn, "connect", side_effect=kaboom):
                 result = conn.send_command("spawn_actor", {})
 
-        assert result["status"] == "error"
+        assert result["success"] is False
 
 
 class TestMaxRetriesExceeded:
@@ -116,7 +116,7 @@ class TestMaxRetriesExceeded:
         fail = fake_socket_factory(raise_on_connect=ConnectionRefusedError("nope"))
         with patch.object(conn, "_create_socket", return_value=fail), patch("time.sleep"):
             result = conn.send_command("spawn_actor", {})
-        assert result["status"] == "error"
+        assert result["success"] is False
         assert "failed after" in result["error"].lower()
 
     def test_socket_closed_and_recreated_between_attempts(self, fake_socket_factory):
