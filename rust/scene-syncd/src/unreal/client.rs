@@ -2,9 +2,14 @@ use crate::config::Config;
 use crate::error::AppError;
 use crate::sync::UnrealActorObservation;
 use serde_json::json;
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::time::timeout;
+
+const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct UnrealClient {
     host: String,
@@ -113,53 +118,62 @@ impl UnrealClient {
 
         let addr = format!("{}:{}", self.host, self.port);
 
-        let mut stream = TcpStream::connect_timeout(
-            &addr.parse().map_err(|e: std::net::AddrParseError| {
-                AppError::UnrealBridge(format!("bad address: {e}"))
-            })?,
-            Duration::from_secs(10),
-        )
-        .map_err(|e| AppError::UnrealBridge(format!("connect error to {addr}: {e}")))?;
+        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
+            .await
+            .map_err(|_| AppError::UnrealBridge(format!("connect timeout to {addr}")))?
+            .map_err(|e| AppError::UnrealBridge(format!("connect error to {addr}: {e}")))?;
 
+        let mut stream = stream;
         stream
             .write_all(&payload_bytes)
+            .await
             .map_err(|e| AppError::UnrealBridge(format!("write payload error: {e}")))?;
 
-        stream
-            .set_read_timeout(Some(Duration::from_secs(30)))
-            .map_err(|e| AppError::UnrealBridge(format!("set read timeout error: {e}")))?;
-
-        let mut resp_buf = Vec::new();
-        let mut chunk = [0u8; 4096];
-        loop {
-            let bytes_read = stream
-                .read(&mut chunk)
-                .map_err(|e| AppError::UnrealBridge(format!("read response error: {e}")))?;
-            if bytes_read == 0 {
-                if resp_buf.is_empty() {
-                    return Err(AppError::UnrealBridge(
-                        "connection closed before response".to_string(),
-                    ));
-                }
-                break;
-            }
-
-            resp_buf.extend_from_slice(&chunk[..bytes_read]);
-            if resp_buf.contains(&b'\n') {
-                let line_len = resp_buf
-                    .iter()
-                    .position(|b| *b == b'\n')
-                    .unwrap_or(resp_buf.len());
-                resp_buf.truncate(line_len);
-                break;
-            }
-        }
+        let resp_buf = timeout(
+            READ_TIMEOUT,
+            read_line_limited(&mut stream, MAX_RESPONSE_SIZE),
+        )
+        .await
+        .map_err(|_| AppError::UnrealBridge("read timeout".to_string()))?
+        .map_err(|e| AppError::UnrealBridge(format!("read response error: {e}")))?;
 
         let response: serde_json::Value = serde_json::from_slice(&resp_buf)
             .map_err(|e| AppError::UnrealBridge(format!("json decode error: {e}")))?;
 
         Ok(normalize_response(response))
     }
+}
+
+async fn read_line_limited(stream: &mut TcpStream, max_size: usize) -> Result<Vec<u8>, AppError> {
+    let mut resp_buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let bytes_read = stream
+            .read(&mut chunk)
+            .await
+            .map_err(|e| AppError::UnrealBridge(format!("read error: {e}")))?;
+        if bytes_read == 0 {
+            if resp_buf.is_empty() {
+                return Err(AppError::UnrealBridge(
+                    "connection closed before response".to_string(),
+                ));
+            }
+            break;
+        }
+
+        if resp_buf.len() + bytes_read > max_size {
+            return Err(AppError::UnrealBridge(format!(
+                "response exceeded maximum size of {max_size} bytes"
+            )));
+        }
+
+        resp_buf.extend_from_slice(&chunk[..bytes_read]);
+        if let Some(pos) = resp_buf.iter().position(|b| *b == b'\n') {
+            resp_buf.truncate(pos);
+            break;
+        }
+    }
+    Ok(resp_buf)
 }
 
 fn normalize_response(response: serde_json::Value) -> serde_json::Value {
@@ -198,4 +212,129 @@ fn normalize_response(response: serde_json::Value) -> serde_json::Value {
     }
 
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::net::TcpListener;
+
+    async fn mock_bridge_server(port: u16) -> tokio::task::JoinHandle<()> {
+        let listener = TcpListener::bind(format!("127.0.0.1:{port}"))
+            .await
+            .expect("mock bridge bind");
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap();
+                if n == 0 {
+                    continue;
+                }
+                let req: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap_or(json!({}));
+                let command = req.get("command").and_then(|v| v.as_str());
+                let resp = match command {
+                    Some("ping") => json!({"status": "success", "result": {"message": "pong"}}),
+                    Some("get_actors_in_level") => json!({
+                        "status": "success",
+                        "result": {"actors": [
+                            {
+                                "name": "cube_01",
+                                "class": "/Script/Engine.StaticMeshActor",
+                                "location": [0.0, 0.0, 0.0],
+                                "rotation": [0.0, 0.0, 0.0],
+                                "scale": [1.0, 1.0, 1.0],
+                                "tags": ["managed_by_mcp", "mcp_id:cube_01"]
+                            }
+                        ]}}
+                    ),
+                    Some("spawn_actor") => json!({
+                        "status": "success",
+                        "result": {"actor_name": "cube_01", "success": true}
+                    }),
+                    Some("find_actor_by_mcp_id") => json!({
+                        "status": "success",
+                        "result": {"actor": {"name": "cube_01", "class": "StaticMeshActor"}, "success": true}
+                    }),
+                    Some("delete_actor_by_mcp_id") => json!({
+                        "status": "success",
+                        "result": {"deleted_actor": {"name": "cube_01"}, "success": true}
+                    }),
+                    Some("set_actor_transform_by_mcp_id") => json!({
+                        "status": "success",
+                        "result": {"success": true}
+                    }),
+                    _ => json!({"status": "error", "error": "unknown command"}),
+                };
+                let mut resp_bytes = serde_json::to_vec(&resp).unwrap();
+                resp_bytes.push(b'\n');
+                socket.write_all(&resp_bytes).await.unwrap();
+                socket.flush().await.unwrap();
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn mock_bridge_ping_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // release so server can bind
+
+        let _server = mock_bridge_server(port).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = UnrealClient {
+            host: "127.0.0.1".to_string(),
+            port,
+        };
+        let resp = client.send_command("ping", json!({})).await.unwrap();
+        assert_eq!(resp.get("success"), Some(&serde_json::Value::Bool(true)));
+    }
+
+    #[tokio::test]
+    async fn mock_bridge_get_actors_parses_correctly() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let _server = mock_bridge_server(port).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = UnrealClient {
+            host: "127.0.0.1".to_string(),
+            port,
+        };
+        let actors = client.get_actors_in_level().await.unwrap();
+        assert_eq!(actors.len(), 1);
+        assert_eq!(actors[0].name, "cube_01");
+    }
+
+    #[tokio::test]
+    async fn mock_bridge_spawn_and_find() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let _server = mock_bridge_server(port).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = UnrealClient {
+            host: "127.0.0.1".to_string(),
+            port,
+        };
+        let spawn_resp = client
+            .spawn_actor(json!({"type": "StaticMeshActor"}))
+            .await
+            .unwrap();
+        assert_eq!(
+            spawn_resp.get("success"),
+            Some(&serde_json::Value::Bool(true))
+        );
+
+        let find_resp = client.find_actor_by_mcp_id("cube_01").await.unwrap();
+        assert_eq!(
+            find_resp.get("success"),
+            Some(&serde_json::Value::Bool(true))
+        );
+    }
 }
