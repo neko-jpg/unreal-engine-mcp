@@ -46,7 +46,7 @@ uint32 FMCPServerRunnable::Run()
                 ClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
 
                 // Receive loop with newline-delimited framing
-                const int32 ChunkSize = 4096;
+                const int32 ChunkSize = 65536;
                 uint8 Buffer[ChunkSize];
                 FString Accumulator;
 
@@ -58,7 +58,7 @@ uint32 FMCPServerRunnable::Run()
                         int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
                         if (LastError == SE_EWOULDBLOCK)
                         {
-                            FPlatformProcess::Sleep(0.01f);
+                            ClientSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(50));
                             continue;
                         }
                         else if (LastError == SE_EINTR)
@@ -116,7 +116,10 @@ uint32 FMCPServerRunnable::Run()
             }
         }
 
-        FPlatformProcess::Sleep(0.1f);
+        if (ListenerSocket)
+        {
+            ListenerSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(250));
+        }
     }
 
     UE_LOG(LogTemp, Log, TEXT("MCPServerRunnable: Server thread stopping"));

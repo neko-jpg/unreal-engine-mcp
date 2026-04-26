@@ -11,6 +11,7 @@
 #include "Commands/EpicUnrealMCPEditorCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
+#include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "EpicUnrealMCPBridge.generated.h"
 
 class FMCPServerRunnable;
@@ -41,8 +42,14 @@ public:
 	FIPv4Address GetServerAddress() const { return ServerAddress; }
 	uint16 GetServerPort() const { return Port; }
 
+	// Lazy actor index initialization
+	void EnsureActorIndexInitialized();
+
 	// Command execution
 	FString ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+	// Actor index for O(1) lookup by name/mcp_id
+	FActorIndex ActorIndex;
 
 private:
 	// Server state

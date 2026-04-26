@@ -6,6 +6,7 @@
 // Forward declarations
 class AActor;
 class UBlueprint;
+class UWorld;
 class UEdGraph;
 class UEdGraphNode;
 class UEdGraphPin;
@@ -16,6 +17,23 @@ class UK2Node_VariableSet;
 class UK2Node_InputAction;
 class UK2Node_Self;
 class UFunction;
+
+/**
+ * In-memory index for O(1) actor lookup by name and mcp_id.
+ * Updated on spawn/delete to avoid GetAllActorsOfClass linear scans.
+ */
+struct UNREALMCP_API FActorIndex
+{
+    TMap<FName, AActor*> NameIndex;
+    TMap<FString, AActor*> McpIdIndex;
+
+    void AddActor(AActor* Actor);
+    void RemoveActor(AActor* Actor);
+    AActor* FindByName(const FName& Name);
+    AActor* FindByMcpId(const FString& McpId);
+    void RebuildFromWorld(UWorld* World);
+    void Clear();
+};
 
 /**
  * Common utilities for EpicUnrealMCP commands

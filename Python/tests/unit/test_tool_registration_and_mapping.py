@@ -271,6 +271,9 @@ class TestPythonToCppCommandMapping:
                 commands.add(m.group(1))
             for m in re.finditer(r'HandleCommand\s*\(\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
                 commands.add(m.group(1))
+            # TMap-based dispatch: {TEXT("command_name"), bucket}
+            for m in re.finditer(r'\{\s*TEXT\s*\(\s*"([^"]+)"\s*\)\s*,\s*\d+\s*\}', text):
+                commands.add(m.group(1))
         return commands
 
     def _collect_python_commands(self):
@@ -325,8 +328,9 @@ class TestPythonToCppCommandMapping:
             "set_mesh_material_color",
             "batch_spawn_actors",
             "scene_create", "scene_upsert_actor", "scene_upsert_actors",
-            "scene_delete_actor", "scene_list_objects", "scene_health",
-            "scene_plan_sync",
+            "scene_delete_actor", "scene_snapshot_create", "scene_snapshot_restore",
+            "scene_list_objects", "scene_create_wall", "scene_create_pyramid",
+            "scene_health", "scene_plan_sync", "scene_sync",
         }
         registered = self._collect_registered_tool_names()
         missing = []

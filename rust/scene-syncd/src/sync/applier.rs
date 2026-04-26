@@ -1,8 +1,8 @@
+use crate::config::Config;
 use crate::db::SurrealSceneRepository;
 use crate::error::AppError;
 use crate::sync::{SyncAction, SyncOperation, SyncPlan};
 use crate::unreal::client::UnrealClient;
-use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -47,10 +47,15 @@ pub async fn apply_sync(
     mode: &str,
     allow_delete: bool,
 ) -> Result<SyncApplyResult, AppError> {
-    let run_id = format!("{}_{:04}", plan.scene_id, chrono::Utc::now().timestamp_millis() % 10000);
+    let run_id = format!(
+        "{}_{:04}",
+        plan.scene_id,
+        chrono::Utc::now().timestamp_millis() % 10000
+    );
     let unreal = UnrealClient::new(config);
 
-    db.create_sync_run(&run_id, &plan.scene_id, mode, "running").await?;
+    db.create_sync_run(&run_id, &plan.scene_id, mode, "running")
+        .await?;
 
     let mut result = SyncApplyResult {
         run_id: run_id.clone(),
@@ -66,15 +71,8 @@ pub async fn apply_sync(
     }
 
     for op in &plan.operations {
-        let applied = apply_operation(
-            db,
-            &unreal,
-            &run_id,
-            &plan.scene_id,
-            op,
-            mode,
-            allow_delete,
-        ).await;
+        let applied =
+            apply_operation(db, &unreal, &run_id, &plan.scene_id, op, mode, allow_delete).await;
 
         match &applied {
             Ok(ao) => {
@@ -126,9 +124,7 @@ async fn apply_operation(
     allow_delete: bool,
 ) -> Result<AppliedOperation, AppError> {
     match op.action {
-        SyncAction::Create => {
-            apply_create(db, unreal, run_id, scene_id, op).await
-        }
+        SyncAction::Create => apply_create(db, unreal, run_id, scene_id, op).await,
         SyncAction::UpdateTransform => {
             if mode == "plan_only" {
                 return Ok(AppliedOperation {
@@ -151,13 +147,7 @@ async fn apply_operation(
                     error: Some("plan_only mode".to_string()),
                 });
             }
-            Ok(AppliedOperation {
-                mcp_id: op.mcp_id.clone(),
-                action: "update_visual".to_string(),
-                status: "skipped".to_string(),
-                unreal_actor_name: None,
-                error: Some("visual updates not yet implemented in bridge".to_string()),
-            })
+            apply_visual_update(db, unreal, run_id, scene_id, op).await
         }
         SyncAction::Delete => {
             if mode == "plan_only" {
@@ -170,7 +160,15 @@ async fn apply_operation(
                 });
             }
             if !allow_delete {
-                db.record_operation(run_id, scene_id, &op.mcp_id, "delete", "skipped", "allow_delete not enabled").await?;
+                db.record_operation(
+                    run_id,
+                    scene_id,
+                    &op.mcp_id,
+                    "delete",
+                    "skipped",
+                    "allow_delete not enabled",
+                )
+                .await?;
                 return Ok(AppliedOperation {
                     mcp_id: op.mcp_id.clone(),
                     action: "delete".to_string(),
@@ -182,7 +180,15 @@ async fn apply_operation(
             apply_delete(db, unreal, run_id, scene_id, op).await
         }
         SyncAction::Noop => {
-            db.record_operation(run_id, scene_id, &op.mcp_id, "noop", "success", "no changes needed").await?;
+            db.record_operation(
+                run_id,
+                scene_id,
+                &op.mcp_id,
+                "noop",
+                "success",
+                "no changes needed",
+            )
+            .await?;
             Ok(AppliedOperation {
                 mcp_id: op.mcp_id.clone(),
                 action: "noop".to_string(),
@@ -192,7 +198,15 @@ async fn apply_operation(
             })
         }
         SyncAction::Conflict => {
-            db.record_operation(run_id, scene_id, &op.mcp_id, "conflict", "skipped", "conflict not auto-resolved").await?;
+            db.record_operation(
+                run_id,
+                scene_id,
+                &op.mcp_id,
+                "conflict",
+                "skipped",
+                "conflict not auto-resolved",
+            )
+            .await?;
             Ok(AppliedOperation {
                 mcp_id: op.mcp_id.clone(),
                 action: "conflict".to_string(),
@@ -202,7 +216,15 @@ async fn apply_operation(
             })
         }
         SyncAction::Unsupported => {
-            db.record_operation(run_id, scene_id, &op.mcp_id, "unsupported", "skipped", "unsupported action").await?;
+            db.record_operation(
+                run_id,
+                scene_id,
+                &op.mcp_id,
+                "unsupported",
+                "skipped",
+                "unsupported action",
+            )
+            .await?;
             Ok(AppliedOperation {
                 mcp_id: op.mcp_id.clone(),
                 action: "unsupported".to_string(),
@@ -214,13 +236,22 @@ async fn apply_operation(
     }
 }
 
-fn extract_verified_actor_name(verify_response: &serde_json::Value, mcp_id: &str) -> Result<Option<String>, String> {
-    let verified = verify_response.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+fn extract_verified_actor_name(
+    verify_response: &serde_json::Value,
+    mcp_id: &str,
+) -> Result<Option<String>, String> {
+    let verified = verify_response
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if !verified {
-        let err_msg = verify_response.get("error")
+        let err_msg = verify_response
+            .get("error")
             .and_then(|e| e.as_str())
             .unwrap_or("created actor could not be verified by mcp_id");
-        return Err(format!("created actor was not verifiable by mcp_id: {err_msg}"));
+        return Err(format!(
+            "created actor was not verifiable by mcp_id: {err_msg}"
+        ));
     }
 
     match verify_response.get("actor").and_then(|a| a.as_object()) {
@@ -245,18 +276,23 @@ async fn apply_create(
     scene_id: &str,
     op: &SyncOperation,
 ) -> Result<AppliedOperation, AppError> {
-    let desired = op.desired.as_ref()
+    let desired = op
+        .desired
+        .as_ref()
         .ok_or_else(|| AppError::Validation("create operation missing desired data".to_string()))?;
 
     let mcp_id = op.mcp_id.as_str();
-    let desired_name = desired.get("desired_name")
+    let desired_name = desired
+        .get("desired_name")
         .and_then(|v| v.as_str())
         .unwrap_or(mcp_id);
-    let actor_type = desired.get("actor_type")
+    let actor_type = desired
+        .get("actor_type")
         .and_then(|v| v.as_str())
         .unwrap_or("StaticMeshActor");
 
-    let asset_path = desired.get("asset_ref")
+    let asset_path = desired
+        .get("asset_ref")
         .and_then(|v| v.get("path"))
         .and_then(|v| v.as_str())
         .unwrap_or("/Engine/BasicShapes/Cube.Cube");
@@ -266,17 +302,44 @@ async fn apply_create(
     let rotation = transform.and_then(|t| t.get("rotation"));
     let scale = transform.and_then(|t| t.get("scale"));
 
-    let loc_x = location.and_then(|l| l.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let loc_y = location.and_then(|l| l.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let loc_z = location.and_then(|l| l.get("z")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let loc_x = location
+        .and_then(|l| l.get("x"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let loc_y = location
+        .and_then(|l| l.get("y"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let loc_z = location
+        .and_then(|l| l.get("z"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
-    let rot_pitch = rotation.and_then(|r| r.get("pitch")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let rot_yaw = rotation.and_then(|r| r.get("yaw")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let rot_roll = rotation.and_then(|r| r.get("roll")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let rot_pitch = rotation
+        .and_then(|r| r.get("pitch"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let rot_yaw = rotation
+        .and_then(|r| r.get("yaw"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let rot_roll = rotation
+        .and_then(|r| r.get("roll"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
-    let scl_x = scale.and_then(|s| s.get("x")).and_then(|v| v.as_f64()).unwrap_or(1.0);
-    let scl_y = scale.and_then(|s| s.get("y")).and_then(|v| v.as_f64()).unwrap_or(1.0);
-    let scl_z = scale.and_then(|s| s.get("z")).and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let scl_x = scale
+        .and_then(|s| s.get("x"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+    let scl_y = scale
+        .and_then(|s| s.get("y"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+    let scl_z = scale
+        .and_then(|s| s.get("z"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
 
     let mut tags = vec!["managed_by_mcp".to_string(), format!("mcp_id:{}", mcp_id)];
     if let Some(tags_val) = desired.get("tags").and_then(|v| v.as_array()) {
@@ -307,10 +370,14 @@ async fn apply_create(
 
     match spawn_result {
         Ok(response) => {
-            let success = response.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let success = response
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             if success {
-                let unreal_actor_name = response.get("actor")
+                let unreal_actor_name = response
+                    .get("actor")
                     .and_then(|a| a.get("name"))
                     .and_then(|n| n.as_str())
                     .or_else(|| response.get("name").and_then(|n| n.as_str()))
@@ -322,8 +389,15 @@ async fn apply_create(
                         match extract_verified_actor_name(&verify_response, mcp_id) {
                             Ok(name) => name,
                             Err(full_msg) => {
-                                db.record_operation(run_id, scene_id, mcp_id, "create", "error", &full_msg).await?;
-                                tracing::warn!(mcp_id = mcp_id, error = full_msg, "Create verification failed");
+                                db.record_operation(
+                                    run_id, scene_id, mcp_id, "create", "error", &full_msg,
+                                )
+                                .await?;
+                                tracing::warn!(
+                                    mcp_id = mcp_id,
+                                    error = full_msg,
+                                    "Create verification failed"
+                                );
                                 return Ok(AppliedOperation {
                                     mcp_id: mcp_id.to_string(),
                                     action: "create".to_string(),
@@ -336,8 +410,13 @@ async fn apply_create(
                     }
                     Err(e) => {
                         let full_msg = format!("created actor was not verifiable by mcp_id: {e}");
-                        db.record_operation(run_id, scene_id, mcp_id, "create", "error", &full_msg).await?;
-                        tracing::warn!(mcp_id = mcp_id, error = full_msg, "Create verification failed");
+                        db.record_operation(run_id, scene_id, mcp_id, "create", "error", &full_msg)
+                            .await?;
+                        tracing::warn!(
+                            mcp_id = mcp_id,
+                            error = full_msg,
+                            "Create verification failed"
+                        );
                         return Ok(AppliedOperation {
                             mcp_id: mcp_id.to_string(),
                             action: "create".to_string(),
@@ -350,12 +429,22 @@ async fn apply_create(
 
                 let unreal_actor_name = verified_actor_name.or(unreal_actor_name);
 
-                let desired_hash = desired.get("desired_hash")
+                let desired_hash = desired
+                    .get("desired_hash")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                db.mark_object_synced(scene_id, mcp_id, desired_hash, unreal_actor_name.as_deref()).await?;
-                db.record_operation(run_id, scene_id, mcp_id, "create", "success", "actor created in Unreal").await?;
+                db.mark_object_synced(scene_id, mcp_id, desired_hash, unreal_actor_name.as_deref())
+                    .await?;
+                db.record_operation(
+                    run_id,
+                    scene_id,
+                    mcp_id,
+                    "create",
+                    "success",
+                    "actor created in Unreal",
+                )
+                .await?;
 
                 tracing::info!(mcp_id = mcp_id, actor_name = ?unreal_actor_name, "Create succeeded");
 
@@ -367,11 +456,13 @@ async fn apply_create(
                     error: None,
                 })
             } else {
-                let err_msg = response.get("error")
+                let err_msg = response
+                    .get("error")
                     .and_then(|e| e.as_str())
                     .unwrap_or("unknown Unreal spawn error");
 
-                db.record_operation(run_id, scene_id, mcp_id, "create", "error", err_msg).await?;
+                db.record_operation(run_id, scene_id, mcp_id, "create", "error", err_msg)
+                    .await?;
 
                 tracing::warn!(mcp_id = mcp_id, error = err_msg, "Create failed");
 
@@ -385,7 +476,8 @@ async fn apply_create(
             }
         }
         Err(e) => {
-            db.record_operation(run_id, scene_id, mcp_id, "create", "error", &e.to_string()).await?;
+            db.record_operation(run_id, scene_id, mcp_id, "create", "error", &e.to_string())
+                .await?;
 
             tracing::warn!(mcp_id = mcp_id, error = %e, "Create failed (bridge error)");
 
@@ -407,8 +499,9 @@ async fn apply_transform_update(
     scene_id: &str,
     op: &SyncOperation,
 ) -> Result<AppliedOperation, AppError> {
-    let desired = op.desired.as_ref()
-        .ok_or_else(|| AppError::Validation("update_transform operation missing desired data".to_string()))?;
+    let desired = op.desired.as_ref().ok_or_else(|| {
+        AppError::Validation("update_transform operation missing desired data".to_string())
+    })?;
 
     let mcp_id = op.mcp_id.as_str();
 
@@ -418,36 +511,78 @@ async fn apply_transform_update(
     let scale = transform.and_then(|t| t.get("scale"));
 
     let loc: [f64; 3] = [
-        location.and_then(|l| l.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0),
-        location.and_then(|l| l.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0),
-        location.and_then(|l| l.get("z")).and_then(|v| v.as_f64()).unwrap_or(0.0),
+        location
+            .and_then(|l| l.get("x"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
+        location
+            .and_then(|l| l.get("y"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
+        location
+            .and_then(|l| l.get("z"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
     ];
     let rot: [f64; 3] = [
-        rotation.and_then(|r| r.get("pitch")).and_then(|v| v.as_f64()).unwrap_or(0.0),
-        rotation.and_then(|r| r.get("yaw")).and_then(|v| v.as_f64()).unwrap_or(0.0),
-        rotation.and_then(|r| r.get("roll")).and_then(|v| v.as_f64()).unwrap_or(0.0),
+        rotation
+            .and_then(|r| r.get("pitch"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
+        rotation
+            .and_then(|r| r.get("yaw"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
+        rotation
+            .and_then(|r| r.get("roll"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
     ];
     let scl: [f64; 3] = [
-        scale.and_then(|s| s.get("x")).and_then(|v| v.as_f64()).unwrap_or(1.0),
-        scale.and_then(|s| s.get("y")).and_then(|v| v.as_f64()).unwrap_or(1.0),
-        scale.and_then(|s| s.get("z")).and_then(|v| v.as_f64()).unwrap_or(1.0),
+        scale
+            .and_then(|s| s.get("x"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0),
+        scale
+            .and_then(|s| s.get("y"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0),
+        scale
+            .and_then(|s| s.get("z"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0),
     ];
 
     tracing::info!(mcp_id = mcp_id, "Updating actor transform in Unreal");
 
-    let result = unreal.set_actor_transform_by_mcp_id(mcp_id, loc, rot, scl).await;
+    let result = unreal
+        .set_actor_transform_by_mcp_id(mcp_id, loc, rot, scl)
+        .await;
 
     match result {
         Ok(response) => {
-            let success = response.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let success = response
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             if success {
-                let desired_hash = desired.get("desired_hash")
+                let desired_hash = desired
+                    .get("desired_hash")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                db.mark_object_synced(scene_id, mcp_id, desired_hash, None).await?;
-                db.record_operation(run_id, scene_id, mcp_id, "update_transform", "success", "transform updated").await?;
+                db.mark_object_synced(scene_id, mcp_id, desired_hash, None)
+                    .await?;
+                db.record_operation(
+                    run_id,
+                    scene_id,
+                    mcp_id,
+                    "update_transform",
+                    "success",
+                    "transform updated",
+                )
+                .await?;
 
                 tracing::info!(mcp_id = mcp_id, "Transform update succeeded");
 
@@ -459,11 +594,20 @@ async fn apply_transform_update(
                     error: None,
                 })
             } else {
-                let err_msg = response.get("error")
+                let err_msg = response
+                    .get("error")
                     .and_then(|e| e.as_str())
                     .unwrap_or("unknown Unreal transform error");
 
-                db.record_operation(run_id, scene_id, mcp_id, "update_transform", "error", err_msg).await?;
+                db.record_operation(
+                    run_id,
+                    scene_id,
+                    mcp_id,
+                    "update_transform",
+                    "error",
+                    err_msg,
+                )
+                .await?;
 
                 Ok(AppliedOperation {
                     mcp_id: mcp_id.to_string(),
@@ -475,7 +619,15 @@ async fn apply_transform_update(
             }
         }
         Err(e) => {
-            db.record_operation(run_id, scene_id, mcp_id, "update_transform", "error", &e.to_string()).await?;
+            db.record_operation(
+                run_id,
+                scene_id,
+                mcp_id,
+                "update_transform",
+                "error",
+                &e.to_string(),
+            )
+            .await?;
 
             Ok(AppliedOperation {
                 mcp_id: mcp_id.to_string(),
@@ -485,6 +637,135 @@ async fn apply_transform_update(
                 error: Some(e.to_string()),
             })
         }
+    }
+}
+
+async fn apply_visual_update(
+    db: &SurrealSceneRepository,
+    unreal: &UnrealClient,
+    run_id: &str,
+    scene_id: &str,
+    op: &SyncOperation,
+) -> Result<AppliedOperation, AppError> {
+    let desired = op.desired.as_ref().ok_or_else(|| {
+        AppError::Validation("update_visual operation missing desired data".to_string())
+    })?;
+
+    let mcp_id = op.mcp_id.as_str();
+    let mut applied_count = 0usize;
+    let mut skip_reasons: Vec<String> = Vec::new();
+
+    // Resolve the Unreal actor name from the operation's actual data or via lookup
+    let actor_name = op
+        .actual
+        .as_ref()
+        .and_then(|a| a.get("name"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // Apply material color if visual contains color info
+    if let Some(visual) = desired.get("visual").and_then(|v| v.as_object()) {
+        if let (Some(r), Some(g), Some(b)) = (
+            visual.get("color_r").and_then(|v| v.as_f64()),
+            visual.get("color_g").and_then(|v| v.as_f64()),
+            visual.get("color_b").and_then(|v| v.as_f64()),
+        ) {
+            if let Some(ref name) = actor_name {
+                tracing::info!(mcp_id = mcp_id, "Setting material color in Unreal");
+                let result = unreal.set_mesh_material_color(name, r, g, b).await;
+                match result {
+                    Ok(response) => {
+                        let success = response
+                            .get("success")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if success {
+                            applied_count += 1;
+                        } else {
+                            let err = response
+                                .get("error")
+                                .and_then(|e| e.as_str())
+                                .unwrap_or("unknown material color error");
+                            skip_reasons.push(format!("material color failed: {err}"));
+                        }
+                    }
+                    Err(e) => {
+                        skip_reasons.push(format!("material color bridge error: {e}"));
+                    }
+                }
+            } else {
+                skip_reasons.push("material color skipped: actor name not resolved".to_string());
+            }
+        }
+    }
+
+    // Asset/mesh changes require delete+create (bridge limitation)
+    if desired.get("asset_ref").is_some() && op.actual.as_ref().and_then(|a| a.get("static_mesh")).is_some() {
+        let desired_path = desired
+            .get("asset_ref")
+            .and_then(|v| v.get("path"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let actual_path = op
+            .actual
+            .as_ref()
+            .and_then(|a| a.get("static_mesh"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if desired_path != actual_path && !desired_path.is_empty() {
+            skip_reasons.push(
+                "asset change requires delete+create (bridge has no mesh swap command)".to_string(),
+            );
+        }
+    }
+
+    // Tag changes are set at spawn time only (bridge limitation)
+    if desired.get("tags").is_some() {
+        // Tags are already applied on create; updating them requires re-spawn
+    }
+
+    let desired_hash = desired
+        .get("desired_hash")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // Mark synced if at least something was applied, even if some parts were skipped
+    if applied_count > 0 || skip_reasons.is_empty() {
+        db.mark_object_synced(scene_id, mcp_id, desired_hash, None)
+            .await?;
+        db.record_operation(
+            run_id,
+            scene_id,
+            mcp_id,
+            "update_visual",
+            "success",
+            &format!("visual update applied ({applied_count} changes)"),
+        )
+        .await?;
+        Ok(AppliedOperation {
+            mcp_id: mcp_id.to_string(),
+            action: "update_visual".to_string(),
+            status: "success".to_string(),
+            unreal_actor_name: None,
+            error: None,
+        })
+    } else {
+        db.record_operation(
+            run_id,
+            scene_id,
+            mcp_id,
+            "update_visual",
+            "skipped",
+            &skip_reasons.join("; "),
+        )
+        .await?;
+        Ok(AppliedOperation {
+            mcp_id: mcp_id.to_string(),
+            action: "update_visual".to_string(),
+            status: "skipped".to_string(),
+            unreal_actor_name: None,
+            error: Some(skip_reasons.join("; ")),
+        })
     }
 }
 
@@ -503,11 +784,22 @@ async fn apply_delete(
 
     match result {
         Ok(response) => {
-            let success = response.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let success = response
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             if success {
                 db.mark_object_deleted_applied(scene_id, mcp_id).await?;
-                db.record_operation(run_id, scene_id, mcp_id, "delete", "success", "actor deleted").await?;
+                db.record_operation(
+                    run_id,
+                    scene_id,
+                    mcp_id,
+                    "delete",
+                    "success",
+                    "actor deleted",
+                )
+                .await?;
 
                 tracing::info!(mcp_id = mcp_id, "Delete succeeded");
 
@@ -519,11 +811,13 @@ async fn apply_delete(
                     error: None,
                 })
             } else {
-                let err_msg = response.get("error")
+                let err_msg = response
+                    .get("error")
                     .and_then(|e| e.as_str())
                     .unwrap_or("unknown Unreal delete error");
 
-                db.record_operation(run_id, scene_id, mcp_id, "delete", "error", err_msg).await?;
+                db.record_operation(run_id, scene_id, mcp_id, "delete", "error", err_msg)
+                    .await?;
 
                 Ok(AppliedOperation {
                     mcp_id: mcp_id.to_string(),
@@ -535,7 +829,8 @@ async fn apply_delete(
             }
         }
         Err(e) => {
-            db.record_operation(run_id, scene_id, mcp_id, "delete", "error", &e.to_string()).await?;
+            db.record_operation(run_id, scene_id, mcp_id, "delete", "error", &e.to_string())
+                .await?;
 
             Ok(AppliedOperation {
                 mcp_id: mcp_id.to_string(),

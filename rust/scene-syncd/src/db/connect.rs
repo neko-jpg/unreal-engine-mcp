@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::error::AppError;
-use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
+use surrealdb::Surreal;
 
 pub async fn connect_surreal(config: &Config) -> Result<Surreal<Any>, AppError> {
     let db: Surreal<Any> = Surreal::init();

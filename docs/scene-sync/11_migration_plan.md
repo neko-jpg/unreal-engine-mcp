@@ -41,6 +41,8 @@ scene_sync -> Rust planner/applier -> Unreal bridge -> Unreal
 
 ## 5. Phase 0: Docs and skeleton
 
+**Status: Implemented**
+
 Add:
 
 - docs
@@ -55,6 +57,8 @@ Risk: low.
 
 ## 6. Phase 1: Unreal identity support
 
+**Status: Implemented**
+
 Add:
 
 - tags in actor listing
@@ -67,6 +71,8 @@ Risk: medium.
 Rollback: existing tools can ignore new fields.
 
 ## 7. Phase 2: SurrealDB CRUD
+
+**Status: Implemented**
 
 Implement:
 
@@ -82,6 +88,8 @@ Risk: low.
 
 ## 8. Phase 3: Plan-only sync
 
+**Status: Implemented**
+
 Implement:
 
 - read desired from SurrealDB
@@ -94,6 +102,8 @@ No mutation.
 Risk: low.
 
 ## 9. Phase 4: Create-only sync
+
+**Status: Implemented**
 
 Implement:
 
@@ -108,6 +118,8 @@ This is the first major proof.
 
 ## 10. Phase 5: Transform updates
 
+**Status: Implemented**
+
 Implement:
 
 - desired transform changes
@@ -118,6 +130,8 @@ Implement:
 Risk: medium.
 
 ## 11. Phase 6: Deletes
+
+**Status: Implemented**
 
 Implement:
 
@@ -130,6 +144,8 @@ Risk: high if identity is not solid.
 
 ## 12. Phase 7: Snapshot/restore
 
+**Status: Implemented**
+
 Implement:
 
 - snapshot current desired state
@@ -139,6 +155,8 @@ Implement:
 Risk: medium.
 
 ## 13. Phase 8: Simple procedural tools
+
+**Status: Implemented**
 
 Add:
 
@@ -150,6 +168,8 @@ These should write DB objects, not directly spawn actors.
 Risk: medium.
 
 ## 14. Phase 9: `ActorSink` abstraction
+
+**Status: Implemented**
 
 Current style:
 

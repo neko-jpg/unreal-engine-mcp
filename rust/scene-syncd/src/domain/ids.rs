@@ -1,19 +1,17 @@
+#[allow(dead_code)]
 pub fn generate_scene_id(name: &str) -> String {
     format!("scene:{name}")
 }
 
+#[allow(dead_code)]
 pub fn generate_scene_object_id(scene: &str, mcp_id: &str) -> String {
     format!("scene_object:{scene}_{mcp_id}")
 }
 
+#[allow(dead_code)]
 pub fn generate_sync_run_id(scene: &str) -> String {
     let now = chrono::Utc::now();
-    format!(
-        "sync_run:{}_{:04}{:02}{:02}_{:04}",
-        scene,
-        now.format("%Y%m%d"),
-        0, 0, 0
-    )
+    format!("sync_run:{}_{}", scene, now.format("%Y%m%d_%H%M%S"))
 }
 
 pub fn validate_mcp_id(id: &str) -> Result<(), String> {

@@ -4,6 +4,43 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-04-26] - Scene-sync Phase 4/5 hardening
+
+### Added
+
+- Added `scripts/verify_phase5.py` integration test: creates an actor through DB desired state, updates its transform in the DB, applies sync, then verifies via `find_actor_by_mcp_id` and confirms re-plan is a no-op.
+- Added `scene_snapshot_create` and `scene_snapshot_restore` via Rust `/snapshots/create` and `/snapshots/restore`; restore changes DB desired state only and requires a later `scene_sync`.
+- Added DB desired-state generators `scene_create_wall` and `scene_create_pyramid` that bulk-upsert generated actors without touching Unreal.
+- Added `FlopperamUnrealMCP 5.7/DEPRECATED.md` to document that the 5.7 project directory contains no plugin source and lacks `mcp_id` bridge commands required for scene sync.
+
+### Fixed
+
+- Fixed the Unreal C++ automation test helper linkage by restoring the `MakeArrayValue(std::initializer_list<TSharedPtr<FJsonValue>>)` overload used by MCP ID editor tests.
+- Fixed `desired_hash` in `scene-syncd` to only include fields that the sync applier can actually apply (`actor_type` and `transform`).
+  - `asset_ref`, `visual`, `physics`, and tags are intentionally excluded until their bridge commands are implemented.
+  - Previously, changing tags or `asset_ref` produced an `UpdateVisual` operation that the applier skipped with "visual updates not yet implemented", leaving the DB `sync_status` permanently out of alignment with Unreal reality.
+- Fixed `scene-syncd` object sync bookkeeping so `mark_object_synced`, tombstone marking, and delete-applied marking update SurrealDB records by typed record key instead of silently missing IDs that contain `scene:mcp_id`.
+- Fixed `scene_snapshot` schema to preserve nested `groups` and `objects` array elements under SurrealDB schemafull mode.
+- Fixed `plan_sync` response in `scene-syncd` to include Unreal-unreachable warnings in the `warnings` array, making it visible to clients that the plan was generated against an empty actual state.
+- Fixed Python drift-detection test to include `scene_sync` in the `skip_tools` set, since it sends commands through the Rust HTTP API rather than directly to the Unreal C++ bridge.
+- Fixed duplicate `mcp_id` safety in `scene-syncd` planner: if the same `mcp_id` is found on multiple actual Unreal actors, the planner downgrades any `Delete` operation for that `mcp_id` to `Conflict`, preventing accidental multi-actor deletion.
+
+### Changed
+
+- Updated `AGENTS.md` repository-specific guidance:
+  - Documented that `scene_sync` (Phase 4 apply) is now implemented and wired into API routes and Python facade.
+  - Added explicit deprecation warning for `FlopperamUnrealMCP 5.7/`.
+
+### Verification
+
+- Ran UE 5.7 editor build for `FlopperamUnrealMCP 5.7 - 3/FlopperamUnrealMCP.uproject`; build succeeded after the automation helper linkage fix.
+- Ran `python -m pytest tests/unit/test_tool_registration_and_mapping.py -v` in `Python`; 35 passed.
+- Ran `cargo test` in `rust/scene-syncd`; 6 passed. Existing unused-code warnings remain.
+- Ran `python scripts/verify_phase5.py` with Unreal Editor, SurrealDB, and `scene-syncd` running; transform update applied and re-plan returned `noop: 1`.
+- Verified Phase 7/8 through Python facade against local SurrealDB + `scene-syncd`: `scene_create_wall` upserted 3 objects, `scene_create_pyramid` upserted 5 objects, snapshot captured 8 objects, restore tombstoned 1 extra object and returned active objects to 8.
+
+---
+
 ## [2026-04-26] - scenectl CLI MVP
 
 ### Added

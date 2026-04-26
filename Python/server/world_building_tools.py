@@ -8,12 +8,12 @@ from typing import Dict, Any, Optional, List
 
 from server.core import mcp, get_unreal_connection
 from server.validation import (
-    validate_vector3, validate_int, validate_float, validate_string,
-    validate_positive_int, validate_unreal_path, MAX_ACTORS_PER_BATCH,
+    validate_vector3, validate_float, validate_string,
+    validate_positive_int, MAX_ACTORS_PER_BATCH,
     ValidationError, make_validation_error_response_from_exception,
 )
 from utils.responses import make_error_response, is_success_response
-from server.actor_tools import batch_spawn_actors
+from server.actor_sink import ActorSpec, DryRunActorSink, UnrealActorSink
 from helpers.infrastructure_creation import (
     _create_street_grid, _create_street_lights, _create_town_vehicles,
     _create_town_decorations, _create_traffic_lights, _create_street_signage,
@@ -34,7 +34,6 @@ from helpers.mansion_creation import (
     build_mansion_main_structure, build_mansion_exterior, add_mansion_interior
 )
 from helpers.actor_utilities import spawn_blueprint_actor
-from helpers.actor_name_manager import safe_spawn_actor
 from helpers.bridge_aqueduct_creation import (
     build_suspension_bridge_structure, build_aqueduct_structure
 )
@@ -62,35 +61,35 @@ def create_pyramid(
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        scale = block_size / 100.0
-        actor_specs = []
+
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         for level in range(base_size):
             count = base_size - level
             for x in range(count):
                 for y in range(count):
-                    actor_specs.append({
-                        "name": f"{name_prefix}_{level}_{x}_{y}",
-                        "type": "StaticMeshActor",
-                        "location": [
-                            location[0] + (x - (count - 1) / 2) * block_size,
-                            location[1] + (y - (count - 1) / 2) * block_size,
-                            location[2] + level * block_size,
-                        ],
-                        "scale": [scale, scale, scale],
-                        "static_mesh": mesh,
-                    })
+                    mcp_id = f"{name_prefix}_{level}_{x}_{y}"
+                    sink.spawn(ActorSpec(
+                        mcp_id=mcp_id,
+                        desired_name=mcp_id,
+                        actor_type="StaticMeshActor",
+                        asset_ref={"path": mesh},
+                        transform={
+                            "location": {
+                                "x": location[0] + (x - (count - 1) / 2) * block_size,
+                                "y": location[1] + (y - (count - 1) / 2) * block_size,
+                                "z": location[2] + level * block_size,
+                            },
+                            "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                            "scale": {"x": block_size / 100.0, "y": block_size / 100.0, "z": block_size / 100.0},
+                        },
+                        tags=["pyramid", name_prefix],
+                    ))
 
+        result = sink.flush()
         if dry_run:
-            return {
-                "success": True,
-                "dry_run": True,
-                "actor_count": len(actor_specs),
-                "actors": actor_specs,
-                "message": f"Would spawn {len(actor_specs)} actors for pyramid (base_size={base_size}).",
-            }
-
-        result = batch_spawn_actors(actor_specs)
-        result["message"] = f"Pyramid created: base_size={base_size}, spawned {result.get('spawned_count', 0)} actors"
+            result["message"] = f"Would spawn {len(sink.specs)} actors for pyramid (base_size={base_size})."
+        else:
+            result["message"] = f"Pyramid created: base_size={base_size}"
         return result
     except Exception as e:
         logger.error(f"create_pyramid error: {e}")
@@ -120,33 +119,36 @@ def create_wall(
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        scale = block_size / 100.0
-        actor_specs = []
+
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         for h in range(height):
             for i in range(length):
                 if orientation == "x":
-                    loc = [location[0] + i * block_size, location[1], location[2] + h * block_size]
+                    loc_x = location[0] + i * block_size
+                    loc_y = location[1]
                 else:
-                    loc = [location[0], location[1] + i * block_size, location[2] + h * block_size]
-                actor_specs.append({
-                    "name": f"{name_prefix}_{h}_{i}",
-                    "type": "StaticMeshActor",
-                    "location": loc,
-                    "scale": [scale, scale, scale],
-                    "static_mesh": mesh,
-                })
+                    loc_x = location[0]
+                    loc_y = location[1] + i * block_size
+                loc_z = location[2] + h * block_size
+                mcp_id = f"{name_prefix}_{h}_{i}"
+                sink.spawn(ActorSpec(
+                    mcp_id=mcp_id,
+                    desired_name=mcp_id,
+                    actor_type="StaticMeshActor",
+                    asset_ref={"path": mesh},
+                    transform={
+                        "location": {"x": loc_x, "y": loc_y, "z": loc_z},
+                        "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                        "scale": {"x": block_size / 100.0, "y": block_size / 100.0, "z": block_size / 100.0},
+                    },
+                    tags=["wall", name_prefix],
+                ))
 
+        result = sink.flush()
         if dry_run:
-            return {
-                "success": True,
-                "dry_run": True,
-                "actor_count": len(actor_specs),
-                "actors": actor_specs,
-                "message": f"Would spawn {len(actor_specs)} actors for wall (length={length}, height={height}).",
-            }
-
-        result = batch_spawn_actors(actor_specs)
-        result["message"] = f"Wall created: length={length}, height={height}, spawned {result.get('spawned_count', 0)} actors"
+            result["message"] = f"Would spawn {len(sink.specs)} actors for wall (length={length}, height={height})."
+        else:
+            result["message"] = f"Wall created: length={length}, height={height}"
         return result
     except Exception as e:
         logger.error(f"create_wall error: {e}")
@@ -161,16 +163,15 @@ def create_tower(
     location: Optional[List[float]] = None,
     name_prefix: str = "TowerBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    tower_style: str = "cylindrical"
+    tower_style: str = "cylindrical",
+    dry_run: bool = False,
 ) -> Dict[str, Any]:
     """Create a realistic tower with various architectural styles."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-        spawned = []
+
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         scale = block_size / 100.0
 
         for level in range(height):
@@ -185,18 +186,18 @@ def create_tower(
                     angle = (2 * math.pi * i) / num_blocks
                     x = location[0] + radius * math.cos(angle)
                     y = location[1] + radius * math.sin(angle)
-
-                    actor_name = f"{name_prefix}_{level}_{i}"
-                    params = {
-                        "name": actor_name,
-                        "type": "StaticMeshActor",
-                        "location": [x, y, level_height],
-                        "scale": [scale, scale, scale],
-                        "static_mesh": mesh
-                    }
-                    resp = safe_spawn_actor(unreal, params)
-                    if resp and is_success_response(resp):
-                        spawned.append(resp)
+                    mcp_id = f"{name_prefix}_{level}_{i}"
+                    sink.spawn(ActorSpec(
+                        mcp_id=mcp_id, desired_name=mcp_id,
+                        actor_type="StaticMeshActor",
+                        asset_ref={"path": mesh},
+                        transform={
+                            "location": {"x": x, "y": y, "z": level_height},
+                            "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                            "scale": {"x": scale, "y": scale, "z": scale},
+                        },
+                        tags=["tower", name_prefix],
+                    ))
 
             elif tower_style == "tapered":
                 current_size = max(1, base_size - (level // 2))
@@ -207,30 +208,31 @@ def create_tower(
                         if side == 0:
                             x = location[0] + (i - half_size + 0.5) * block_size
                             y = location[1] - half_size * block_size
-                            actor_name = f"{name_prefix}_{level}_front_{i}"
+                            side_label = "front"
                         elif side == 1:
                             x = location[0] + half_size * block_size
                             y = location[1] + (i - half_size + 0.5) * block_size
-                            actor_name = f"{name_prefix}_{level}_right_{i}"
+                            side_label = "right"
                         elif side == 2:
                             x = location[0] + (half_size - i - 0.5) * block_size
                             y = location[1] + half_size * block_size
-                            actor_name = f"{name_prefix}_{level}_back_{i}"
+                            side_label = "back"
                         else:
                             x = location[0] - half_size * block_size
                             y = location[1] + (half_size - i - 0.5) * block_size
-                            actor_name = f"{name_prefix}_{level}_left_{i}"
-
-                        params = {
-                            "name": actor_name,
-                            "type": "StaticMeshActor",
-                            "location": [x, y, level_height],
-                            "scale": [scale, scale, scale],
-                            "static_mesh": mesh
-                        }
-                        resp = safe_spawn_actor(unreal, params)
-                        if resp and is_success_response(resp):
-                            spawned.append(resp)
+                            side_label = "left"
+                        mcp_id = f"{name_prefix}_{level}_{side_label}_{i}"
+                        sink.spawn(ActorSpec(
+                            mcp_id=mcp_id, desired_name=mcp_id,
+                            actor_type="StaticMeshActor",
+                            asset_ref={"path": mesh},
+                            transform={
+                                "location": {"x": x, "y": y, "z": level_height},
+                                "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                                "scale": {"x": scale, "y": scale, "z": scale},
+                            },
+                            tags=["tower", name_prefix],
+                        ))
 
             else:  # square tower
                 half_size = base_size / 2
@@ -240,50 +242,53 @@ def create_tower(
                         if side == 0:
                             x = location[0] + (i - half_size + 0.5) * block_size
                             y = location[1] - half_size * block_size
-                            actor_name = f"{name_prefix}_{level}_front_{i}"
+                            side_label = "front"
                         elif side == 1:
                             x = location[0] + half_size * block_size
                             y = location[1] + (i - half_size + 0.5) * block_size
-                            actor_name = f"{name_prefix}_{level}_right_{i}"
+                            side_label = "right"
                         elif side == 2:
                             x = location[0] + (half_size - i - 0.5) * block_size
                             y = location[1] + half_size * block_size
-                            actor_name = f"{name_prefix}_{level}_back_{i}"
+                            side_label = "back"
                         else:
                             x = location[0] - half_size * block_size
                             y = location[1] + (half_size - i - 0.5) * block_size
-                            actor_name = f"{name_prefix}_{level}_left_{i}"
-
-                        params = {
-                            "name": actor_name,
-                            "type": "StaticMeshActor",
-                            "location": [x, y, level_height],
-                            "scale": [scale, scale, scale],
-                            "static_mesh": mesh
-                        }
-                        resp = safe_spawn_actor(unreal, params)
-                        if resp and is_success_response(resp):
-                            spawned.append(resp)
+                            side_label = "left"
+                        mcp_id = f"{name_prefix}_{level}_{side_label}_{i}"
+                        sink.spawn(ActorSpec(
+                            mcp_id=mcp_id, desired_name=mcp_id,
+                            actor_type="StaticMeshActor",
+                            asset_ref={"path": mesh},
+                            transform={
+                                "location": {"x": x, "y": y, "z": level_height},
+                                "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                                "scale": {"x": scale, "y": scale, "z": scale},
+                            },
+                            tags=["tower", name_prefix],
+                        ))
 
             if level % 3 == 2 and level < height - 1:
                 for corner in range(4):
                     angle = corner * math.pi / 2
                     detail_x = location[0] + (base_size/2 + 0.5) * block_size * math.cos(angle)
                     detail_y = location[1] + (base_size/2 + 0.5) * block_size * math.sin(angle)
+                    mcp_id = f"{name_prefix}_{level}_detail_{corner}"
+                    sink.spawn(ActorSpec(
+                        mcp_id=mcp_id, desired_name=mcp_id,
+                        actor_type="StaticMeshActor",
+                        asset_ref={"path": "/Engine/BasicShapes/Cylinder.Cylinder"},
+                        transform={
+                            "location": {"x": detail_x, "y": detail_y, "z": level_height},
+                            "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                            "scale": {"x": scale * 0.7, "y": scale * 0.7, "z": scale * 0.7},
+                        },
+                        tags=["tower_detail", name_prefix],
+                    ))
 
-                    actor_name = f"{name_prefix}_{level}_detail_{corner}"
-                    params = {
-                        "name": actor_name,
-                        "type": "StaticMeshActor",
-                        "location": [detail_x, detail_y, level_height],
-                        "scale": [scale * 0.7, scale * 0.7, scale * 0.7],
-                        "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
-                    }
-                    resp = safe_spawn_actor(unreal, params)
-                    if resp and is_success_response(resp):
-                        spawned.append(resp)
-
-        return {"success": True, "actors": spawned, "tower_style": tower_style}
+        result = sink.flush()
+        result["tower_style"] = tower_style
+        return result
     except Exception as e:
         logger.error(f"create_tower error: {e}")
         return make_error_response(str(e))
@@ -295,7 +300,8 @@ def create_staircase(
     step_size: Optional[List[float]] = None,
     location: Optional[List[float]] = None,
     name_prefix: str = "Stair",
-    mesh: str = "/Engine/BasicShapes/Cube.Cube"
+    mesh: str = "/Engine/BasicShapes/Cube.Cube",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a staircase from cubes."""
     try:
@@ -303,26 +309,29 @@ def create_staircase(
             step_size = [100.0, 100.0, 50.0]
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-        spawned = []
+
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         sx, sy, sz = step_size
         for i in range(steps):
-            actor_name = f"{name_prefix}_{i}"
-            loc = [location[0] + i * sx, location[1], location[2] + i * sz]
-            scale = [sx/100.0, sy/100.0, sz/100.0]
-            params = {
-                "name": actor_name,
-                "type": "StaticMeshActor",
-                "location": loc,
-                "scale": scale,
-                "static_mesh": mesh
-            }
-            resp = safe_spawn_actor(unreal, params)
-            if resp and is_success_response(resp):
-                spawned.append(resp)
-        return {"success": True, "actors": spawned}
+            mcp_id = f"{name_prefix}_{i}"
+            sink.spawn(ActorSpec(
+                mcp_id=mcp_id, desired_name=mcp_id,
+                actor_type="StaticMeshActor",
+                asset_ref={"path": mesh},
+                transform={
+                    "location": {"x": location[0] + i * sx, "y": location[1], "z": location[2] + i * sz},
+                    "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                    "scale": {"x": sx / 100.0, "y": sy / 100.0, "z": sz / 100.0},
+                },
+                tags=["staircase", name_prefix],
+            ))
+
+        result = sink.flush()
+        if dry_run:
+            result["message"] = f"Would spawn {len(sink.specs)} actors for staircase ({steps} steps)."
+        else:
+            result["message"] = f"Staircase created: {steps} steps"
+        return result
     except Exception as e:
         logger.error(f"create_staircase error: {e}")
         return make_error_response(str(e))
@@ -336,17 +345,22 @@ def construct_house(
     location: Optional[List[float]] = None,
     name_prefix: str = "House",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    house_style: str = "modern"
+    house_style: str = "modern",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Construct a realistic house with architectural details and multiple rooms."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
 
-        return build_house(unreal, width, depth, height, location, name_prefix, mesh, house_style)
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        build_house(None, width, depth, height, location, name_prefix, mesh, house_style, sink=sink)
+        result = sink.flush()
+        if dry_run:
+            result["message"] = f"Would spawn {len(sink.specs)} actors for house ({house_style})."
+        else:
+            result["message"] = f"House ({house_style}) created."
+        return result
 
     except Exception as e:
         logger.error(f"construct_house error: {e}")
@@ -357,44 +371,43 @@ def construct_house(
 def construct_mansion(
     mansion_scale: str = "large",
     location: Optional[List[float]] = None,
-    name_prefix: str = "Mansion"
+    name_prefix: str = "Mansion",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Construct a mansion with multiple wings, grand rooms, gardens, fountains, and luxury features."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {mansion_scale} mansion")
-        all_actors = []
 
         params = get_mansion_size_params(mansion_scale)
         layout = calculate_mansion_layout(params)
 
-        build_mansion_main_structure(unreal, name_prefix, location, layout, all_actors)
-        build_mansion_exterior(unreal, name_prefix, location, layout, all_actors)
-        add_mansion_interior(unreal, name_prefix, location, layout, all_actors)
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        build_mansion_main_structure(None, name_prefix, location, layout, [], sink=sink)
+        build_mansion_exterior(None, name_prefix, location, layout, [], sink=sink)
+        add_mansion_interior(None, name_prefix, location, layout, [], sink=sink)
 
-        logger.info(f"Mansion construction complete! Created {len(all_actors)} elements")
-
-        return {
-            "success": True,
-            "message": f"Magnificent {mansion_scale} mansion created with {len(all_actors)} elements!",
-            "actors": all_actors,
-            "stats": {
-                "scale": mansion_scale,
-                "wings": layout["wings"],
-                "floors": layout["floors"],
-                "main_rooms": layout["main_rooms"],
-                "bedrooms": layout["bedrooms"],
-                "garden_size": layout["garden_size"],
-                "fountain_count": layout["fountain_count"],
-                "car_count": layout["car_count"],
-                "total_actors": len(all_actors)
-            }
+        result = sink.flush()
+        if dry_run:
+            count = len(sink.specs) if hasattr(sink, 'specs') else 0
+            result["message"] = f"Would spawn {count} actors for {mansion_scale} mansion."
+        else:
+            count = result.get("count", 0)
+            result["message"] = f"Magnificent {mansion_scale} mansion created with {count} elements!"
+        result["stats"] = {
+            "scale": mansion_scale,
+            "wings": layout["wings"],
+            "floors": layout["floors"],
+            "main_rooms": layout["main_rooms"],
+            "bedrooms": layout["bedrooms"],
+            "garden_size": layout["garden_size"],
+            "fountain_count": layout["fountain_count"],
+            "car_count": layout["car_count"],
+            "total_actors": count
         }
+        return result
 
     except Exception as e:
         logger.error(f"construct_mansion error: {e}")
@@ -407,34 +420,40 @@ def create_arch(
     segments: int = 6,
     location: Optional[List[float]] = None,
     name_prefix: str = "ArchBlock",
-    mesh: str = "/Engine/BasicShapes/Cube.Cube"
+    mesh: str = "/Engine/BasicShapes/Cube.Cube",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a simple arch using cubes in a semicircle."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-        spawned = []
+
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         angle_step = math.pi / segments
         scale = radius / 300.0 / 2
         for i in range(segments + 1):
             theta = angle_step * i
             x = radius * math.cos(theta)
             z = radius * math.sin(theta)
-            actor_name = f"{name_prefix}_{i}"
-            params = {
-                "name": actor_name,
-                "type": "StaticMeshActor",
-                "location": [location[0] + x, location[1], location[2] + z],
-                "scale": [scale, scale, scale],
-                "static_mesh": mesh
-            }
-            resp = safe_spawn_actor(unreal, params)
-            if resp and is_success_response(resp):
-                spawned.append(resp)
-        return {"success": True, "actors": spawned}
+            mcp_id = f"{name_prefix}_{i}"
+            sink.spawn(ActorSpec(
+                mcp_id=mcp_id, desired_name=mcp_id,
+                actor_type="StaticMeshActor",
+                asset_ref={"path": mesh},
+                transform={
+                    "location": {"x": location[0] + x, "y": location[1], "z": location[2] + z},
+                    "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                    "scale": {"x": scale, "y": scale, "z": scale},
+                },
+                tags=["arch", name_prefix],
+            ))
+
+        result = sink.flush()
+        if dry_run:
+            result["message"] = f"Would spawn {len(sink.specs)} actors for arch (radius={radius}, segments={segments})."
+        else:
+            result["message"] = f"Arch created: radius={radius}, segments={segments}"
+        return result
     except Exception as e:
         logger.error(f"create_arch error: {e}")
         return make_error_response(str(e))
@@ -520,7 +539,8 @@ def create_maze(
     cols: int = 4,
     cell_size: float = 300.0,
     wall_height: int = 3,
-    location: Optional[List[float]] = None
+    location: Optional[List[float]] = None,
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a proper solvable maze with entrance, exit, and guaranteed path using recursive backtracking algorithm."""
     try:
@@ -543,12 +563,6 @@ def create_maze(
                 max_possible_actor_count=max_wall_estimate,
                 max_actors=MAX_ACTORS_PER_BATCH,
             )
-
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-
-        spawned = []
 
         maze = [[True for _ in range(cols * 2 + 1)] for _ in range(rows * 2 + 1)]
 
@@ -583,62 +597,70 @@ def create_maze(
                 max_actors=MAX_ACTORS_PER_BATCH,
             )
 
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         maze_height = rows * 2 + 1
         maze_width = cols * 2 + 1
+        wall_scale = cell_size / 100.0
 
         for r in range(maze_height):
             for c in range(maze_width):
                 if maze[r][c]:
                     for h in range(wall_height):
-                        x_pos = location[0] + (c - maze_width/2) * cell_size
-                        y_pos = location[1] + (r - maze_height/2) * cell_size
-                        z_pos = location[2] + h * cell_size
+                        mcp_id = f"Maze_Wall_{r}_{c}_{h}"
+                        sink.spawn(ActorSpec(
+                            mcp_id=mcp_id, desired_name=mcp_id,
+                            actor_type="StaticMeshActor",
+                            asset_ref={"path": "/Engine/BasicShapes/Cube.Cube"},
+                            transform={
+                                "location": {
+                                    "x": location[0] + (c - maze_width / 2) * cell_size,
+                                    "y": location[1] + (r - maze_height / 2) * cell_size,
+                                    "z": location[2] + h * cell_size,
+                                },
+                                "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                                "scale": {"x": wall_scale, "y": wall_scale, "z": wall_scale},
+                            },
+                            tags=["maze", "wall"],
+                        ))
 
-                        actor_name = f"Maze_Wall_{r}_{c}_{h}"
-                        params = {
-                            "name": actor_name,
-                            "type": "StaticMeshActor",
-                            "location": [x_pos, y_pos, z_pos],
-                            "scale": [cell_size/100.0, cell_size/100.0, cell_size/100.0],
-                            "static_mesh": "/Engine/BasicShapes/Cube.Cube"
-                        }
-                        resp = safe_spawn_actor(unreal, params)
-                        if resp and is_success_response(resp):
-                            spawned.append(resp)
+        sink.spawn(ActorSpec(
+            mcp_id="Maze_Entrance", desired_name="Maze_Entrance",
+            actor_type="StaticMeshActor",
+            asset_ref={"path": "/Engine/BasicShapes/Cylinder.Cylinder"},
+            transform={
+                "location": {
+                    "x": location[0] - maze_width / 2 * cell_size - cell_size,
+                    "y": location[1] + (-maze_height / 2 + 1) * cell_size,
+                    "z": location[2] + cell_size,
+                },
+                "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                "scale": {"x": 0.5, "y": 0.5, "z": 0.5},
+            },
+            tags=["maze", "entrance"],
+        ))
 
-        # Add entrance and exit markers
-        entrance_marker = safe_spawn_actor(unreal, {
-            "name": "Maze_Entrance",
-            "type": "StaticMeshActor",
-            "location": [location[0] - maze_width/2 * cell_size - cell_size,
-                       location[1] + (-maze_height/2 + 1) * cell_size,
-                       location[2] + cell_size],
-            "scale": [0.5, 0.5, 0.5],
-            "static_mesh": "/Engine/BasicShapes/Cylinder.Cylinder"
-        })
-        if entrance_marker and is_success_response(entrance_marker):
-            spawned.append(entrance_marker)
+        sink.spawn(ActorSpec(
+            mcp_id="Maze_Exit", desired_name="Maze_Exit",
+            actor_type="StaticMeshActor",
+            asset_ref={"path": "/Engine/BasicShapes/Sphere.Sphere"},
+            transform={
+                "location": {
+                    "x": location[0] + maze_width / 2 * cell_size + cell_size,
+                    "y": location[1] + (-maze_height / 2 + rows * 2 - 1) * cell_size,
+                    "z": location[2] + cell_size,
+                },
+                "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                "scale": {"x": 0.5, "y": 0.5, "z": 0.5},
+            },
+            tags=["maze", "exit"],
+        ))
 
-        exit_marker = safe_spawn_actor(unreal, {
-            "name": "Maze_Exit",
-            "type": "StaticMeshActor",
-            "location": [location[0] + maze_width/2 * cell_size + cell_size,
-                       location[1] + (-maze_height/2 + rows * 2 - 1) * cell_size,
-                       location[2] + cell_size],
-            "scale": [0.5, 0.5, 0.5],
-            "static_mesh": "/Engine/BasicShapes/Sphere.Sphere"
-        })
-        if exit_marker and is_success_response(exit_marker):
-            spawned.append(exit_marker)
-
-        return {
-            "success": True,
-            "actors": spawned,
-            "maze_size": f"{rows}x{cols}",
-            "wall_count": actual_wall_cells,
-            "entrance": "Left side (cylinder marker)",
-            "exit": "Right side (sphere marker)"
-        }
+        result = sink.flush()
+        result["maze_size"] = f"{rows}x{cols}"
+        result["wall_count"] = actual_wall_cells
+        result["entrance"] = "Left side (cylinder marker)"
+        result["exit"] = "Right side (sphere marker)"
+        return result
     except Exception as e:
         logger.error(f"create_maze error: {e}")
         return make_error_response(str(e))
@@ -651,17 +673,14 @@ def create_town(
     location: Optional[List[float]] = None,
     name_prefix: str = "Town",
     include_infrastructure: bool = True,
-    architectural_style: str = "mixed"
+    architectural_style: str = "mixed",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a full dynamic town with buildings, streets, infrastructure, and vehicles."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
         random.seed()
-
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {town_size} town with {building_density} density at {location}")
 
@@ -679,14 +698,13 @@ def create_town(
         target_population = int(params["population"] * building_density)
         skyscraper_chance = params["skyscraper_chance"]
 
-        all_spawned = []
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         street_width = block_size * 0.3
         building_area = block_size * 0.7
 
         # Create street grid first
         logger.info("Creating street grid...")
-        street_results = _create_street_grid(blocks, block_size, street_width, location, name_prefix)
-        all_spawned.extend(street_results.get("actors", []))
+        _create_street_grid(blocks, block_size, street_width, location, name_prefix, [], sink=sink)
 
         # Create buildings in each block
         logger.info("Placing buildings...")
@@ -721,11 +739,12 @@ def create_town(
                     building_area,
                     max_height,
                     f"{name_prefix}_Building_{block_x}_{block_y}",
-                    building_count
+                    building_count,
+                    all_actors=[],
+                    sink=sink
                 )
 
-                if is_success_response(building_result):
-                    all_spawned.extend(building_result.get("actors", []))
+                if building_result.get("success"):
                     building_count += 1
 
         # Add infrastructure if requested
@@ -733,57 +752,40 @@ def create_town(
         if include_infrastructure:
             logger.info("Adding infrastructure...")
 
-            light_results = _create_street_lights(blocks, block_size, location, name_prefix)
-            all_spawned.extend(light_results.get("actors", []))
-            infrastructure_count += len(light_results.get("actors", []))
+            infra_calls = [
+                ("light", _create_street_lights, [blocks, block_size, location, name_prefix]),
+                ("vehicle", _create_town_vehicles, [blocks, block_size, street_width, location, name_prefix, target_population // 3]),
+                ("decoration", _create_town_decorations, [blocks, block_size, location, name_prefix]),
+                ("traffic", _create_traffic_lights, [blocks, block_size, location, name_prefix]),
+                ("signage", _create_street_signage, [blocks, block_size, location, name_prefix, town_size]),
+                ("sidewalk", _create_sidewalks_crosswalks, [blocks, block_size, street_width, location, name_prefix]),
+                ("furniture", _create_urban_furniture, [blocks, block_size, location, name_prefix]),
+                ("utility", _create_street_utilities, [blocks, block_size, location, name_prefix]),
+            ]
 
-            vehicle_results = _create_town_vehicles(blocks, block_size, street_width, location, name_prefix, target_population // 3)
-            all_spawned.extend(vehicle_results.get("actors", []))
-            infrastructure_count += len(vehicle_results.get("actors", []))
-
-            decoration_results = _create_town_decorations(blocks, block_size, location, name_prefix)
-            all_spawned.extend(decoration_results.get("actors", []))
-            infrastructure_count += len(decoration_results.get("actors", []))
-
-            traffic_results = _create_traffic_lights(blocks, block_size, location, name_prefix)
-            all_spawned.extend(traffic_results.get("actors", []))
-            infrastructure_count += len(traffic_results.get("actors", []))
-
-            signage_results = _create_street_signage(blocks, block_size, location, name_prefix, town_size)
-            all_spawned.extend(signage_results.get("actors", []))
-            infrastructure_count += len(signage_results.get("actors", []))
-
-            sidewalk_results = _create_sidewalks_crosswalks(blocks, block_size, street_width, location, name_prefix)
-            all_spawned.extend(sidewalk_results.get("actors", []))
-            infrastructure_count += len(sidewalk_results.get("actors", []))
-
-            furniture_results = _create_urban_furniture(blocks, block_size, location, name_prefix)
-            all_spawned.extend(furniture_results.get("actors", []))
-            infrastructure_count += len(furniture_results.get("actors", []))
-
-            utility_results = _create_street_utilities(blocks, block_size, location, name_prefix)
-            all_spawned.extend(utility_results.get("actors", []))
-            infrastructure_count += len(utility_results.get("actors", []))
+            for name, func, args in infra_calls:
+                result = func(*args, all_actors=[], sink=sink)
+                infrastructure_count += len(result.get("actors", []))
 
             if town_size in ["large", "metropolis"]:
-                plaza_results = _create_central_plaza(blocks, block_size, location, name_prefix)
-                all_spawned.extend(plaza_results.get("actors", []))
-                infrastructure_count += len(plaza_results.get("actors", []))
+                _create_central_plaza(blocks, block_size, location, name_prefix, [], sink=sink)
 
-        return {
-            "success": True,
-            "town_stats": {
-                "size": town_size,
-                "density": building_density,
-                "blocks": blocks,
-                "buildings": building_count,
-                "infrastructure_items": infrastructure_count,
-                "total_actors": len(all_spawned),
-                "architectural_style": architectural_style
-            },
-            "actors": all_spawned,
-            "message": f"Created {town_size} town with {building_count} buildings and {infrastructure_count} infrastructure items"
+        result = sink.flush()
+        total = len(sink.specs) if hasattr(sink, 'specs') else result.get("count", 0)
+        if dry_run:
+            result["message"] = f"Would spawn {total} actors for {town_size} town."
+        else:
+            result["message"] = f"Created {town_size} town with {building_count} buildings and {infrastructure_count} infrastructure items"
+        result["town_stats"] = {
+            "size": town_size,
+            "density": building_density,
+            "blocks": blocks,
+            "buildings": building_count,
+            "infrastructure_items": infrastructure_count,
+            "total_actors": total,
+            "architectural_style": architectural_style
         }
+        return result
 
     except Exception as e:
         logger.error(f"create_town error: {e}")
@@ -797,57 +799,60 @@ def create_castle_fortress(
     name_prefix: str = "Castle",
     include_siege_weapons: bool = True,
     include_village: bool = True,
-    architectural_style: str = "medieval"
+    architectural_style: str = "medieval",
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """Create a massive castle fortress with walls, towers, courtyards, throne room, and surrounding village."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
 
         logger.info(f"Creating {castle_size} {architectural_style} castle fortress")
-        all_actors = []
 
         params = get_castle_size_params(castle_size)
         dimensions = calculate_scaled_dimensions(params, scale_factor=2.0)
 
-        build_outer_bailey_walls(unreal, name_prefix, location, dimensions, all_actors)
-        build_inner_bailey_walls(unreal, name_prefix, location, dimensions, all_actors)
-        build_gate_complex(unreal, name_prefix, location, dimensions, all_actors)
-        build_corner_towers(unreal, name_prefix, location, dimensions, architectural_style, all_actors)
-        build_inner_corner_towers(unreal, name_prefix, location, dimensions, all_actors)
-        build_intermediate_towers(unreal, name_prefix, location, dimensions, all_actors)
-        build_central_keep(unreal, name_prefix, location, dimensions, all_actors)
-        build_courtyard_complex(unreal, name_prefix, location, dimensions, all_actors)
-        build_bailey_annexes(unreal, name_prefix, location, dimensions, all_actors)
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        all_actors: List[Dict[str, Any]] = []
+
+        build_outer_bailey_walls(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_inner_bailey_walls(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_gate_complex(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_corner_towers(None, name_prefix, location, dimensions, architectural_style, all_actors, sink=sink)
+        build_inner_corner_towers(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_intermediate_towers(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_central_keep(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_courtyard_complex(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        build_bailey_annexes(None, name_prefix, location, dimensions, all_actors, sink=sink)
 
         if include_siege_weapons:
-            build_siege_weapons(unreal, name_prefix, location, dimensions, all_actors)
+            build_siege_weapons(None, name_prefix, location, dimensions, all_actors, sink=sink)
 
         if include_village:
-            build_village_settlement(unreal, name_prefix, location, dimensions, castle_size, all_actors)
+            build_village_settlement(None, name_prefix, location, dimensions, castle_size, all_actors, sink=sink)
 
-        build_drawbridge_and_moat(unreal, name_prefix, location, dimensions, all_actors)
-        add_decorative_flags(unreal, name_prefix, location, dimensions, all_actors)
+        build_drawbridge_and_moat(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        add_decorative_flags(None, name_prefix, location, dimensions, all_actors, sink=sink)
 
-        logger.info(f"Castle fortress creation complete! Created {len(all_actors)} actors")
+        logger.info(f"Castle fortress creation complete! Spawned {len(sink.specs)} actors")
 
-        return {
-            "success": True,
-            "message": f"Epic {castle_size} {architectural_style} castle fortress created with {len(all_actors)} elements!",
-            "actors": all_actors,
-            "stats": {
-                "size": castle_size,
-                "style": architectural_style,
-                "wall_sections": int(dimensions["outer_width"]/200) * 2 + int(dimensions["outer_depth"]/200) * 2,
-                "towers": dimensions["tower_count"],
-                "has_village": include_village,
-                "has_siege_weapons": include_siege_weapons,
-                "total_actors": len(all_actors)
-            }
+        result = sink.flush()
+        wall_sections = int(dimensions["outer_width"]/200) * 2 + int(dimensions["outer_depth"]/200) * 2
+        total = len(sink.specs)
+        if dry_run:
+            result["message"] = f"Would spawn {total} actors for {castle_size} {architectural_style} castle fortress."
+        else:
+            result["message"] = f"Epic {castle_size} {architectural_style} castle fortress created with {total} elements!"
+        result["stats"] = {
+            "size": castle_size,
+            "style": architectural_style,
+            "wall_sections": wall_sections,
+            "towers": dimensions["tower_count"],
+            "has_village": include_village,
+            "has_siege_weapons": include_siege_weapons,
+            "total_actors": total
         }
+        return result
 
     except Exception as e:
         logger.error(f"create_castle_fortress error: {e}")
@@ -876,40 +881,12 @@ def create_suspension_bridge(
             location = [0.0, 0.0, 0.0]
         start_time = time.perf_counter()
 
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-
         logger.info(f"Creating suspension bridge: span={span_length}, width={deck_width}, height={tower_height}")
 
-        all_actors = []
-
-        if dry_run:
-            expected_towers = 10
-            expected_deck = max(1, int(span_length / module_size)) * max(1, int(deck_width / module_size))
-            expected_cables = 2 * max(1, int(span_length / module_size))
-            expected_suspenders = 2 * max(1, int(span_length / (module_size * 3)))
-
-            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-
-            return {
-                "success": True,
-                "dry_run": True,
-                "metrics": {
-                    "total_actors": expected_towers + expected_deck + expected_cables + expected_suspenders,
-                    "deck_segments": expected_deck,
-                    "cable_segments": expected_cables,
-                    "suspender_count": expected_suspenders,
-                    "towers": expected_towers,
-                    "span_length": span_length,
-                    "deck_width": deck_width,
-                    "est_area": span_length * deck_width,
-                    "elapsed_ms": elapsed_ms
-                }
-            }
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
 
         counts = build_suspension_bridge_structure(
-            unreal,
+            None,
             span_length,
             deck_width,
             tower_height,
@@ -922,7 +899,8 @@ def create_suspension_bridge(
             tower_mesh,
             cable_mesh,
             suspender_mesh,
-            all_actors
+            all_actors=[],
+            sink=sink
         )
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
@@ -930,22 +908,24 @@ def create_suspension_bridge(
 
         logger.info(f"Bridge construction complete: {total_actors} actors in {elapsed_ms}ms")
 
-        return {
-            "success": True,
-            "message": f"Created suspension bridge with {total_actors} components",
-            "actors": all_actors,
-            "metrics": {
-                "total_actors": total_actors,
-                "deck_segments": counts["deck_segments"],
-                "cable_segments": counts["cable_segments"],
-                "suspender_count": counts["suspenders"],
-                "towers": counts["towers"],
-                "span_length": span_length,
-                "deck_width": deck_width,
-                "est_area": span_length * deck_width,
-                "elapsed_ms": elapsed_ms
-            }
+        result = sink.flush()
+        if dry_run:
+            actual_count = len(sink.specs) if hasattr(sink, 'specs') else total_actors
+            result["message"] = f"Would spawn {actual_count} actors for suspension bridge."
+        else:
+            result["message"] = f"Created suspension bridge with {total_actors} components"
+        result["metrics"] = {
+            "total_actors": total_actors,
+            "deck_segments": counts["deck_segments"],
+            "cable_segments": counts["cable_segments"],
+            "suspender_count": counts["suspenders"],
+            "towers": counts["towers"],
+            "span_length": span_length,
+            "deck_width": deck_width,
+            "est_area": span_length * deck_width,
+            "elapsed_ms": elapsed_ms
         }
+        return result
 
     except Exception as e:
         logger.error(f"create_suspension_bridge error: {e}")
@@ -974,47 +954,13 @@ def create_aqueduct(
             location = [0.0, 0.0, 0.0]
         start_time = time.perf_counter()
 
-        unreal = get_unreal_connection()
-        if not unreal:
-            return make_error_response("Failed to connect to Unreal Engine")
-
         logger.info(f"Creating aqueduct: {arches} arches, {tiers} tiers, radius={arch_radius}")
-
-        all_actors = []
 
         total_length = arches * (2 * arch_radius + pier_width) + pier_width
 
-        if dry_run:
-            arch_circumference = math.pi * arch_radius
-            segments_per_arch = max(4, int(arch_circumference / module_size))
-            expected_arch_segments = tiers * arches * segments_per_arch
-
-            expected_piers = tiers * (arches + 1)
-
-            deck_length_segments = max(1, int(total_length / module_size))
-            deck_width_segments = max(1, int(deck_width / module_size))
-            expected_deck = deck_length_segments * deck_width_segments
-            expected_deck += 2 * deck_length_segments
-
-            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-
-            return {
-                "success": True,
-                "dry_run": True,
-                "metrics": {
-                    "total_actors": expected_arch_segments + expected_piers + expected_deck,
-                    "arch_segments": expected_arch_segments,
-                    "pier_count": expected_piers,
-                    "tiers": tiers,
-                    "deck_segments": expected_deck,
-                    "total_length": total_length,
-                    "est_area": total_length * deck_width,
-                    "elapsed_ms": elapsed_ms
-                }
-            }
-
+        sink = DryRunActorSink() if dry_run else UnrealActorSink()
         counts = build_aqueduct_structure(
-            unreal,
+            None,
             arches,
             arch_radius,
             pier_width,
@@ -1027,7 +973,8 @@ def create_aqueduct(
             arch_mesh,
             pier_mesh,
             deck_mesh,
-            all_actors
+            all_actors=[],
+            sink=sink
         )
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
@@ -1035,21 +982,23 @@ def create_aqueduct(
 
         logger.info(f"Aqueduct construction complete: {total_actors} actors in {elapsed_ms}ms")
 
-        return {
-            "success": True,
-            "message": f"Created {tiers}-tier aqueduct with {arches} arches ({total_actors} components)",
-            "actors": all_actors,
-            "metrics": {
-                "total_actors": total_actors,
-                "arch_segments": counts["arch_segments"],
-                "pier_count": counts["piers"],
-                "tiers": tiers,
-                "deck_segments": counts["deck_segments"],
-                "total_length": total_length,
-                "est_area": total_length * deck_width,
-                "elapsed_ms": elapsed_ms
-            }
+        result = sink.flush()
+        if dry_run:
+            actual_count = len(sink.specs) if hasattr(sink, 'specs') else total_actors
+            result["message"] = f"Would spawn {actual_count} actors for aqueduct."
+        else:
+            result["message"] = f"Created {tiers}-tier aqueduct with {arches} arches ({total_actors} components)"
+        result["metrics"] = {
+            "total_actors": total_actors,
+            "arch_segments": counts["arch_segments"],
+            "pier_count": counts["piers"],
+            "tiers": tiers,
+            "deck_segments": counts["deck_segments"],
+            "total_length": total_length,
+            "est_area": total_length * deck_width,
+            "elapsed_ms": elapsed_ms
         }
+        return result
 
     except Exception as e:
         logger.error(f"create_aqueduct error: {e}")

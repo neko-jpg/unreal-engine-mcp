@@ -1,5 +1,5 @@
-pub mod planner;
 pub mod applier;
+pub mod planner;
 
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +58,9 @@ pub struct UnrealActorObservation {
 
 impl UnrealActorObservation {
     pub fn mcp_id(&self) -> Option<&str> {
-        self.tags.iter().find(|t| t.starts_with("mcp_id:")).map(|t| &t[7..])
+        self.tags
+            .iter()
+            .find(|t| t.starts_with("mcp_id:"))
+            .map(|t| &t[7..])
     }
 }

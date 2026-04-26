@@ -346,7 +346,7 @@ Negative:
 
 ## ADR-0015: Use `ActorSink` to migrate generators
 
-Status: Proposed
+Status: Accepted
 
 ### Context
 

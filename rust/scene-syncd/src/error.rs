@@ -12,12 +12,14 @@ pub enum AppError {
     UnrealBridge(String),
 
     #[error("Scene syncd unavailable: {0}")]
+    #[allow(dead_code)]
     Unavailable(String),
 
     #[error("Not found: {0}")]
     NotFound(String),
 
     #[error("Conflict: {0}")]
+    #[allow(dead_code)]
     Conflict(String),
 
     #[error("Internal error: {0}")]
@@ -30,10 +32,20 @@ impl axum::response::IntoResponse for AppError {
             AppError::Validation(_) => (axum::http::StatusCode::BAD_REQUEST, "validation_error"),
             AppError::NotFound(_) => (axum::http::StatusCode::NOT_FOUND, "not_found"),
             AppError::Conflict(_) => (axum::http::StatusCode::CONFLICT, "conflict"),
-            AppError::Unavailable(_) => (axum::http::StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
-            AppError::UnrealBridge(_) => (axum::http::StatusCode::BAD_GATEWAY, "unreal_bridge_error"),
-            AppError::Database(_) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "database_error"),
-            AppError::Internal(_) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+            AppError::Unavailable(_) => {
+                (axum::http::StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+            }
+            AppError::UnrealBridge(_) => {
+                (axum::http::StatusCode::BAD_GATEWAY, "unreal_bridge_error")
+            }
+            AppError::Database(_) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "database_error",
+            ),
+            AppError::Internal(_) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
         };
 
         let body = serde_json::json!({

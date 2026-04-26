@@ -91,29 +91,54 @@ class TestSpawnActorDuplicateNameError:
 class TestCreatePyramidDryRun:
     def test_default_params_succeed(self):
         from server.world_building_tools import create_pyramid
-        with patch("server.world_building_tools.get_unreal_connection"):
-            result = create_pyramid(dry_run=True)
+        result = create_pyramid(dry_run=True)
         assert result["success"] is True
         assert result["dry_run"] is True
-        assert result["actor_count"] > 0
+        assert result["count"] > 0
 
 
 class TestCreateWallDryRun:
     def test_default_params_succeed(self):
         from server.world_building_tools import create_wall
-        with patch("server.world_building_tools.get_unreal_connection"):
-            result = create_wall(dry_run=True)
+        result = create_wall(dry_run=True)
         assert result["success"] is True
         assert result["dry_run"] is True
-        assert result["actor_count"] > 0
+        assert result["count"] > 0
 
 
 class TestCreateMazeDefaults:
     def test_default_params_do_not_exceed_batch_limit(self):
         from server.world_building_tools import create_maze
-        with patch("server.world_building_tools.get_unreal_connection"):
-            result = create_maze()
+        result = create_maze(dry_run=True)
         assert result.get("success") is True or is_success_response(result)
+
+
+class TestCreateStaircaseDryRun:
+    def test_default_params_succeed(self):
+        from server.world_building_tools import create_staircase
+        result = create_staircase(dry_run=True)
+        assert result["success"] is True
+        assert result["dry_run"] is True
+        assert result["count"] > 0
+
+    def test_custom_step_count(self):
+        from server.world_building_tools import create_staircase
+        result = create_staircase(steps=3, dry_run=True)
+        assert result["count"] == 3
+
+
+class TestCreateArchDryRun:
+    def test_default_params_succeed(self):
+        from server.world_building_tools import create_arch
+        result = create_arch(dry_run=True)
+        assert result["success"] is True
+        assert result["dry_run"] is True
+        assert result["count"] > 0
+
+    def test_segments_plus_one(self):
+        from server.world_building_tools import create_arch
+        result = create_arch(segments=4, dry_run=True)
+        assert result["count"] == 5  # segments + 1 blocks
 
 
 class TestIsSuccessResponse:

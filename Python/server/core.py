@@ -10,7 +10,7 @@ import struct
 import time
 import threading
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any, Optional, List
+from typing import AsyncIterator, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
 
 from utils.responses import make_error_response
@@ -58,9 +58,11 @@ class UnrealConnection:
     BASE_RETRY_DELAY = 0.5
     MAX_RETRY_DELAY = 5.0
     CONNECT_TIMEOUT = 10
+    SEND_TIMEOUT = 10
     DEFAULT_RECV_TIMEOUT = 30
     LARGE_OP_RECV_TIMEOUT = 300
     BUFFER_SIZE = 8192
+    MAX_RESPONSE_SIZE = 10_000_000
 
     LARGE_OPERATION_COMMANDS = {
         "get_available_materials",
@@ -128,11 +130,11 @@ class UnrealConnection:
         if self.socket:
             try:
                 self.socket.shutdown(socket.SHUT_RDWR)
-            except:
+            except OSError:
                 pass
             try:
                 self.socket.close()
-            except:
+            except OSError:
                 pass
             self.socket = None
         self.connected = False
@@ -158,6 +160,10 @@ class UnrealConnection:
                 raise TimeoutError(
                     f"Timeout after {elapsed:.1f}s waiting for response to {command_type} "
                     f"(received {len(buffer)} bytes)"
+                )
+            if len(buffer) > self.MAX_RESPONSE_SIZE:
+                raise ValueError(
+                    f"Response size exceeded {self.MAX_RESPONSE_SIZE} bytes for {command_type}"
                 )
             try:
                 chunk = self.socket.recv(self.BUFFER_SIZE)
@@ -263,7 +269,7 @@ class UnrealConnection:
                 command_json = json.dumps(command_obj) + '\n'
                 logger.info(f"Sending command (attempt {attempt + 1}): {command}")
                 logger.debug(f"Command payload: {command_json[:500]}...")
-                self.socket.settimeout(10)
+                self.socket.settimeout(self.SEND_TIMEOUT)
                 self.socket.sendall(command_json.encode('utf-8'))
                 response_data = self._receive_response(command)
                 try:

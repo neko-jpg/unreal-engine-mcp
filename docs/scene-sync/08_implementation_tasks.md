@@ -22,50 +22,33 @@ Scope: Design documents for a SurrealDB-backed desired-state sync architecture i
 ### TASK-0001: Add documentation
 
 Priority: P0
+Status: Done
 
 - Create `docs/scene-sync/`.
 - Add this document set.
 - Link from root README.
 
-Done when docs are committed and readable.
-
 ### TASK-0002: Create Rust service crate
 
 Priority: P0
-
-```bash
-cd /home/arat2/Project-MUSE && mkdir -p rust && cargo new rust/scene-syncd --bin
-```
-
-Done when `cargo check` passes.
+Status: Done
 
 ### TASK-0003: Add dependencies
 
 Priority: P0
-
-```bash
-cd /home/arat2/Project-MUSE/rust/scene-syncd && cargo add surrealdb tokio serde serde_json axum thiserror anyhow tracing tracing-subscriber sha2 uuid futures chrono
-```
-
-Done when dependencies are pinned and `cargo check` passes.
+Status: Done
 
 ## Milestone 1: Local SurrealDB
 
 ### TASK-0101: Add start script
 
 Priority: P0
-
-Create `scripts/start-surrealdb.sh`.
-
-```bash
-cd /home/arat2/Project-MUSE && mkdir -p .surreal && surreal start --user root --pass secret --bind 127.0.0.1:8000 rocksdb://.surreal/unreal_mcp.db
-```
-
-Done when DB persists after restart.
+Status: Done
 
 ### TASK-0102: Add `.env.example`
 
 Priority: P0
+Status: Done
 
 Include:
 
@@ -87,62 +70,36 @@ SCENE_SYNCD_AUTOSYNC=false
 ### TASK-0201: Implement config loader
 
 Priority: P0
-
-Files:
-
-```text
-src/config.rs
-```
-
-Done when env vars override defaults.
+Status: Done
 
 ### TASK-0202: Add Axum server
 
 Priority: P0
-
-Endpoint:
-
-```text
-GET /health
-```
-
-Done when `curl http://127.0.0.1:8787/health` returns ok.
+Status: Done
 
 ### TASK-0203: Add tracing
 
 Priority: P1
-
-Done when request logs show route, status, duration.
+Status: Done
 
 ## Milestone 3: SurrealDB connection and migrations
 
 ### TASK-0301: Connect using Rust SDK
 
 Priority: P0
-
-Files:
-
-```text
-src/db/surreal.rs
-```
-
-Done when service signs in and selects namespace/database.
+Status: Done
 
 ### TASK-0302: Add migration runner
 
 Priority: P0
+Status: Done
 
-Files:
-
-```text
-src/db/migrations.rs
-```
-
-Done when migrations are idempotent.
+Inline idempotent DDL in `ensure_schema` instead of separate runner.
 
 ### TASK-0303: Create schema
 
 Priority: P0
+Status: Done
 
 Tables:
 
@@ -162,16 +119,12 @@ Done when unique `(scene, mcp_id)` index exists.
 ### TASK-0401: Transform types
 
 Priority: P0
-
-Implement:
-
-- `Vec3`
-- `Rotator`
-- `Transform`
+Status: Done
 
 ### TASK-0402: Scene object type
 
 Priority: P0
+Status: Done
 
 Validate:
 
@@ -183,6 +136,7 @@ Validate:
 ### TASK-0403: Desired hash
 
 Priority: P0
+Status: Done
 
 Hash sync-relevant fields only.
 
@@ -193,12 +147,14 @@ Done when timestamp changes do not alter hash, but transform changes do.
 ### TASK-0501: Ensure default scene
 
 Priority: P0
+Status: Done
 
 Create `scene:main` on startup.
 
 ### TASK-0502: Upsert object
 
 Priority: P0
+Status: Done
 
 Endpoint:
 
@@ -211,6 +167,7 @@ Done when repeated upsert updates same record.
 ### TASK-0503: Bulk upsert
 
 Priority: P1
+Status: Done
 
 Endpoint:
 
@@ -223,6 +180,7 @@ Done when 100 objects can be written.
 ### TASK-0504: Mark object deleted
 
 Priority: P1
+Status: Done
 
 Endpoint:
 
@@ -235,6 +193,7 @@ Done when object has `deleted=true` and `sync_status=pending`.
 ### TASK-0505: List objects
 
 Priority: P1
+Status: Done
 
 Endpoint:
 
@@ -249,12 +208,14 @@ Done when filters work.
 ### TASK-0601: Return actor tags
 
 Priority: P0
+Status: Done
 
 C++ actor JSON must include `tags`.
 
 ### TASK-0602: Spawn accepts `mcp_id`
 
 Priority: P0
+Status: Done
 
 Spawned actor must receive:
 
@@ -266,18 +227,21 @@ mcp_id:<id>
 ### TASK-0603: Find by `mcp_id`
 
 Priority: P1
+Status: Done
 
 Add `find_actor_by_mcp_id`.
 
 ### TASK-0604: Transform by `mcp_id`
 
 Priority: P1
+Status: Done
 
 Add `set_actor_transform_by_mcp_id`.
 
 ### TASK-0605: Delete by `mcp_id`
 
 Priority: P1
+Status: Done
 
 Add `delete_actor_by_mcp_id`.
 
@@ -286,30 +250,35 @@ Add `delete_actor_by_mcp_id`.
 ### TASK-0701: TCP JSON command client
 
 Priority: P0
+Status: Done
 
 Use `tokio::net::TcpStream`.
 
 ### TASK-0702: Actor listing
 
 Priority: P0
+Status: Done
 
 Parse actual actors and extract `mcp_id`.
 
 ### TASK-0703: Spawn actor
 
 Priority: P1
+Status: Done
 
 Send `mcp_id` and tags.
 
 ### TASK-0704: Transform actor
 
 Priority: P1
+Status: Done
 
 Use mcp_id command if available.
 
 ### TASK-0705: Delete actor
 
 Priority: P1
+Status: Done
 
 Idempotent missing delete.
 
@@ -318,42 +287,49 @@ Idempotent missing delete.
 ### TASK-0801: Desired index
 
 Priority: P0
+Status: Done
 
 Detect duplicate desired `mcp_id`.
 
 ### TASK-0802: Actual index
 
 Priority: P0
+Status: Done
 
 Detect duplicate actual `mcp_id`.
 
 ### TASK-0803: Create detection
 
 Priority: P0
+Status: Done
 
 Desired missing in Unreal -> create.
 
 ### TASK-0804: Transform diff
 
 Priority: P0
+Status: Done
 
 Transform mismatch -> update_transform.
 
 ### TASK-0805: Delete detection
 
 Priority: P1
+Status: Done
 
 Tombstoned desired + actual exists -> delete.
 
 ### TASK-0806: No-op detection
 
 Priority: P1
+Status: Done
 
 Equivalent desired/actual -> noop.
 
 ### TASK-0807: Plan endpoint
 
 Priority: P0
+Status: Done
 
 `POST /sync/plan`.
 
@@ -362,36 +338,42 @@ Priority: P0
 ### TASK-0901: Create sync_run
 
 Priority: P1
+Status: Done
 
 Every apply creates run.
 
 ### TASK-0902: Apply create
 
 Priority: P0
+Status: Done
 
 One DB object creates one Unreal actor.
 
 ### TASK-0903: No duplicate re-sync
 
 Priority: P0
+Status: Done
 
 Second sync is noop.
 
 ### TASK-0904: Apply transform
 
 Priority: P1
+Status: Done
 
 DB transform edit moves actor.
 
 ### TASK-0905: Apply delete
 
 Priority: P1
+Status: Done
 
 Requires `allow_delete=true`.
 
 ### TASK-0906: Persist operation result
 
 Priority: P1
+Status: Done
 
 Each op records success/error.
 
@@ -400,12 +382,14 @@ Each op records success/error.
 ### TASK-1001: Add `scene_client.py`
 
 Priority: P1
+Status: Done
 
 Calls Rust HTTP API.
 
 ### TASK-1002: Add `scene_tools.py`
 
 Priority: P1
+Status: Done
 
 Tools:
 
@@ -420,6 +404,7 @@ Tools:
 ### TASK-1003: Register tools
 
 Priority: P1
+Status: Done
 
 Import scene tools in MCP entrypoint.
 
@@ -428,18 +413,21 @@ Import scene tools in MCP entrypoint.
 ### TASK-1101: `scene_create_wall`
 
 Priority: P2
+Status: Done
 
 Writes wall segments to DB.
 
 ### TASK-1102: `scene_create_pyramid`
 
 Priority: P2
+Status: Done
 
 Writes pyramid blocks to DB.
 
 ### TASK-1103: `ActorSink`
 
 Priority: P2
+Status: Done
 
 Introduce output abstraction:
 
@@ -458,12 +446,14 @@ Large helper migration after simple tools work.
 ### TASK-1201: Create snapshot
 
 Priority: P2
+Status: Done
 
 Stores groups and objects.
 
 ### TASK-1202: Restore snapshot
 
 Priority: P2
+Status: Done
 
 Restores desired state only.
 

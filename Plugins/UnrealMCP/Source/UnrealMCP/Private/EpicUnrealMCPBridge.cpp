@@ -135,6 +135,7 @@ UEpicUnrealMCPBridge::~UEpicUnrealMCPBridge()
 void UEpicUnrealMCPBridge::Initialize(FSubsystemCollectionBase& Collection)
 {
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Initializing"));
+    // Defer actor index rebuild to first command — editor world may not be ready yet
     StartServer();
 }
 
@@ -262,11 +263,76 @@ void UEpicUnrealMCPBridge::StopServer()
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Server stopped"));
 }
 
+void UEpicUnrealMCPBridge::EnsureActorIndexInitialized()
+{
+    if (ActorIndex.NameIndex.IsEmpty() && ActorIndex.McpIdIndex.IsEmpty())
+    {
+        UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+        if (World)
+        {
+            ActorIndex.RebuildFromWorld(World);
+        }
+    }
+}
+
+namespace
+{
+    // Command routing: 0=ping, 1=EditorCommands, 2=BlueprintCommands, 3=BlueprintGraphCommands
+    int32 RouteCommand(const FString& CommandType)
+    {
+        static const TMap<FString, int32> Router = {
+            {TEXT("ping"), 0},
+            {TEXT("get_actors_in_level"), 1},
+            {TEXT("find_actors_by_name"), 1},
+            {TEXT("spawn_actor"), 1},
+            {TEXT("delete_actor"), 1},
+            {TEXT("set_actor_transform"), 1},
+            {TEXT("spawn_blueprint_actor"), 2},
+            {TEXT("find_actor_by_mcp_id"), 1},
+            {TEXT("set_actor_transform_by_mcp_id"), 1},
+            {TEXT("delete_actor_by_mcp_id"), 1},
+            {TEXT("create_blueprint"), 2},
+            {TEXT("add_component_to_blueprint"), 2},
+            {TEXT("set_physics_properties"), 2},
+            {TEXT("compile_blueprint"), 2},
+            {TEXT("set_static_mesh_properties"), 2},
+            {TEXT("set_mesh_material_color"), 2},
+            {TEXT("get_available_materials"), 2},
+            {TEXT("apply_material_to_actor"), 2},
+            {TEXT("apply_material_to_blueprint"), 2},
+            {TEXT("get_actor_material_info"), 2},
+            {TEXT("get_blueprint_material_info"), 2},
+            {TEXT("read_blueprint_content"), 2},
+            {TEXT("analyze_blueprint_graph"), 2},
+            {TEXT("get_blueprint_variable_details"), 2},
+            {TEXT("get_blueprint_function_details"), 2},
+            {TEXT("add_blueprint_node"), 3},
+            {TEXT("connect_nodes"), 3},
+            {TEXT("create_variable"), 3},
+            {TEXT("set_blueprint_variable_properties"), 3},
+            {TEXT("add_event_node"), 3},
+            {TEXT("delete_node"), 3},
+            {TEXT("set_node_property"), 3},
+            {TEXT("create_function"), 3},
+            {TEXT("add_function_input"), 3},
+            {TEXT("add_function_output"), 3},
+            {TEXT("delete_function"), 3},
+            {TEXT("rename_function"), 3},
+        };
+        const int32* Found = Router.Find(CommandType);
+        return Found ? *Found : -1;
+    }
+}
+
 FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Executing command: %s"), *CommandType);
 
-    auto ExecuteOnCurrentThread = [this, &CommandType, &Params]() -> FString
+    EnsureActorIndexInitialized();
+
+    const int32 Route = RouteCommand(CommandType);
+
+    auto ExecuteOnCurrentThread = [this, &CommandType, &Params, Route]() -> FString
     {
         TSharedPtr<FJsonObject> ResponseJson = MakeShareable(new FJsonObject);
 
@@ -274,58 +340,22 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
         {
             TSharedPtr<FJsonObject> ResultJson;
 
-            if (CommandType == TEXT("ping"))
+            switch (Route)
             {
+            case 0: // ping
                 ResultJson = MakeShareable(new FJsonObject);
                 ResultJson->SetStringField(TEXT("message"), TEXT("pong"));
-            }
-            else if (CommandType == TEXT("get_actors_in_level") ||
-                     CommandType == TEXT("find_actors_by_name") ||
-                     CommandType == TEXT("spawn_actor") ||
-                     CommandType == TEXT("delete_actor") ||
-                     CommandType == TEXT("set_actor_transform") ||
-                     CommandType == TEXT("spawn_blueprint_actor") ||
-                     CommandType == TEXT("find_actor_by_mcp_id") ||
-                     CommandType == TEXT("set_actor_transform_by_mcp_id") ||
-                     CommandType == TEXT("delete_actor_by_mcp_id"))
-            {
+                break;
+            case 1: // EditorCommands
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
-            }
-            else if (CommandType == TEXT("create_blueprint") ||
-                     CommandType == TEXT("add_component_to_blueprint") ||
-                     CommandType == TEXT("set_physics_properties") ||
-                     CommandType == TEXT("compile_blueprint") ||
-                     CommandType == TEXT("set_static_mesh_properties") ||
-                     CommandType == TEXT("set_mesh_material_color") ||
-                     CommandType == TEXT("get_available_materials") ||
-                     CommandType == TEXT("apply_material_to_actor") ||
-                     CommandType == TEXT("apply_material_to_blueprint") ||
-                     CommandType == TEXT("get_actor_material_info") ||
-                     CommandType == TEXT("get_blueprint_material_info") ||
-                     CommandType == TEXT("read_blueprint_content") ||
-                     CommandType == TEXT("analyze_blueprint_graph") ||
-                     CommandType == TEXT("get_blueprint_variable_details") ||
-                     CommandType == TEXT("get_blueprint_function_details"))
-            {
+                break;
+            case 2: // BlueprintCommands
                 ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
-            }
-            else if (CommandType == TEXT("add_blueprint_node") ||
-                     CommandType == TEXT("connect_nodes") ||
-                     CommandType == TEXT("create_variable") ||
-                     CommandType == TEXT("set_blueprint_variable_properties") ||
-                     CommandType == TEXT("add_event_node") ||
-                     CommandType == TEXT("delete_node") ||
-                     CommandType == TEXT("set_node_property") ||
-                     CommandType == TEXT("create_function") ||
-                     CommandType == TEXT("add_function_input") ||
-                     CommandType == TEXT("add_function_output") ||
-                     CommandType == TEXT("delete_function") ||
-                     CommandType == TEXT("rename_function"))
-            {
+                break;
+            case 3: // BlueprintGraphCommands
                 ResultJson = BlueprintGraphCommands->HandleCommand(CommandType, Params);
-            }
-            else
-            {
+                break;
+            default:
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
                 ResponseJson->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *CommandType));
 

@@ -28,9 +28,21 @@ pub struct Transform {
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            location: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
-            rotation: Rotator { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-            scale: Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+            location: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            rotation: Rotator {
+                pitch: 0.0,
+                yaw: 0.0,
+                roll: 0.0,
+            },
+            scale: Vec3 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            },
         }
     }
 }
@@ -38,6 +50,7 @@ impl Default for Transform {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scene {
     #[serde(default, skip_serializing, skip_deserializing)]
+    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,6 +66,7 @@ pub struct Scene {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SceneGroup {
     #[serde(default, skip_serializing, skip_deserializing)]
     pub id: String,
@@ -74,6 +88,7 @@ pub struct SceneGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneObject {
     #[serde(default, skip_serializing, skip_deserializing)]
+    #[allow(dead_code)]
     pub id: String,
     pub scene: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,4 +117,20 @@ pub struct SceneObject {
     pub revision: i64,
     pub created_at: Datetime,
     pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneSnapshot {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub revision: i64,
+    #[serde(default)]
+    pub groups: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub objects: Vec<SceneObject>,
+    pub created_at: Datetime,
 }

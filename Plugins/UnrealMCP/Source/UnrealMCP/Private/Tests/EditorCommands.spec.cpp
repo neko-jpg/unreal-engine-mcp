@@ -84,7 +84,7 @@ bool FUnrealMCPEditorMcpIdTest::RunTest(const FString& Parameters)
 		{TEXT("type"), MakeStringValue(TEXT("StaticMeshActor"))},
 		{TEXT("name"), MakeStringValue(ActorName)},
 		{TEXT("mcp_id"), MakeStringValue(TEXT("test_cube_001"))},
-		{TEXT("tags"), MakeArrayValue({MakeStringValue(TEXT("managed_by_mcp")), MakeStringValue(TEXT("scene:main"))})},
+		{TEXT("tags"), MakeArrayValueJson({MakeStringValue(TEXT("managed_by_mcp")), MakeStringValue(TEXT("scene:main"))})},
 		{TEXT("location"), MakeArrayValue({0.0, 0.0, 100.0})}
 	});
 
@@ -160,7 +160,7 @@ bool FUnrealMCPEditorGetActorsTagsTest::RunTest(const FString& Parameters)
 		{TEXT("type"), MakeStringValue(TEXT("StaticMeshActor"))},
 		{TEXT("name"), MakeStringValue(ActorName)},
 		{TEXT("mcp_id"), MakeStringValue(TEXT("tag_test_001"))},
-		{TEXT("tags"), MakeArrayValue({MakeStringValue(TEXT("my_tag"))})}
+		{TEXT("tags"), MakeArrayValueJson({MakeStringValue(TEXT("my_tag"))})}
 	});
 
 	Commands.HandleCommand(TEXT("spawn_actor"), SpawnParams);

@@ -25,7 +25,9 @@ impl UnrealClient {
         let actors = response
             .get("actors")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| AppError::UnrealBridge("missing actors array in response".to_string()))?;
+            .ok_or_else(|| {
+                AppError::UnrealBridge("missing actors array in response".to_string())
+            })?;
 
         let mut result = Vec::new();
         for actor_val in actors {
@@ -37,12 +39,16 @@ impl UnrealClient {
         Ok(result)
     }
 
-    pub async fn spawn_actor(&self, params: serde_json::Value) -> Result<serde_json::Value, AppError> {
+    pub async fn spawn_actor(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, AppError> {
         self.send_command("spawn_actor", params).await
     }
 
     pub async fn find_actor_by_mcp_id(&self, mcp_id: &str) -> Result<serde_json::Value, AppError> {
-        self.send_command("find_actor_by_mcp_id", json!({ "mcp_id": mcp_id })).await
+        self.send_command("find_actor_by_mcp_id", json!({ "mcp_id": mcp_id }))
+            .await
     }
 
     pub async fn set_actor_transform_by_mcp_id(
@@ -64,8 +70,31 @@ impl UnrealClient {
         .await
     }
 
-    pub async fn delete_actor_by_mcp_id(&self, mcp_id: &str) -> Result<serde_json::Value, AppError> {
-        self.send_command("delete_actor_by_mcp_id", json!({ "mcp_id": mcp_id })).await
+    pub async fn delete_actor_by_mcp_id(
+        &self,
+        mcp_id: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command("delete_actor_by_mcp_id", json!({ "mcp_id": mcp_id }))
+            .await
+    }
+
+    pub async fn set_mesh_material_color(
+        &self,
+        actor_name: &str,
+        r: f64,
+        g: f64,
+        b: f64,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "set_mesh_material_color",
+            json!({
+                "actor_name": actor_name,
+                "r": r,
+                "g": g,
+                "b": b,
+            }),
+        )
+        .await
     }
 
     async fn send_command(
@@ -85,7 +114,9 @@ impl UnrealClient {
         let addr = format!("{}:{}", self.host, self.port);
 
         let mut stream = TcpStream::connect_timeout(
-            &addr.parse().map_err(|e: std::net::AddrParseError| AppError::UnrealBridge(format!("bad address: {e}")))?,
+            &addr.parse().map_err(|e: std::net::AddrParseError| {
+                AppError::UnrealBridge(format!("bad address: {e}"))
+            })?,
             Duration::from_secs(10),
         )
         .map_err(|e| AppError::UnrealBridge(format!("connect error to {addr}: {e}")))?;
@@ -106,7 +137,9 @@ impl UnrealClient {
                 .map_err(|e| AppError::UnrealBridge(format!("read response error: {e}")))?;
             if bytes_read == 0 {
                 if resp_buf.is_empty() {
-                    return Err(AppError::UnrealBridge("connection closed before response".to_string()));
+                    return Err(AppError::UnrealBridge(
+                        "connection closed before response".to_string(),
+                    ));
                 }
                 break;
             }

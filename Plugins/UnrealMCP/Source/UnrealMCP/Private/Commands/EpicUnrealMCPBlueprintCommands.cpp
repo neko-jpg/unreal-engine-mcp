@@ -1,5 +1,6 @@
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
+#include "EpicUnrealMCPBridge.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Factories/BlueprintFactory.h"
@@ -36,6 +37,13 @@ FEpicUnrealMCPBlueprintCommands::FEpicUnrealMCPBlueprintCommands()
 
 namespace
 {
+    static FActorIndex& GetBlueprintActorIndex()
+    {
+        UEpicUnrealMCPBridge* Bridge = GEditor->GetEditorSubsystem<UEpicUnrealMCPBridge>();
+        check(Bridge);
+        return Bridge->ActorIndex;
+    }
+
     TSharedPtr<FJsonObject> MakeBlueprintSuccessResult(std::initializer_list<TPair<FString, TSharedPtr<FJsonValue>>> Fields)
     {
         TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
@@ -108,71 +116,30 @@ namespace
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
-    if (CommandType == TEXT("create_blueprint"))
+    using Handler = TSharedPtr<FJsonObject>(FEpicUnrealMCPBlueprintCommands::*)(const TSharedPtr<FJsonObject>&);
+    static const TMap<FString, Handler> Dispatch = {
+        {TEXT("create_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleCreateBlueprint},
+        {TEXT("add_component_to_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleAddComponentToBlueprint},
+        {TEXT("set_physics_properties"), &FEpicUnrealMCPBlueprintCommands::HandleSetPhysicsProperties},
+        {TEXT("compile_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleCompileBlueprint},
+        {TEXT("set_static_mesh_properties"), &FEpicUnrealMCPBlueprintCommands::HandleSetStaticMeshProperties},
+        {TEXT("spawn_blueprint_actor"), &FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintActor},
+        {TEXT("set_mesh_material_color"), &FEpicUnrealMCPBlueprintCommands::HandleSetMeshMaterialColor},
+        {TEXT("get_available_materials"), &FEpicUnrealMCPBlueprintCommands::HandleGetAvailableMaterials},
+        {TEXT("apply_material_to_actor"), &FEpicUnrealMCPBlueprintCommands::HandleApplyMaterialToActor},
+        {TEXT("apply_material_to_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleApplyMaterialToBlueprint},
+        {TEXT("get_actor_material_info"), &FEpicUnrealMCPBlueprintCommands::HandleGetActorMaterialInfo},
+        {TEXT("get_blueprint_material_info"), &FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintMaterialInfo},
+        {TEXT("read_blueprint_content"), &FEpicUnrealMCPBlueprintCommands::HandleReadBlueprintContent},
+        {TEXT("analyze_blueprint_graph"), &FEpicUnrealMCPBlueprintCommands::HandleAnalyzeBlueprintGraph},
+        {TEXT("get_blueprint_variable_details"), &FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintVariableDetails},
+        {TEXT("get_blueprint_function_details"), &FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintFunctionDetails},
+    };
+
+    const Handler* H = Dispatch.Find(CommandType);
+    if (H)
     {
-        return HandleCreateBlueprint(Params);
-    }
-    else if (CommandType == TEXT("add_component_to_blueprint"))
-    {
-        return HandleAddComponentToBlueprint(Params);
-    }
-    else if (CommandType == TEXT("set_physics_properties"))
-    {
-        return HandleSetPhysicsProperties(Params);
-    }
-    else if (CommandType == TEXT("compile_blueprint"))
-    {
-        return HandleCompileBlueprint(Params);
-    }
-    else if (CommandType == TEXT("set_static_mesh_properties"))
-    {
-        return HandleSetStaticMeshProperties(Params);
-    }
-    else if (CommandType == TEXT("spawn_blueprint_actor"))
-    {
-        return HandleSpawnBlueprintActor(Params);
-    }
-    else if (CommandType == TEXT("set_mesh_material_color"))
-    {
-        return HandleSetMeshMaterialColor(Params);
-    }
-    // Material management commands
-    else if (CommandType == TEXT("get_available_materials"))
-    {
-        return HandleGetAvailableMaterials(Params);
-    }
-    else if (CommandType == TEXT("apply_material_to_actor"))
-    {
-        return HandleApplyMaterialToActor(Params);
-    }
-    else if (CommandType == TEXT("apply_material_to_blueprint"))
-    {
-        return HandleApplyMaterialToBlueprint(Params);
-    }
-    else if (CommandType == TEXT("get_actor_material_info"))
-    {
-        return HandleGetActorMaterialInfo(Params);
-    }
-    else if (CommandType == TEXT("get_blueprint_material_info"))
-    {
-        return HandleGetBlueprintMaterialInfo(Params);
-    }
-    // Blueprint analysis commands
-    else if (CommandType == TEXT("read_blueprint_content"))
-    {
-        return HandleReadBlueprintContent(Params);
-    }
-    else if (CommandType == TEXT("analyze_blueprint_graph"))
-    {
-        return HandleAnalyzeBlueprintGraph(Params);
-    }
-    else if (CommandType == TEXT("get_blueprint_variable_details"))
-    {
-        return HandleGetBlueprintVariableDetails(Params);
-    }
-    else if (CommandType == TEXT("get_blueprint_function_details"))
-    {
-        return HandleGetBlueprintFunctionDetails(Params);
+        return (this->*(*H))(Params);
     }
 
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint command: %s"), *CommandType));
@@ -458,7 +425,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
 {
     FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Spawn Blueprint Actor")));
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Starting blueprint actor spawn"));
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Starting blueprint actor spawn"));
     
     // Get required parameters
     FString BlueprintName;
@@ -475,7 +442,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Looking for blueprint '%s'"), *BlueprintName);
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Looking for blueprint '%s'"), *BlueprintName);
 
     // Find the blueprint
     UBlueprint* Blueprint = FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
@@ -485,7 +452,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Blueprint found, getting transform parameters"));
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Blueprint found, getting transform parameters"));
 
     // Get transform parameters
     FVector Location(0.0f, 0.0f, 0.0f);
@@ -494,15 +461,15 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
     if (Params->HasField(TEXT("location")))
     {
         Location = FEpicUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("location"));
-        UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Location set to (%f, %f, %f)"), Location.X, Location.Y, Location.Z);
+        UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Location set to (%f, %f, %f)"), Location.X, Location.Y, Location.Z);
     }
     if (Params->HasField(TEXT("rotation")))
     {
         Rotation = FEpicUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation"));
-        UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Rotation set to (%f, %f, %f)"), Rotation.Pitch, Rotation.Yaw, Rotation.Roll);
+        UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Rotation set to (%f, %f, %f)"), Rotation.Pitch, Rotation.Yaw, Rotation.Roll);
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Getting editor world"));
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Getting editor world"));
 
     // Spawn the actor
     UWorld* World = GEditor->GetEditorWorldContext().World();
@@ -512,16 +479,27 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Creating spawn transform"));
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Creating spawn transform"));
 
     FTransform SpawnTransform;
     SpawnTransform.SetLocation(Location);
     SpawnTransform.SetRotation(FQuat(Rotation));
 
-    // Add a small delay to allow the engine to process the newly compiled class
-    FPlatformProcess::Sleep(0.2f);
+    // Ensure blueprint class is ready (retry loop instead of fixed 200ms sleep)
+    if (!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->ClassDefaultObject)
+    {
+        FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    }
+    {
+        int32 Retries = 0;
+        while ((!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->ClassDefaultObject) && Retries < 10)
+        {
+            FPlatformProcess::Sleep(0.005f);
+            Retries++;
+        }
+    }
 
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: About to spawn actor from blueprint '%s' with GeneratedClass: %s"), 
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: About to spawn actor from blueprint '%s' with GeneratedClass: %s"),
            *BlueprintName, Blueprint->GeneratedClass ? *Blueprint->GeneratedClass->GetName() : TEXT("NULL"));
 
     FActorSpawnParameters SpawnParams;
@@ -529,18 +507,18 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
 
     AActor* NewActor = World->SpawnActor<AActor>(Blueprint->GeneratedClass, SpawnTransform, SpawnParams);
     
-    UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: SpawnActor completed, NewActor: %s"), 
+    UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: SpawnActor completed, NewActor: %s"), 
            NewActor ? *NewActor->GetName() : TEXT("NULL"));
     
     if (NewActor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Setting actor label to '%s'"), *ActorName);
+        UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Setting actor label to '%s'"), *ActorName);
         NewActor->SetActorLabel(*ActorName);
         
-        UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: About to convert actor to JSON"));
+        UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: About to convert actor to JSON"));
         TSharedPtr<FJsonObject> Result = FEpicUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
         
-        UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: JSON conversion completed, returning result"));
+        UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: JSON conversion completed, returning result"));
         return Result;
     }
 
@@ -824,48 +802,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleGetAvailableMater
     
     UE_LOG(LogTemp, Log, TEXT("Asset registry found %d materials"), AssetDataArray.Num());
 
-    // Also try manual search using EditorAssetLibrary for more comprehensive results
-    TArray<FString> AllAssetPaths;
-    if (!SearchPath.IsEmpty())
-    {
-        AllAssetPaths = UEditorAssetLibrary::ListAssets(SearchPath, true, false);
-    }
-    else
-    {
-        AllAssetPaths = UEditorAssetLibrary::ListAssets(TEXT("/Game/"), true, false);
-    }
-    
-    // Filter for materials from the manual search
-    for (const FString& AssetPath : AllAssetPaths)
-    {
-        if (AssetPath.Contains(TEXT("Material")) && !AssetPath.Contains(TEXT(".uasset")))
-        {
-            UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
-            if (Asset && Asset->IsA<UMaterialInterface>())
-            {
-                // Check if we already have this asset from registry search
-                bool bAlreadyFound = false;
-                for (const FAssetData& ExistingData : AssetDataArray)
-                {
-                    if (ExistingData.GetObjectPathString() == AssetPath)
-                    {
-                        bAlreadyFound = true;
-                        break;
-                    }
-                }
-                
-                if (!bAlreadyFound)
-                {
-                    // Create FAssetData manually for this asset
-                    FAssetData ManualAssetData(Asset);
-                    AssetDataArray.Add(ManualAssetData);
-                }
-            }
-        }
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("Total materials found after manual search: %d"), AssetDataArray.Num());
-
     // Convert to JSON
     TArray<TSharedPtr<FJsonValue>> MaterialArray;
     for (const FAssetData& AssetData : AssetDataArray)
@@ -912,26 +848,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleApplyMaterialToAc
         MaterialSlot = Params->GetIntegerField(TEXT("material_slot"));
     }
 
-    // Find the actor
-    AActor* TargetActor = nullptr;
-    UWorld* World = GEditor->GetEditorWorldContext().World();
-    if (!World)
-    {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
-    }
-    
-    TArray<AActor*> AllActors;
-    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
-    
-    for (AActor* Actor : AllActors)
-    {
-        if (Actor && Actor->GetName() == ActorName)
-        {
-            TargetActor = Actor;
-            break;
-        }
-    }
-
+    // Find the actor via O(1) index
+    AActor* TargetActor = GetBlueprintActorIndex().FindByName(FName(*ActorName));
     if (!TargetActor)
     {
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
@@ -1062,26 +980,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleGetActorMaterialI
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
     }
 
-    // Find the actor
-    AActor* TargetActor = nullptr;
-    UWorld* World = GEditor->GetEditorWorldContext().World();
-    if (!World)
-    {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
-    }
-    
-    TArray<AActor*> AllActors;
-    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
-    
-    for (AActor* Actor : AllActors)
-    {
-        if (Actor && Actor->GetName() == ActorName)
-        {
-            TargetActor = Actor;
-            break;
-        }
-    }
-
+    // Find the actor via O(1) index
+    AActor* TargetActor = GetBlueprintActorIndex().FindByName(FName(*ActorName));
     if (!TargetActor)
     {
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));

@@ -87,9 +87,14 @@ from server.scene_tools import (
     scene_upsert_actor,
     scene_upsert_actors,
     scene_delete_actor,
+    scene_snapshot_create,
+    scene_snapshot_restore,
     scene_list_objects,
+    scene_create_wall,
+    scene_create_pyramid,
     scene_health,
     scene_plan_sync,
+    scene_sync,
 )
 
 
@@ -155,6 +160,18 @@ __all__ = [
     "create_castle_fortress",
     "create_suspension_bridge",
     "create_aqueduct",
+    "scene_create",
+    "scene_upsert_actor",
+    "scene_upsert_actors",
+    "scene_delete_actor",
+    "scene_snapshot_create",
+    "scene_snapshot_restore",
+    "scene_list_objects",
+    "scene_create_wall",
+    "scene_create_pyramid",
+    "scene_health",
+    "scene_plan_sync",
+    "scene_sync",
 ]
 
 

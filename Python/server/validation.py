@@ -1,7 +1,7 @@
 """Input validation utilities for Unreal MCP server tools."""
 
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from utils.responses import make_error_response, is_success_response, is_error_response  # noqa: F401  re-export
 
@@ -121,7 +121,7 @@ def validate_int(
         if allow_none:
             return None
         raise ValidationError(field_name, "must not be None")
-    if not isinstance(value, int) or isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ValidationError(field_name, f"must be an integer, got {type(value).__name__}")
     if min_val is not None and value < min_val:
         raise ValidationError(field_name, f"must be >= {min_val}, got {value}")
@@ -142,6 +142,10 @@ def validate_unreal_path(value: Any, field_name: str) -> str:
     value = validate_string(value, field_name)
     if not value.startswith("/"):
         raise ValidationError(field_name, f"must start with '/', got '{value}'")
+    if ".." in value.split("/"):
+        raise ValidationError(field_name, f"path traversal not allowed, got '{value}'")
+    if any("\x00" in part or "\n" in part or "\r" in part for part in value.split("/")):
+        raise ValidationError(field_name, f"control characters not allowed in path, got '{value}'")
     return value
 
 

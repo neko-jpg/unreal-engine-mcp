@@ -20,53 +20,26 @@ FEpicUnrealMCPBlueprintGraphCommands::~FEpicUnrealMCPBlueprintGraphCommands()
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
-    if (CommandType == TEXT("add_blueprint_node"))
+    using Handler = TSharedPtr<FJsonObject>(FEpicUnrealMCPBlueprintGraphCommands::*)(const TSharedPtr<FJsonObject>&);
+    static const TMap<FString, Handler> Dispatch = {
+        {TEXT("add_blueprint_node"), &FEpicUnrealMCPBlueprintGraphCommands::HandleAddBlueprintNode},
+        {TEXT("connect_nodes"), &FEpicUnrealMCPBlueprintGraphCommands::HandleConnectNodes},
+        {TEXT("create_variable"), &FEpicUnrealMCPBlueprintGraphCommands::HandleCreateVariable},
+        {TEXT("set_blueprint_variable_properties"), &FEpicUnrealMCPBlueprintGraphCommands::HandleSetVariableProperties},
+        {TEXT("add_event_node"), &FEpicUnrealMCPBlueprintGraphCommands::HandleAddEventNode},
+        {TEXT("delete_node"), &FEpicUnrealMCPBlueprintGraphCommands::HandleDeleteNode},
+        {TEXT("set_node_property"), &FEpicUnrealMCPBlueprintGraphCommands::HandleSetNodeProperty},
+        {TEXT("create_function"), &FEpicUnrealMCPBlueprintGraphCommands::HandleCreateFunction},
+        {TEXT("add_function_input"), &FEpicUnrealMCPBlueprintGraphCommands::HandleAddFunctionInput},
+        {TEXT("add_function_output"), &FEpicUnrealMCPBlueprintGraphCommands::HandleAddFunctionOutput},
+        {TEXT("delete_function"), &FEpicUnrealMCPBlueprintGraphCommands::HandleDeleteFunction},
+        {TEXT("rename_function"), &FEpicUnrealMCPBlueprintGraphCommands::HandleRenameFunction},
+    };
+
+    const Handler* H = Dispatch.Find(CommandType);
+    if (H)
     {
-        return HandleAddBlueprintNode(Params);
-    }
-    else if (CommandType == TEXT("connect_nodes"))
-    {
-        return HandleConnectNodes(Params);
-    }
-    else if (CommandType == TEXT("create_variable"))
-    {
-        return HandleCreateVariable(Params);
-    }
-    else if (CommandType == TEXT("set_blueprint_variable_properties"))
-    {
-        return HandleSetVariableProperties(Params);
-    }
-    else if (CommandType == TEXT("add_event_node"))
-    {
-        return HandleAddEventNode(Params);
-    }
-    else if (CommandType == TEXT("delete_node"))
-    {
-        return HandleDeleteNode(Params);
-    }
-    else if (CommandType == TEXT("set_node_property"))
-    {
-        return HandleSetNodeProperty(Params);
-    }
-    else if (CommandType == TEXT("create_function"))
-    {
-        return HandleCreateFunction(Params);
-    }
-    else if (CommandType == TEXT("add_function_input"))
-    {
-        return HandleAddFunctionInput(Params);
-    }
-    else if (CommandType == TEXT("add_function_output"))
-    {
-        return HandleAddFunctionOutput(Params);
-    }
-    else if (CommandType == TEXT("delete_function"))
-    {
-        return HandleDeleteFunction(Params);
-    }
-    else if (CommandType == TEXT("rename_function"))
-    {
-        return HandleRenameFunction(Params);
+        return (this->*(*H))(Params);
     }
 
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint graph command: %s"), *CommandType));

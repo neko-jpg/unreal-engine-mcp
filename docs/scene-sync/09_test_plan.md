@@ -28,6 +28,8 @@ The most important tests are identity and idempotency. If those fail, congratula
 
 ### TEST-UNIT-001: `mcp_id` validation
 
+Status: Implemented (partial -- record key tests cover prefix stripping; full validation pending)
+
 Valid:
 
 ```text
@@ -107,9 +109,13 @@ Duplicate `(scene, mcp_id)` is rejected.
 
 ### TEST-DB-007: Snapshot
 
+Status: Implemented (verified via Python facade + SurrealDB).
+
 Snapshot stores current groups/objects.
 
 ### TEST-DB-008: Restore
+
+Status: Implemented (verified via Python facade + SurrealDB).
 
 Restore modifies desired state only.
 
@@ -165,6 +171,8 @@ Tool returns structured error.
 
 ### TEST-PY-003: Existing tools still import
 
+Status: Implemented (verified by test_tool_registration_and_mapping.py)
+
 Adding `scene_tools.py` does not break startup.
 
 ## 8. End-to-end tests
@@ -202,6 +210,8 @@ Adding `scene_tools.py` does not break startup.
 
 ### TEST-E2E-004: Snapshot restore
 
+Status: Implemented (verified via Python facade against local SurrealDB + scene-syncd).
+
 1. Create 10 objects.
 2. Snapshot.
 3. Move/delete some.
@@ -210,6 +220,8 @@ Adding `scene_tools.py` does not break startup.
 6. Scene returns to snapshot desired state.
 
 ### TEST-E2E-005: Wall generator
+
+Status: Implemented (verified via Python facade against local SurrealDB + scene-syncd).
 
 1. `scene_create_wall` with 10 segments.
 2. Plan create=10.

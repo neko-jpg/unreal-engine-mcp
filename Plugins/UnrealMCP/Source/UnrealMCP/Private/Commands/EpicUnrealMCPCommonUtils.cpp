@@ -25,6 +25,76 @@
 #include "BlueprintActionDatabase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Kismet/GameplayStatics.h"
+
+// FActorIndex implementation
+
+void FActorIndex::AddActor(AActor* Actor)
+{
+    if (!Actor) return;
+    NameIndex.Add(FName(*Actor->GetName()), Actor);
+
+    for (const FName& Tag : Actor->Tags)
+    {
+        FString TagStr = Tag.ToString();
+        if (TagStr.StartsWith(TEXT("mcp_id:")))
+        {
+            FString McpId = TagStr.Mid(7);
+            McpIdIndex.Add(McpId, Actor);
+            break; // Use first mcp_id tag
+        }
+    }
+}
+
+void FActorIndex::RemoveActor(AActor* Actor)
+{
+    if (!Actor) return;
+    NameIndex.Remove(FName(*Actor->GetName()));
+
+    for (const FName& Tag : Actor->Tags)
+    {
+        FString TagStr = Tag.ToString();
+        if (TagStr.StartsWith(TEXT("mcp_id:")))
+        {
+            McpIdIndex.Remove(TagStr.Mid(7));
+            break;
+        }
+    }
+}
+
+AActor* FActorIndex::FindByName(const FName& Name)
+{
+    AActor** Found = NameIndex.Find(Name);
+    return Found ? *Found : nullptr;
+}
+
+AActor* FActorIndex::FindByMcpId(const FString& McpId)
+{
+    AActor** Found = McpIdIndex.Find(McpId);
+    return Found ? *Found : nullptr;
+}
+
+void FActorIndex::RebuildFromWorld(UWorld* World)
+{
+    Clear();
+    if (!World) return;
+
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+    for (AActor* Actor : AllActors)
+    {
+        if (Actor)
+        {
+            AddActor(Actor);
+        }
+    }
+}
+
+void FActorIndex::Clear()
+{
+    NameIndex.Reset();
+    McpIdIndex.Reset();
+}
 
 // JSON Utilities
 TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::CreateErrorResponse(const FString& Message)
@@ -490,12 +560,12 @@ UEdGraphPin* FEpicUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FStrin
     }
     
     // Log all pins for debugging
-    UE_LOG(LogTemp, Display, TEXT("FindPin: Looking for pin '%s' (Direction: %d) in node '%s'"), 
+    UE_LOG(LogTemp, Verbose, TEXT("FindPin: Looking for pin '%s' (Direction: %d) in node '%s'"), 
            *PinName, (int32)Direction, *Node->GetName());
     
     for (UEdGraphPin* Pin : Node->Pins)
     {
-        UE_LOG(LogTemp, Display, TEXT("  - Available pin: '%s', Direction: %d, Category: %s"), 
+        UE_LOG(LogTemp, Verbose, TEXT("  - Available pin: '%s', Direction: %d, Category: %s"), 
                *Pin->PinName.ToString(), (int32)Pin->Direction, *Pin->PinType.PinCategory.ToString());
     }
     
@@ -504,7 +574,7 @@ UEdGraphPin* FEpicUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FStrin
     {
         if (Pin->PinName.ToString() == PinName && (Direction == EGPD_MAX || Pin->Direction == Direction))
         {
-            UE_LOG(LogTemp, Display, TEXT("  - Found exact matching pin: '%s'"), *Pin->PinName.ToString());
+            UE_LOG(LogTemp, Verbose, TEXT("  - Found exact matching pin: '%s'"), *Pin->PinName.ToString());
             return Pin;
         }
     }
@@ -515,7 +585,7 @@ UEdGraphPin* FEpicUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FStrin
         if (Pin->PinName.ToString().Equals(PinName, ESearchCase::IgnoreCase) && 
             (Direction == EGPD_MAX || Pin->Direction == Direction))
         {
-            UE_LOG(LogTemp, Display, TEXT("  - Found case-insensitive matching pin: '%s'"), *Pin->PinName.ToString());
+            UE_LOG(LogTemp, Verbose, TEXT("  - Found case-insensitive matching pin: '%s'"), *Pin->PinName.ToString());
             return Pin;
         }
     }
@@ -527,7 +597,7 @@ UEdGraphPin* FEpicUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FStrin
         {
             if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
             {
-                UE_LOG(LogTemp, Display, TEXT("  - Found fallback data output pin: '%s'"), *Pin->PinName.ToString());
+                UE_LOG(LogTemp, Verbose, TEXT("  - Found fallback data output pin: '%s'"), *Pin->PinName.ToString());
                 return Pin;
             }
         }
@@ -540,52 +610,12 @@ UEdGraphPin* FEpicUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FStrin
 // Actor utilities
 TSharedPtr<FJsonValue> FEpicUnrealMCPCommonUtils::ActorToJson(AActor* Actor)
 {
-    if (!Actor)
+    TSharedPtr<FJsonObject> Object = ActorToJsonObject(Actor);
+    if (!Object)
     {
         return MakeShared<FJsonValueNull>();
     }
-    
-    TSharedPtr<FJsonObject> ActorObject = MakeShared<FJsonObject>();
-    ActorObject->SetStringField(TEXT("name"), Actor->GetName());
-    ActorObject->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
-    
-    FVector Location = Actor->GetActorLocation();
-    TArray<TSharedPtr<FJsonValue>> LocationArray;
-    LocationArray.Add(MakeShared<FJsonValueNumber>(Location.X));
-    LocationArray.Add(MakeShared<FJsonValueNumber>(Location.Y));
-    LocationArray.Add(MakeShared<FJsonValueNumber>(Location.Z));
-    ActorObject->SetArrayField(TEXT("location"), LocationArray);
-    
-    FRotator Rotation = Actor->GetActorRotation();
-    TArray<TSharedPtr<FJsonValue>> RotationArray;
-    RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Pitch));
-    RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Yaw));
-    RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Roll));
-    ActorObject->SetArrayField(TEXT("rotation"), RotationArray);
-    
-    FVector Scale = Actor->GetActorScale3D();
-    TArray<TSharedPtr<FJsonValue>> ScaleArray;
-    ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.X));
-    ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Y));
-    ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
-    ActorObject->SetArrayField(TEXT("scale"), ScaleArray);
-
-    TArray<TSharedPtr<FJsonValue>> TagsArray;
-    for (const FName& Tag : Actor->Tags)
-    {
-        TagsArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
-    }
-    ActorObject->SetArrayField(TEXT("tags"), TagsArray);
-
-    FString StaticMeshPath;
-    UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetComponentByClass(UStaticMeshComponent::StaticClass()));
-    if (MeshComp && MeshComp->GetStaticMesh())
-    {
-        StaticMeshPath = MeshComp->GetStaticMesh()->GetPathName();
-    }
-    ActorObject->SetStringField(TEXT("static_mesh"), StaticMeshPath);
-    
-    return MakeShared<FJsonValueObject>(ActorObject);
+    return MakeShared<FJsonValueObject>(Object);
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::ActorToJsonObject(AActor* Actor, bool bDetailed)

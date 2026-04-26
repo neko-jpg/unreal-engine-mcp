@@ -1,20 +1,11 @@
-mod api;
-mod config;
-mod db;
-mod domain;
-mod error;
-mod sync;
-mod unreal;
-
 use axum::routing::{get, post};
 use axum::Router;
-use config::Config;
-use db::connect::connect_surreal;
-use db::SurrealSceneRepository;
-use tower_http::trace::TraceLayer;
+use scene_syncd::db::connect::connect_surreal;
+use scene_syncd::db::SurrealSceneRepository;
+use scene_syncd::api::routes::AppState;
+use scene_syncd::Config;
 use tower_http::cors::CorsLayer;
-
-use api::routes::AppState;
+use tower_http::trace::TraceLayer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,20 +34,25 @@ async fn main() -> anyhow::Result<()> {
 
     let bind_addr = config.bind_addr();
 
-    let state = AppState {
-        db,
-        config,
-    };
+    let state = AppState { db, config };
 
     let app = Router::new()
-        .route("/health", get(api::routes::health))
-        .route("/scenes/create", post(api::routes::create_scene))
-        .route("/objects/upsert", post(api::routes::upsert_object))
-        .route("/objects/bulk-upsert", post(api::routes::bulk_upsert_objects))
-        .route("/objects/list", post(api::routes::list_objects))
-        .route("/objects/delete", post(api::routes::delete_object))
-        .route("/sync/plan", post(api::routes::plan_sync_route))
-        .route("/sync/apply", post(api::routes::apply_sync_route))
+        .route("/health", get(scene_syncd::api::routes::health))
+        .route("/scenes/create", post(scene_syncd::api::routes::create_scene))
+        .route("/objects/upsert", post(scene_syncd::api::routes::upsert_object))
+        .route(
+            "/objects/bulk-upsert",
+            post(scene_syncd::api::routes::bulk_upsert_objects),
+        )
+        .route("/objects/list", post(scene_syncd::api::routes::list_objects))
+        .route("/objects/delete", post(scene_syncd::api::routes::delete_object))
+        .route("/groups/create", post(scene_syncd::api::routes::create_group))
+        .route("/groups/list", post(scene_syncd::api::routes::list_groups))
+        .route("/snapshots/create", post(scene_syncd::api::routes::create_snapshot))
+        .route("/snapshots/list", post(scene_syncd::api::routes::list_snapshots))
+        .route("/snapshots/restore", post(scene_syncd::api::routes::restore_snapshot))
+        .route("/sync/plan", post(scene_syncd::api::routes::plan_sync_route))
+        .route("/sync/apply", post(scene_syncd::api::routes::apply_sync_route))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state);

@@ -1,8 +1,6 @@
 #include "Tests/MCPAutomationTestUtils.h"
 
 #include "Commands/EpicUnrealMCPCommonUtils.h"
-#include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
 #include "EditorAssetLibrary.h"
 #include "Engine/Blueprint.h"
 #include "Engine/SimpleConstructionScript.h"
@@ -21,72 +19,14 @@ namespace UnrealMCP::Tests
 		return FString::Printf(TEXT("%s_%s"), *Prefix, *FGuid::NewGuid().ToString(EGuidFormats::Digits));
 	}
 
-	TSharedPtr<FJsonObject> MakeObject(std::initializer_list<TPair<FString, TSharedPtr<FJsonValue>>> Fields)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Fields)
-		{
-			Result->SetField(Field.Key, Field.Value);
-		}
-		return Result;
-	}
-
-	TSharedPtr<FJsonValue> MakeStringValue(const FString& Value)
-	{
-		return MakeShared<FJsonValueString>(Value);
-	}
-
-	TSharedPtr<FJsonValue> MakeBoolValue(bool bValue)
-	{
-		return MakeShared<FJsonValueBoolean>(bValue);
-	}
-
-	TSharedPtr<FJsonValue> MakeNumberValue(double Value)
-	{
-		return MakeShared<FJsonValueNumber>(Value);
-	}
-
-	TSharedPtr<FJsonValue> MakeArrayValue(std::initializer_list<double> Values)
+	TSharedPtr<FJsonValue> MakeArrayValue(std::initializer_list<TSharedPtr<FJsonValue>> Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Array;
-		for (double Value : Values)
+		for (const TSharedPtr<FJsonValue>& V : Values)
 		{
-			Array.Add(MakeNumberValue(Value));
+			Array.Add(V);
 		}
 		return MakeShared<FJsonValueArray>(Array);
-	}
-
-	TSharedPtr<FJsonValue> MakeObjectValue(const TSharedPtr<FJsonObject>& Value)
-	{
-		return MakeShared<FJsonValueObject>(Value);
-	}
-
-	bool IsSuccessResponse(const TSharedPtr<FJsonObject>& Response)
-	{
-		if (!Response.IsValid())
-		{
-			return false;
-		}
-
-		bool bSuccess = false;
-		if (Response->TryGetBoolField(TEXT("success"), bSuccess))
-		{
-			return bSuccess;
-		}
-
-		return !Response->HasField(TEXT("error"));
-	}
-
-	FString GetErrorMessage(const TSharedPtr<FJsonObject>& Response)
-	{
-		if (!Response.IsValid())
-		{
-			return TEXT("Invalid response");
-		}
-
-		FString ErrorMessage;
-		Response->TryGetStringField(TEXT("error"), ErrorMessage);
-		return ErrorMessage;
 	}
 
 	static TSharedPtr<FJsonObject> ParseEnvelope(const FString& SerializedResponse)

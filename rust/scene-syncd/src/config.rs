@@ -11,6 +11,7 @@ pub struct Config {
     pub surreal_pass: String,
     pub unreal_host: String,
     pub unreal_port: u16,
+    #[allow(dead_code)]
     pub autosync: bool,
     pub log_level: String,
 }
@@ -36,6 +37,7 @@ impl Config {
         format!("{}:{}", self.host, self.port)
     }
 
+    #[allow(dead_code)]
     pub fn unreal_addr(&self) -> String {
         format!("{}:{}", self.unreal_host, self.unreal_port)
     }

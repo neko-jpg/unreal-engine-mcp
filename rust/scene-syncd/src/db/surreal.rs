@@ -1,8 +1,13 @@
 use crate::domain::*;
 use crate::error::AppError;
-use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::sql::Datetime;
+use surrealdb::Surreal;
+
+/// Build a scene_object record key, stripping any `scene:` prefix from the scene id.
+pub fn scene_object_record_key(scene_id: &str, mcp_id: &str) -> String {
+    format!("{}:{}", scene_id.replace("scene:", ""), mcp_id)
+}
 
 #[derive(Debug, Clone)]
 pub struct SurrealSceneRepository {
@@ -83,7 +88,9 @@ impl SurrealSceneRepository {
             "DEFINE FIELD description ON TABLE scene_snapshot TYPE option<string>;",
             "DEFINE FIELD revision ON TABLE scene_snapshot TYPE int;",
             "DEFINE FIELD groups ON TABLE scene_snapshot TYPE array;",
+            "DEFINE FIELD groups.* ON TABLE scene_snapshot FLEXIBLE TYPE object;",
             "DEFINE FIELD objects ON TABLE scene_snapshot TYPE array;",
+            "DEFINE FIELD objects.* ON TABLE scene_snapshot FLEXIBLE TYPE object;",
             "DEFINE FIELD created_at ON TABLE scene_snapshot TYPE datetime DEFAULT time::now();",
 
             "DEFINE TABLE sync_run SCHEMAFULL;",
@@ -122,7 +129,10 @@ impl SurrealSceneRepository {
         ];
 
         for query in &queries {
-            self.db.query(*query).await.map_err(|e| AppError::Database(format!("schema migration error: {e}")))?;
+            self.db
+                .query(*query)
+                .await
+                .map_err(|e| AppError::Database(format!("schema migration error: {e}")))?;
         }
 
         tracing::info!("Schema migrations applied");
@@ -132,7 +142,8 @@ impl SurrealSceneRepository {
     pub async fn ensure_default_scene(&self) -> Result<(), AppError> {
         let now = Datetime::from(chrono::Utc::now());
 
-        let existing: Option<Scene> = self.db
+        let existing: Option<Scene> = self
+            .db
             .select(("scene", "main"))
             .await
             .map_err(|e| AppError::Database(format!("select scene:main error: {e}")))?;
@@ -150,7 +161,8 @@ impl SurrealSceneRepository {
                 updated_at: now,
             };
 
-            let _: Option<Scene> = self.db
+            let _: Option<Scene> = self
+                .db
                 .create(("scene", "main"))
                 .content(scene)
                 .await
@@ -162,10 +174,15 @@ impl SurrealSceneRepository {
         Ok(())
     }
 
-    pub async fn create_scene(&self, name: &str, description: Option<String>) -> Result<Scene, AppError> {
+    pub async fn create_scene(
+        &self,
+        scene_id: &str,
+        name: &str,
+        description: Option<String>,
+    ) -> Result<Scene, AppError> {
         let now = Datetime::from(chrono::Utc::now());
         let scene = Scene {
-            id: format!("scene:{name}"),
+            id: format!("scene:{scene_id}"),
             name: name.to_string(),
             description,
             status: "active".to_string(),
@@ -176,8 +193,9 @@ impl SurrealSceneRepository {
             updated_at: now,
         };
 
-        let created: Option<Scene> = self.db
-            .create(("scene", name))
+        let created: Option<Scene> = self
+            .db
+            .create(("scene", scene_id))
             .content(scene)
             .await
             .map_err(|e| AppError::Database(format!("create scene error: {e}")))?;
@@ -185,78 +203,133 @@ impl SurrealSceneRepository {
         created.ok_or_else(|| AppError::Internal("failed to create scene".to_string()))
     }
 
-    pub async fn upsert_object(&self, obj: &SceneObject) -> Result<SceneObject, AppError> {
+    pub async fn upsert_scene(
+        &self,
+        scene_id: &str,
+        name: &str,
+        description: Option<String>,
+    ) -> Result<Scene, AppError> {
         let now = Datetime::from(chrono::Utc::now());
-        let record_key = format!("{}:{}", obj.scene.replace("scene:", ""), obj.mcp_id);
 
-        let existing: Option<SceneObject> = self.db
-            .select(("scene_object", record_key.as_str()))
+        let existing: Option<Scene> = self
+            .db
+            .select(("scene", scene_id))
             .await
-            .map_err(|e| AppError::Database(format!("select object error: {e}")))?;
+            .map_err(|e| AppError::Database(format!("select scene error: {e}")))?;
 
-        if let Some(mut existing_obj) = existing {
-            existing_obj.actor_type = obj.actor_type.clone();
-            existing_obj.desired_name = obj.desired_name.clone();
-            existing_obj.transform = obj.transform.clone();
-            existing_obj.asset_ref = obj.asset_ref.clone();
-            existing_obj.visual = obj.visual.clone();
-            existing_obj.physics = obj.physics.clone();
-            existing_obj.tags = obj.tags.clone();
-            existing_obj.metadata = obj.metadata.clone();
-            existing_obj.desired_hash = obj.desired_hash.clone();
-            existing_obj.sync_status = "pending".to_string();
-            existing_obj.updated_at = now;
-            if obj.group.is_some() {
-                existing_obj.group = obj.group.clone();
+        if let Some(mut scene) = existing {
+            scene.name = name.to_string();
+            if description.is_some() {
+                scene.description = description;
             }
-
-            let updated: Option<SceneObject> = self.db
-                .update(("scene_object", record_key.as_str()))
-                .content(existing_obj)
-                .await
-                .map_err(|e| AppError::Database(format!("update object error: {e}")))?;
-
-            updated.ok_or_else(|| AppError::Internal("failed to update object".to_string()))?;
-            self.write_object_tags(&record_key, &obj.tags).await
+            scene.updated_at = now;
+            let updated: Option<Scene> =
+                self.db
+                    .update(("scene", scene_id))
+                    .content(scene)
+                    .await
+                    .map_err(|e| AppError::Database(format!("update scene error: {e}")))?;
+            updated.ok_or_else(|| AppError::Internal("failed to update scene".to_string()))
         } else {
-            let mut new_obj = obj.clone();
-            new_obj.created_at = now.clone();
-            new_obj.updated_at = now;
-
-            let created: Option<SceneObject> = self.db
-                .create(("scene_object", record_key.as_str()))
-                .content(new_obj)
-                .await
-                .map_err(|e| AppError::Database(format!("create object error: {e}")))?;
-
-            created.ok_or_else(|| AppError::Internal("failed to create object".to_string()))?;
-            self.write_object_tags(&record_key, &obj.tags).await
+            self.create_scene(scene_id, name, description).await
         }
     }
 
-    async fn write_object_tags(&self, record_key: &str, tags: &[String]) -> Result<SceneObject, AppError> {
-        let tags_json = serde_json::to_value(tags)
-            .map_err(|e| AppError::Internal(format!("serialize tags error: {e}")))?;
+    pub async fn upsert_object(&self, obj: &SceneObject) -> Result<SceneObject, AppError> {
+        let record_key = scene_object_record_key(&obj.scene, &obj.mcp_id);
+        let key_owned = record_key.clone();
+        let scene_id = obj.scene.trim_start_matches("scene:");
 
-        let updated: Option<SceneObject> = self.db
-            .update(("scene_object", record_key))
-            .merge(serde_json::json!({ "tags": tags_json }))
+        let updated: Option<SceneObject> = self
+            .db
+            .query(
+                "IF type::thing($table, $key).id THEN \
+                 UPDATE type::thing($table, $key) SET \
+                    scene = $scene, \
+                    group = $group, \
+                    mcp_id = $mcp_id, \
+                    desired_name = $desired_name, \
+                    actor_type = $actor_type, \
+                    asset_ref = $asset_ref, \
+                    transform = $transform, \
+                    visual = $visual, \
+                    physics = $physics, \
+                    tags = $tags, \
+                    metadata = $metadata, \
+                    desired_hash = $desired_hash, \
+                    deleted = $deleted, \
+                    sync_status = 'pending', \
+                    updated_at = time::now() \
+                 ELSE \
+                 CREATE type::thing($table, $key) CONTENT { \
+                    scene: $scene, \
+                    group: $group, \
+                    mcp_id: $mcp_id, \
+                    desired_name: $desired_name, \
+                    actor_type: $actor_type, \
+                    asset_ref: $asset_ref, \
+                    transform: $transform, \
+                    visual: $visual, \
+                    physics: $physics, \
+                    tags: $tags, \
+                    metadata: $metadata, \
+                    desired_hash: $desired_hash, \
+                    deleted: $deleted, \
+                    sync_status: 'pending', \
+                    created_at: time::now(), \
+                    updated_at: time::now() \
+                 } \
+                 END"
+            )
+            .bind(("table", "scene_object"))
+            .bind(("key", key_owned))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("group", obj.group.clone()))
+            .bind(("mcp_id", obj.mcp_id.clone()))
+            .bind(("desired_name", obj.desired_name.clone()))
+            .bind(("actor_type", obj.actor_type.clone()))
+            .bind(("asset_ref", obj.asset_ref.clone()))
+            .bind(("transform", obj.transform.clone()))
+            .bind(("visual", obj.visual.clone()))
+            .bind(("physics", obj.physics.clone()))
+            .bind(("tags", obj.tags.clone()))
+            .bind(("metadata", obj.metadata.clone()))
+            .bind(("desired_hash", obj.desired_hash.clone()))
+            .bind(("deleted", obj.deleted))
             .await
-            .map_err(|e| AppError::Database(format!("write object tags error: {e}")))?;
+            .map_err(|e| AppError::Database(format!("upsert object error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert object parse error: {e}")))?;
 
-        updated.ok_or_else(|| AppError::Internal("failed to reload object after tag write".to_string()))
+        updated.ok_or_else(|| AppError::Internal("failed to upsert object".to_string()))
     }
 
-    pub async fn list_desired_objects(&self, scene: &str, include_deleted: bool) -> Result<Vec<SceneObject>, AppError> {
-        let query = if include_deleted {
-            "SELECT * FROM scene_object WHERE scene = $scene"
-        } else {
-            "SELECT * FROM scene_object WHERE scene = $scene AND deleted = false"
-        };
+    pub async fn list_desired_objects(
+        &self,
+        scene: &str,
+        include_deleted: bool,
+        group_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<SceneObject>, AppError> {
+        let mut conditions = vec![format!("scene = $scene")];
+        if !include_deleted {
+            conditions.push("deleted = false".to_string());
+        }
+        if group_id.is_some() {
+            conditions.push("group = $group".to_string());
+        }
+        let where_clause = conditions.join(" AND ");
+        let mut query = format!("SELECT * FROM scene_object WHERE {where_clause}");
+        if let Some(n) = limit {
+            query.push_str(&format!(" LIMIT {n}"));
+        }
 
-        let objects: Vec<SceneObject> = self.db
-            .query(query)
-            .bind(("scene", format!("scene:{scene}")))
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene}")));
+        if let Some(gid) = group_id {
+            q = q.bind(("group", format!("scene_group:{gid}")));
+        }
+
+        let objects: Vec<SceneObject> = q
             .await
             .map_err(|e| AppError::Database(format!("list objects error: {e}")))?
             .take(0)
@@ -266,23 +339,191 @@ impl SurrealSceneRepository {
     }
 
     pub async fn mark_object_deleted(&self, scene: &str, mcp_id: &str) -> Result<(), AppError> {
-        let record_key = format!("{}:{}", scene, mcp_id);
-        let now = Datetime::from(chrono::Utc::now());
+        let record_key = scene_object_record_key(scene, mcp_id);
 
-        let result: Vec<SceneObject> = self.db
-            .query("UPDATE type::thing($id) SET deleted = true, sync_status = \"pending\", updated_at = $now")
-            .bind(("id", format!("scene_object:{record_key}")))
-            .bind(("now", now))
+        let updated: Option<SceneObject> = self
+            .db
+            .update(("scene_object", record_key.as_str()))
+            .merge(serde_json::json!({
+                "deleted": true,
+                "sync_status": "pending",
+            }))
             .await
-            .map_err(|e| AppError::Database(format!("mark deleted error: {e}")))?
-            .take(0)
-            .map_err(|e| AppError::Database(format!("mark deleted parse error: {e}")))?;
+            .map_err(|e| AppError::Database(format!("mark deleted error: {e}")))?;
 
-        if result.is_empty() {
-            return Err(AppError::NotFound(format!("object {mcp_id} not found in scene {scene}")));
+        if updated.is_none() {
+            return Err(AppError::NotFound(format!(
+                "object {mcp_id} not found in scene {scene}"
+            )));
         }
 
         Ok(())
+    }
+
+    pub async fn create_group(
+        &self,
+        scene_id: &str,
+        kind: &str,
+        name: &str,
+        tool_name: Option<String>,
+        params: serde_json::Value,
+        seed: Option<String>,
+    ) -> Result<SceneGroup, AppError> {
+        let now = Datetime::from(chrono::Utc::now());
+        let record_key = format!("{}:{}", scene_id, name);
+        let group = SceneGroup {
+            id: format!("scene_group:{record_key}"),
+            scene: format!("scene:{scene_id}"),
+            kind: kind.to_string(),
+            tool_name,
+            name: name.to_string(),
+            params,
+            seed,
+            revision: 1,
+            deleted: false,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let created: Option<SceneGroup> = self
+            .db
+            .create(("scene_group", record_key.as_str()))
+            .content(group)
+            .await
+            .map_err(|e| AppError::Database(format!("create group error: {e}")))?;
+
+        created.ok_or_else(|| AppError::Internal("failed to create group".to_string()))
+    }
+
+    pub async fn list_groups(
+        &self,
+        scene_id: &str,
+        include_deleted: bool,
+    ) -> Result<Vec<SceneGroup>, AppError> {
+        let query = if include_deleted {
+            "SELECT * FROM scene_group WHERE scene = $scene"
+        } else {
+            "SELECT * FROM scene_group WHERE scene = $scene AND deleted = false"
+        };
+
+        let groups: Vec<SceneGroup> = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")))
+            .await
+            .map_err(|e| AppError::Database(format!("list groups error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list groups parse error: {e}")))?;
+
+        Ok(groups)
+    }
+
+    pub async fn create_snapshot(
+        &self,
+        scene_id: &str,
+        name: &str,
+        description: Option<String>,
+    ) -> Result<SceneSnapshot, AppError> {
+        let now = Datetime::from(chrono::Utc::now());
+        let snapshot_key = format!("{}_{}", scene_id, chrono::Utc::now().format("%Y%m%d%H%M%S"));
+        let objects = self.list_desired_objects(scene_id, false, None, None).await?;
+        let snapshot = SceneSnapshot {
+            id: format!("scene_snapshot:{snapshot_key}"),
+            scene: format!("scene:{scene_id}"),
+            name: name.to_string(),
+            description,
+            revision: 1,
+            groups: Vec::new(),
+            objects,
+            created_at: now,
+        };
+
+        let created: Option<SceneSnapshot> = self
+            .db
+            .create(("scene_snapshot", snapshot_key.as_str()))
+            .content(snapshot.clone())
+            .await
+            .map_err(|e| AppError::Database(format!("create snapshot error: {e}")))?;
+
+        created
+            .map(|_| snapshot)
+            .ok_or_else(|| AppError::Internal("failed to create snapshot".to_string()))
+    }
+
+    pub async fn list_snapshots(
+        &self,
+        scene_id: &str,
+    ) -> Result<Vec<SceneSnapshot>, AppError> {
+        let snapshots: Vec<SceneSnapshot> = self
+            .db
+            .query("SELECT * FROM scene_snapshot WHERE scene = $scene")
+            .bind(("scene", format!("scene:{scene_id}")))
+            .await
+            .map_err(|e| AppError::Database(format!("list snapshots error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list snapshots parse error: {e}")))?;
+
+        Ok(snapshots)
+    }
+
+    pub async fn restore_snapshot(
+        &self,
+        snapshot_id: &str,
+        restore_mode: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        if restore_mode != "replace_desired" {
+            return Err(AppError::Validation(format!(
+                "unsupported restore_mode {restore_mode}; expected replace_desired"
+            )));
+        }
+
+        let snapshot_key = snapshot_id
+            .strip_prefix("scene_snapshot:")
+            .unwrap_or(snapshot_id);
+        let snapshot: Option<SceneSnapshot> = self
+            .db
+            .select(("scene_snapshot", snapshot_key))
+            .await
+            .map_err(|e| AppError::Database(format!("select snapshot error: {e}")))?;
+        let snapshot = snapshot
+            .ok_or_else(|| AppError::NotFound(format!("snapshot {snapshot_id} not found")))?;
+
+        let scene_id = snapshot
+            .scene
+            .strip_prefix("scene:")
+            .unwrap_or(&snapshot.scene);
+        let snapshot_ids: std::collections::HashSet<String> = snapshot
+            .objects
+            .iter()
+            .map(|obj| obj.mcp_id.clone())
+            .collect();
+
+        let existing = self.list_desired_objects(scene_id, false, None, None).await?;
+        let mut tombstoned = 0usize;
+        for obj in existing {
+            if !snapshot_ids.contains(&obj.mcp_id) {
+                self.mark_object_deleted(scene_id, &obj.mcp_id).await?;
+                tombstoned += 1;
+            }
+        }
+
+        let mut restored = 0usize;
+        for mut obj in snapshot.objects {
+            obj.scene = snapshot.scene.clone();
+            obj.deleted = false;
+            obj.sync_status = "pending".to_string();
+            obj.last_applied_hash = None;
+            self.upsert_object(&obj).await?;
+            restored += 1;
+        }
+
+        Ok(serde_json::json!({
+            "snapshot_id": format!("scene_snapshot:{snapshot_key}"),
+            "scene_id": scene_id,
+            "restore_mode": restore_mode,
+            "restored_objects": restored,
+            "tombstoned_objects": tombstoned,
+        }))
     }
 
     pub async fn create_sync_run(
@@ -316,9 +557,18 @@ impl SurrealSceneRepository {
         let summary_json = serde_json::to_value(summary)
             .map_err(|e| AppError::Internal(format!("serialize summary error: {e}")))?;
 
+        let status = if summary.failed > 0 {
+            "completed_with_errors"
+        } else {
+            "completed"
+        };
+
         self.db
-            .query("UPDATE type::thing($id) SET status = \"completed\", summary = $summary, ended_at = $now")
+            .query(
+                "UPDATE type::thing($id) SET status = $status, summary = $summary, ended_at = $now",
+            )
             .bind(("id", format!("sync_run:{run_id}")))
+            .bind(("status", status.to_string()))
             .bind(("summary", summary_json))
             .bind(("now", now))
             .await
@@ -334,26 +584,34 @@ impl SurrealSceneRepository {
         desired_hash: &str,
         unreal_actor_name: Option<&str>,
     ) -> Result<(), AppError> {
-        let record_key = format!("{}:{}", scene_id, mcp_id);
-        let now = Datetime::from(chrono::Utc::now());
+        let record_key = scene_object_record_key(scene_id, mcp_id);
 
-        let update_query = if unreal_actor_name.is_some() {
-            "UPDATE type::thing($id) SET sync_status = \"synced\", last_applied_hash = $hash, unreal_actor_name = $actor_name, updated_at = $now"
+        let updated: Option<SceneObject> = if let Some(name) = unreal_actor_name {
+            self.db
+                .update(("scene_object", record_key.as_str()))
+                .merge(serde_json::json!({
+                    "sync_status": "synced",
+                    "last_applied_hash": desired_hash,
+                    "unreal_actor_name": name,
+                }))
+                .await
+                .map_err(|e| AppError::Database(format!("mark synced error: {e}")))?
         } else {
-            "UPDATE type::thing($id) SET sync_status = \"synced\", last_applied_hash = $hash, updated_at = $now"
+            self.db
+                .update(("scene_object", record_key.as_str()))
+                .merge(serde_json::json!({
+                    "sync_status": "synced",
+                    "last_applied_hash": desired_hash,
+                }))
+                .await
+                .map_err(|e| AppError::Database(format!("mark synced error: {e}")))?
         };
 
-        let mut query = self.db.query(update_query)
-            .bind(("id", format!("scene_object:{record_key}")))
-            .bind(("hash", desired_hash.to_string()))
-            .bind(("now", now));
-
-        if let Some(name) = unreal_actor_name {
-            query = query.bind(("actor_name", name.to_string()));
+        if updated.is_none() {
+            return Err(AppError::NotFound(format!(
+                "object {mcp_id} not found in scene {scene_id}"
+            )));
         }
-
-        query.await
-            .map_err(|e| AppError::Database(format!("mark synced error: {e}")))?;
 
         Ok(())
     }
@@ -363,15 +621,22 @@ impl SurrealSceneRepository {
         scene_id: &str,
         mcp_id: &str,
     ) -> Result<(), AppError> {
-        let record_key = format!("{}:{}", scene_id, mcp_id);
-        let now = Datetime::from(chrono::Utc::now());
+        let record_key = scene_object_record_key(scene_id, mcp_id);
 
-        self.db
-            .query("UPDATE type::thing($id) SET sync_status = \"synced\", updated_at = $now")
-            .bind(("id", format!("scene_object:{record_key}")))
-            .bind(("now", now))
+        let updated: Option<SceneObject> = self
+            .db
+            .update(("scene_object", record_key.as_str()))
+            .merge(serde_json::json!({
+                "sync_status": "synced",
+            }))
             .await
             .map_err(|e| AppError::Database(format!("mark deleted applied error: {e}")))?;
+
+        if updated.is_none() {
+            return Err(AppError::NotFound(format!(
+                "object {mcp_id} not found in scene {scene_id}"
+            )));
+        }
 
         Ok(())
     }
@@ -399,5 +664,42 @@ impl SurrealSceneRepository {
             .map_err(|e| AppError::Database(format!("record operation error: {e}")))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_key_strips_scene_prefix() {
+        assert_eq!(
+            scene_object_record_key("scene:main", "obj_1"),
+            "main:obj_1"
+        );
+    }
+
+    #[test]
+    fn record_key_bare_scene_id_unchanged() {
+        assert_eq!(
+            scene_object_record_key("main", "obj_1"),
+            "main:obj_1"
+        );
+    }
+
+    #[test]
+    fn record_key_consistent_across_prefix_variants() {
+        let with_prefix = scene_object_record_key("scene:my_scene", "actor_42");
+        let without_prefix = scene_object_record_key("my_scene", "actor_42");
+        assert_eq!(with_prefix, without_prefix);
+    }
+
+    #[test]
+    fn record_key_double_prefix_stripped() {
+        // .replace replaces all occurrences
+        assert_eq!(
+            scene_object_record_key("scene:scene:x", "obj"),
+            "x:obj"
+        );
     }
 }
