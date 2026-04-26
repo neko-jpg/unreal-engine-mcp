@@ -279,7 +279,7 @@ impl SurrealSceneRepository {
                     created_at: time::now(), \
                     updated_at: time::now() \
                  } \
-                 END"
+                 END",
             )
             .bind(("table", "scene_object"))
             .bind(("key", key_owned))
@@ -324,7 +324,10 @@ impl SurrealSceneRepository {
             query.push_str(&format!(" LIMIT {n}"));
         }
 
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene}")));
         if let Some(gid) = group_id {
             q = q.bind(("group", format!("scene_group:{gid}")));
         }
@@ -426,7 +429,9 @@ impl SurrealSceneRepository {
     ) -> Result<SceneSnapshot, AppError> {
         let now = Datetime::from(chrono::Utc::now());
         let snapshot_key = format!("{}_{}", scene_id, chrono::Utc::now().format("%Y%m%d%H%M%S"));
-        let objects = self.list_desired_objects(scene_id, false, None, None).await?;
+        let objects = self
+            .list_desired_objects(scene_id, false, None, None)
+            .await?;
         let snapshot = SceneSnapshot {
             id: format!("scene_snapshot:{snapshot_key}"),
             scene: format!("scene:{scene_id}"),
@@ -450,10 +455,7 @@ impl SurrealSceneRepository {
             .ok_or_else(|| AppError::Internal("failed to create snapshot".to_string()))
     }
 
-    pub async fn list_snapshots(
-        &self,
-        scene_id: &str,
-    ) -> Result<Vec<SceneSnapshot>, AppError> {
+    pub async fn list_snapshots(&self, scene_id: &str) -> Result<Vec<SceneSnapshot>, AppError> {
         let snapshots: Vec<SceneSnapshot> = self
             .db
             .query("SELECT * FROM scene_snapshot WHERE scene = $scene")
@@ -498,7 +500,9 @@ impl SurrealSceneRepository {
             .map(|obj| obj.mcp_id.clone())
             .collect();
 
-        let existing = self.list_desired_objects(scene_id, false, None, None).await?;
+        let existing = self
+            .list_desired_objects(scene_id, false, None, None)
+            .await?;
         let mut tombstoned = 0usize;
         for obj in existing {
             if !snapshot_ids.contains(&obj.mcp_id) {
@@ -673,18 +677,12 @@ mod tests {
 
     #[test]
     fn record_key_strips_scene_prefix() {
-        assert_eq!(
-            scene_object_record_key("scene:main", "obj_1"),
-            "main:obj_1"
-        );
+        assert_eq!(scene_object_record_key("scene:main", "obj_1"), "main:obj_1");
     }
 
     #[test]
     fn record_key_bare_scene_id_unchanged() {
-        assert_eq!(
-            scene_object_record_key("main", "obj_1"),
-            "main:obj_1"
-        );
+        assert_eq!(scene_object_record_key("main", "obj_1"), "main:obj_1");
     }
 
     #[test]
@@ -697,9 +695,6 @@ mod tests {
     #[test]
     fn record_key_double_prefix_stripped() {
         // .replace replaces all occurrences
-        assert_eq!(
-            scene_object_record_key("scene:scene:x", "obj"),
-            "x:obj"
-        );
+        assert_eq!(scene_object_record_key("scene:scene:x", "obj"), "x:obj");
     }
 }

@@ -55,7 +55,7 @@ pub fn compute_desired_hash(obj: &SceneObject) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{SceneObject, Transform, Vec3, Rotator};
+    use crate::domain::{Rotator, SceneObject, Transform, Vec3};
     use surrealdb::sql::Datetime;
 
     fn make_obj() -> SceneObject {
@@ -69,9 +69,21 @@ mod tests {
             actor_type: "StaticMeshActor".to_string(),
             asset_ref: serde_json::json!({"path": "/Engine/BasicShapes/Cube.Cube"}),
             transform: Transform {
-                location: Vec3 { x: 100.0, y: 200.0, z: 300.0 },
-                rotation: Rotator { pitch: 0.0, yaw: 90.0, roll: 0.0 },
-                scale: Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+                location: Vec3 {
+                    x: 100.0,
+                    y: 200.0,
+                    z: 300.0,
+                },
+                rotation: Rotator {
+                    pitch: 0.0,
+                    yaw: 90.0,
+                    roll: 0.0,
+                },
+                scale: Vec3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
             },
             visual: serde_json::json!({}),
             physics: serde_json::json!({}),

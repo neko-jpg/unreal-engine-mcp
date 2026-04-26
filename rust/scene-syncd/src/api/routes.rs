@@ -197,7 +197,7 @@ pub async fn upsert_object(
         updated_at: Datetime::from(chrono::Utc::now()),
     };
 
-    obj.desired_hash = compute_desired_hash(&obj).map_err(|e| AppError::Internal(e))?;
+    obj.desired_hash = compute_desired_hash(&obj).map_err(AppError::Internal)?;
 
     let repo = SurrealSceneRepository::new(state.db.clone());
     let saved = repo.upsert_object(&obj).await?;
@@ -270,7 +270,14 @@ pub async fn create_group(
 ) -> Result<Json<Value>, AppError> {
     let repo = SurrealSceneRepository::new(state.db.clone());
     let group = repo
-        .create_group(&req.scene_id, &req.kind, &req.name, req.tool_name, req.params, req.seed)
+        .create_group(
+            &req.scene_id,
+            &req.kind,
+            &req.name,
+            req.tool_name,
+            req.params,
+            req.seed,
+        )
         .await?;
     Ok(Json(success_response(json!({ "group": group }))))
 }
@@ -468,7 +475,9 @@ pub async fn plan_sync_route(
 ) -> Result<Json<Value>, AppError> {
     let repo = SurrealSceneRepository::new(state.db.clone());
 
-    let desired_objects = repo.list_desired_objects(&req.scene_id, true, None, None).await?;
+    let desired_objects = repo
+        .list_desired_objects(&req.scene_id, true, None, None)
+        .await?;
 
     let unreal_client = UnrealClient::new(&state.config);
     let (actual_actors, plan_unreal_warning) = match unreal_client.get_actors_in_level().await {
@@ -530,7 +539,9 @@ pub async fn apply_sync_route(
 ) -> Result<Json<Value>, AppError> {
     let repo = SurrealSceneRepository::new(state.db.clone());
 
-    let desired_objects = repo.list_desired_objects(&req.scene_id, true, None, None).await?;
+    let desired_objects = repo
+        .list_desired_objects(&req.scene_id, true, None, None)
+        .await?;
 
     let unreal_client = UnrealClient::new(&state.config);
     let actual_actors = match unreal_client.get_actors_in_level().await {

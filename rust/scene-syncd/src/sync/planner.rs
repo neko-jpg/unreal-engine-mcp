@@ -19,6 +19,7 @@ pub fn plan_sync(
     for obj in desired_objects {
         if desired_index.contains_key(obj.mcp_id.as_str()) {
             warnings.push(format!("duplicate desired mcp_id: {}", obj.mcp_id));
+            continue;
         }
         desired_index.insert(&obj.mcp_id, obj);
     }
@@ -171,8 +172,8 @@ fn transform_differs(desired: &SceneObject, actual: &UnrealActorObservation) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Transform, Vec3, Rotator};
     use crate::domain::transform::compute_desired_hash;
+    use crate::domain::{Rotator, Transform, Vec3};
     use surrealdb::sql::Datetime;
 
     fn make_object(mcp_id: &str, x: f64, y: f64, z: f64) -> SceneObject {
@@ -187,8 +188,16 @@ mod tests {
             asset_ref: serde_json::json!({"path": "/Engine/BasicShapes/Cube.Cube"}),
             transform: Transform {
                 location: Vec3 { x, y, z },
-                rotation: Rotator { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-                scale: Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+                rotation: Rotator {
+                    pitch: 0.0,
+                    yaw: 0.0,
+                    roll: 0.0,
+                },
+                scale: Vec3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
             },
             visual: serde_json::json!({}),
             physics: serde_json::json!({}),
@@ -277,10 +286,16 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_desired_mcp_id_produces_warning() {
+    fn duplicate_desired_mcp_id_produces_warning_and_skips() {
         let obj1 = make_object("dup_1", 0.0, 0.0, 0.0);
         let obj2 = make_object("dup_1", 10.0, 0.0, 0.0);
         let plan = plan_sync("main", &[obj1, obj2], &[]);
-        assert!(plan.warnings.iter().any(|w| w.contains("duplicate desired mcp_id")));
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|w| w.contains("duplicate desired mcp_id")));
+        // Only 1 operation should be generated (not 2)
+        assert_eq!(plan.operations.len(), 1);
+        assert_eq!(plan.summary.create, 1);
     }
 }

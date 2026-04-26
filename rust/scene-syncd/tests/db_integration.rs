@@ -58,7 +58,10 @@ async fn upsert_and_list_objects() {
     let obj = make_object("main", "cube_01");
     repo.upsert_object(&obj).await.unwrap();
 
-    let objects = repo.list_desired_objects("main", false, None, None).await.unwrap();
+    let objects = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0].mcp_id, "cube_01");
 }
@@ -80,7 +83,10 @@ async fn upsert_updates_existing_object() {
     updated.desired_hash = "hash_v2".to_string();
     repo.upsert_object(&updated).await.unwrap();
 
-    let objects = repo.list_desired_objects("main", false, None, None).await.unwrap();
+    let objects = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0].transform.location.x, 200.0);
     assert_eq!(objects[0].desired_hash, "hash_v2");
@@ -93,16 +99,26 @@ async fn list_objects_excludes_deleted() {
     repo.ensure_schema().await.unwrap();
     repo.ensure_default_scene().await.unwrap();
 
-    repo.upsert_object(&make_object("main", "cube_01")).await.unwrap();
-    repo.upsert_object(&make_object("main", "cube_02")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_01"))
+        .await
+        .unwrap();
+    repo.upsert_object(&make_object("main", "cube_02"))
+        .await
+        .unwrap();
 
     repo.mark_object_deleted("main", "cube_01").await.unwrap();
 
-    let active = repo.list_desired_objects("main", false, None, None).await.unwrap();
+    let active = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].mcp_id, "cube_02");
 
-    let all = repo.list_desired_objects("main", true, None, None).await.unwrap();
+    let all = repo
+        .list_desired_objects("main", true, None, None)
+        .await
+        .unwrap();
     assert_eq!(all.len(), 2);
 }
 
@@ -121,7 +137,9 @@ async fn list_objects_group_id_filter() {
     obj_b.group = Some("scene_group:pyramid_01".to_string());
     repo.upsert_object(&obj_b).await.unwrap();
 
-    repo.upsert_object(&make_object("main", "cube_c")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_c"))
+        .await
+        .unwrap();
 
     let wall_objs = repo
         .list_desired_objects("main", false, Some("wall_01"), None)
@@ -158,13 +176,18 @@ async fn mark_object_synced() {
     repo.ensure_schema().await.unwrap();
     repo.ensure_default_scene().await.unwrap();
 
-    repo.upsert_object(&make_object("main", "cube_01")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_01"))
+        .await
+        .unwrap();
 
     repo.mark_object_synced("main", "cube_01", "hash_v1", Some("SM_Cube_01"))
         .await
         .unwrap();
 
-    let objects = repo.list_desired_objects("main", false, None, None).await.unwrap();
+    let objects = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
     assert_eq!(objects[0].sync_status, "synced");
     assert_eq!(objects[0].last_applied_hash.as_deref(), Some("hash_v1"));
     assert_eq!(objects[0].unreal_actor_name.as_deref(), Some("SM_Cube_01"));
@@ -177,9 +200,16 @@ async fn create_and_list_groups() {
     repo.ensure_schema().await.unwrap();
     repo.ensure_default_scene().await.unwrap();
 
-    repo.create_group("main", "wall", "my_wall", Some("create_wall".to_string()), serde_json::json!({"length": 5}), None)
-        .await
-        .unwrap();
+    repo.create_group(
+        "main",
+        "wall",
+        "my_wall",
+        Some("create_wall".to_string()),
+        serde_json::json!({"length": 5}),
+        None,
+    )
+    .await
+    .unwrap();
 
     let groups = repo.list_groups("main", false).await.unwrap();
     assert_eq!(groups.len(), 1);
@@ -194,8 +224,12 @@ async fn create_and_list_snapshots() {
     repo.ensure_schema().await.unwrap();
     repo.ensure_default_scene().await.unwrap();
 
-    repo.upsert_object(&make_object("main", "cube_01")).await.unwrap();
-    repo.upsert_object(&make_object("main", "cube_02")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_01"))
+        .await
+        .unwrap();
+    repo.upsert_object(&make_object("main", "cube_02"))
+        .await
+        .unwrap();
 
     let snap = repo
         .create_snapshot("main", "initial", Some("first snapshot".to_string()))
@@ -214,8 +248,12 @@ async fn restore_snapshot() {
     repo.ensure_schema().await.unwrap();
     repo.ensure_default_scene().await.unwrap();
 
-    repo.upsert_object(&make_object("main", "cube_01")).await.unwrap();
-    repo.upsert_object(&make_object("main", "cube_02")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_01"))
+        .await
+        .unwrap();
+    repo.upsert_object(&make_object("main", "cube_02"))
+        .await
+        .unwrap();
 
     let snap = repo
         .create_snapshot("main", "pre_change", None)
@@ -223,7 +261,9 @@ async fn restore_snapshot() {
         .unwrap();
 
     // Add a third object after snapshot
-    repo.upsert_object(&make_object("main", "cube_03")).await.unwrap();
+    repo.upsert_object(&make_object("main", "cube_03"))
+        .await
+        .unwrap();
 
     let summary = repo
         .restore_snapshot(&snap.id, "replace_desired")
@@ -234,7 +274,10 @@ async fn restore_snapshot() {
     assert_eq!(summary["tombstoned_objects"], 1);
 
     // cube_03 should be deleted, cube_01 and cube_02 restored
-    let active = repo.list_desired_objects("main", false, None, None).await.unwrap();
+    let active = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
     let active_ids: Vec<&str> = active.iter().map(|o| o.mcp_id.as_str()).collect();
     assert!(active_ids.contains(&"cube_01"));
     assert!(active_ids.contains(&"cube_02"));
@@ -268,4 +311,19 @@ async fn record_operation_and_sync_run() {
         noops: 0,
     };
     repo.finish_sync_run("run_001", &summary).await.unwrap();
+}
+
+#[tokio::test]
+async fn ensure_schema_is_idempotent() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    let objects = repo
+        .list_desired_objects("main", false, None, None)
+        .await
+        .unwrap();
+    assert_eq!(objects.len(), 0);
 }

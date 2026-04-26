@@ -170,3 +170,15 @@ def safe_delete_actor(unreal_connection, actor_name: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error in safe_delete_actor: {e}")
         return make_error_response(str(e))
+
+
+def safe_delete_actor_by_mcp_id(unreal_connection, mcp_id: str) -> Dict[str, Any]:
+    if not unreal_connection:
+        return make_error_response("No Unreal connection available")
+
+    try:
+        response = unreal_connection.send_command("delete_actor_by_mcp_id", {"mcp_id": mcp_id})
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"Error in safe_delete_actor_by_mcp_id: {e}")
+        return make_error_response(str(e))

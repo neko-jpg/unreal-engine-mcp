@@ -65,6 +65,7 @@ class ActorSpec:
         scl = self.transform.get("scale", {})
         return {
             "name": self.desired_name,
+            "mcp_id": self.mcp_id,
             "type": self.actor_type,
             "location": [loc.get("x", 0.0), loc.get("y", 0.0), loc.get("z", 0.0)],
             "rotation": [rot.get("pitch", 0.0), rot.get("yaw", 0.0), rot.get("roll", 0.0)],
@@ -154,11 +155,11 @@ class UnrealActorSink(ActorSink):
         return {"success": True, "count": count, "message": f"UnrealActorSink: {count} actors spawned"}
 
     def delete(self, mcp_id: str) -> Dict[str, Any]:
-        from helpers.actor_name_manager import safe_delete_actor
+        from helpers.actor_name_manager import safe_delete_actor_by_mcp_id
         from server.core import get_unreal_connection
 
         unreal = get_unreal_connection()
-        return safe_delete_actor(unreal, mcp_id)
+        return safe_delete_actor_by_mcp_id(unreal, mcp_id)
 
 
 class DryRunActorSink(ActorSink):
@@ -232,8 +233,9 @@ def params_to_spec(
     loc = _coerce_vec3(params.get("location"), [0.0, 0.0, 0.0])
     rot = _coerce_vec3(params.get("rotation"), [0.0, 0.0, 0.0])
     scl = _coerce_vec3(params.get("scale"), [1.0, 1.0, 1.0])
+    mcp_id = params.get("mcp_id") or params.get("name", "")
     return ActorSpec(
-        mcp_id=params.get("name", ""),
+        mcp_id=mcp_id,
         desired_name=params.get("name", ""),
         actor_type=params.get("type", "StaticMeshActor"),
         asset_ref={"path": params.get("static_mesh", "/Engine/BasicShapes/Cube.Cube")},

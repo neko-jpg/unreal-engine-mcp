@@ -47,6 +47,12 @@ pub async fn apply_sync(
     mode: &str,
     allow_delete: bool,
 ) -> Result<SyncApplyResult, AppError> {
+    if mode == "plan_only" {
+        return Err(AppError::Validation(
+            "plan_only is not valid for /sync/apply. Use /sync/plan instead.".to_string(),
+        ));
+    }
+
     let run_id = format!(
         "{}_{:04}",
         plan.scene_id,
@@ -700,7 +706,13 @@ async fn apply_visual_update(
     }
 
     // Asset/mesh changes require delete+create (bridge limitation)
-    if desired.get("asset_ref").is_some() && op.actual.as_ref().and_then(|a| a.get("static_mesh")).is_some() {
+    if desired.get("asset_ref").is_some()
+        && op
+            .actual
+            .as_ref()
+            .and_then(|a| a.get("static_mesh"))
+            .is_some()
+    {
         let desired_path = desired
             .get("asset_ref")
             .and_then(|v| v.get("path"))

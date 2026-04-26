@@ -1,0 +1,19 @@
+name: Rust checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
