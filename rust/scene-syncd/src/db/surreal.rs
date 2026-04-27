@@ -180,6 +180,7 @@ impl SurrealSceneRepository {
             "DEFINE FIELD metadata ON TABLE scene_component TYPE object DEFAULT {};",
             "DEFINE FIELD created_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
+            "DEFINE INDEX scene_component_entity ON TABLE scene_component COLUMNS scene, entity_id, component_type, name UNIQUE;",
 
             "DEFINE TABLE scene_asset SCHEMAFULL;",
             "DEFINE FIELD OVERWRITE scene ON TABLE scene_asset TYPE string;",
@@ -219,6 +220,7 @@ impl SurrealSceneRepository {
             "DEFINE FIELD status ON TABLE scene_realization TYPE string DEFAULT 'pending';",
             "DEFINE FIELD unreal_actor_name ON TABLE scene_realization TYPE option<string>;",
             "DEFINE FIELD metadata ON TABLE scene_realization TYPE object DEFAULT {};",
+            "DEFINE INDEX scene_realization_entity_policy ON TABLE scene_realization COLUMNS scene, entity_id, policy UNIQUE;",
             "DEFINE FIELD created_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
         ];
@@ -1001,6 +1003,265 @@ impl SurrealSceneRepository {
             .take(0)
             .map_err(|e| AppError::Database(format!("list assets parse error: {e}")))?;
         Ok(assets)
+    }
+
+    // ------------------------------------------------------------------
+    // P6: Component, Blueprint, Realization CRUD
+    // ------------------------------------------------------------------
+
+    pub async fn upsert_component(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        component_type: &str,
+        name: &str,
+        properties: serde_json::Value,
+        metadata: serde_json::Value,
+    ) -> Result<SceneComponent, AppError> {
+        let record_key = format!("{scene_id}:{entity_id}:{component_type}:{name}");
+        let updated: Option<SceneComponent> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    entity_id: $entity_id, \
+                    component_type: $component_type, \
+                    name: $name, \
+                    properties: $properties, \
+                    metadata: $metadata, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_component"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("entity_id", entity_id.to_string()))
+            .bind(("component_type", component_type.to_string()))
+            .bind(("name", name.to_string()))
+            .bind(("properties", properties))
+            .bind(("metadata", metadata))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert component error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert component parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert component".to_string()))
+    }
+
+    pub async fn list_components(
+        &self,
+        scene_id: &str,
+        entity_id: Option<&str>,
+        component_type: Option<&str>,
+    ) -> Result<Vec<SceneComponent>, AppError> {
+        let mut query = "SELECT * FROM scene_component WHERE scene = $scene".to_string();
+        if entity_id.is_some() {
+            query.push_str(" AND entity_id = $entity_id");
+        }
+        if component_type.is_some() {
+            query.push_str(" AND component_type = $component_type");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(eid) = entity_id {
+            q = q.bind(("entity_id", eid.to_string()));
+        }
+        if let Some(ct) = component_type {
+            q = q.bind(("component_type", ct.to_string()));
+        }
+        let components: Vec<SceneComponent> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list components error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list components parse error: {e}")))?;
+        Ok(components)
+    }
+
+    pub async fn delete_component(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        component_type: &str,
+        name: &str,
+    ) -> Result<(), AppError> {
+        let record_key = format!("{scene_id}:{entity_id}:{component_type}:{name}");
+        self.db
+            .query("DELETE type::thing($table, $key) WHERE scene = $scene")
+            .bind(("table", "scene_component"))
+            .bind(("key", record_key))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .await
+            .map_err(|e| AppError::Database(format!("delete component error: {e}")))?;
+        Ok(())
+    }
+
+    pub async fn upsert_blueprint(
+        &self,
+        scene_id: &str,
+        blueprint_id: &str,
+        class_name: &str,
+        parent_class: &str,
+        components: Vec<serde_json::Value>,
+        variables: Vec<serde_json::Value>,
+        metadata: serde_json::Value,
+    ) -> Result<SceneBlueprint, AppError> {
+        let record_key = format!("{scene_id}:{blueprint_id}");
+        let updated: Option<SceneBlueprint> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    blueprint_id: $blueprint_id, \
+                    class_name: $class_name, \
+                    parent_class: $parent_class, \
+                    components: $components, \
+                    variables: $variables, \
+                    metadata: $metadata, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_blueprint"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("blueprint_id", blueprint_id.to_string()))
+            .bind(("class_name", class_name.to_string()))
+            .bind(("parent_class", parent_class.to_string()))
+            .bind(("components", components))
+            .bind(("variables", variables))
+            .bind(("metadata", metadata))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert blueprint error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert blueprint parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert blueprint".to_string()))
+    }
+
+    pub async fn list_blueprints(
+        &self,
+        scene_id: &str,
+        class_name: Option<&str>,
+    ) -> Result<Vec<SceneBlueprint>, AppError> {
+        let mut query = "SELECT * FROM scene_blueprint WHERE scene = $scene".to_string();
+        if class_name.is_some() {
+            query.push_str(" AND class_name = $class_name");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(cn) = class_name {
+            q = q.bind(("class_name", cn.to_string()));
+        }
+        let blueprints: Vec<SceneBlueprint> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list blueprints error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list blueprints parse error: {e}")))?;
+        Ok(blueprints)
+    }
+
+    pub async fn delete_blueprint(
+        &self,
+        scene_id: &str,
+        blueprint_id: &str,
+    ) -> Result<(), AppError> {
+        let record_key = format!("{scene_id}:{blueprint_id}");
+        self.db
+            .query("DELETE type::thing($table, $key) WHERE scene = $scene")
+            .bind(("table", "scene_blueprint"))
+            .bind(("key", record_key))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .await
+            .map_err(|e| AppError::Database(format!("delete blueprint error: {e}")))?;
+        Ok(())
+    }
+
+    pub async fn upsert_realization(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        policy: &str,
+        status: &str,
+        unreal_actor_name: Option<String>,
+        metadata: serde_json::Value,
+    ) -> Result<SceneRealization, AppError> {
+        let record_key = format!("{scene_id}:{entity_id}:{policy}");
+        let updated: Option<SceneRealization> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    entity_id: $entity_id, \
+                    policy: $policy, \
+                    status: $status, \
+                    unreal_actor_name: $unreal_actor_name, \
+                    metadata: $metadata, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_realization"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("entity_id", entity_id.to_string()))
+            .bind(("policy", policy.to_string()))
+            .bind(("status", status.to_string()))
+            .bind(("unreal_actor_name", unreal_actor_name))
+            .bind(("metadata", metadata))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert realization error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert realization parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert realization".to_string()))
+    }
+
+    pub async fn list_realizations(
+        &self,
+        scene_id: &str,
+        entity_id: Option<&str>,
+        policy: Option<&str>,
+    ) -> Result<Vec<SceneRealization>, AppError> {
+        let mut query = "SELECT * FROM scene_realization WHERE scene = $scene".to_string();
+        if entity_id.is_some() {
+            query.push_str(" AND entity_id = $entity_id");
+        }
+        if policy.is_some() {
+            query.push_str(" AND policy = $policy");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(eid) = entity_id {
+            q = q.bind(("entity_id", eid.to_string()));
+        }
+        if let Some(p) = policy {
+            q = q.bind(("policy", p.to_string()));
+        }
+        let realizations: Vec<SceneRealization> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list realizations error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list realizations parse error: {e}")))?;
+        Ok(realizations)
+    }
+
+    pub async fn update_realization_status(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        policy: &str,
+        status: &str,
+    ) -> Result<SceneRealization, AppError> {
+        let record_key = format!("{scene_id}:{entity_id}:{policy}");
+        let updated: Option<SceneRealization> = self
+            .db
+            .query(
+                "UPDATE type::thing($table, $key) MERGE { status: $status, updated_at: time::now() }",
+            )
+            .bind(("table", "scene_realization"))
+            .bind(("key", record_key))
+            .bind(("status", status.to_string()))
+            .await
+            .map_err(|e| AppError::Database(format!("update realization status error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("update realization status parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to update realization status".to_string()))
     }
 }
 

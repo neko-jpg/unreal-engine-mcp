@@ -910,6 +910,226 @@ pub async fn list_assets(
     Ok(Json(success_response(json!({ "assets": assets }))))
 }
 
+// ------------------------------------------------------------------
+// P6: Component, Blueprint, Realization routes
+// ------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertComponentRequest {
+    pub scene_id: String,
+    pub entity_id: String,
+    pub component_type: String,
+    pub name: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+pub async fn upsert_component(
+    State(state): State<AppState>,
+    Json(req): Json<UpsertComponentRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let component = repo
+        .upsert_component(
+            &scene_id,
+            &req.entity_id,
+            &req.component_type,
+            &req.name,
+            req.properties,
+            req.metadata,
+        )
+        .await?;
+    Ok(Json(success_response(json!({ "component": component }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListComponentsRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub entity_id: Option<String>,
+    #[serde(default)]
+    pub component_type: Option<String>,
+}
+
+pub async fn list_components(
+    State(state): State<AppState>,
+    Json(req): Json<ListComponentsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let components = repo
+        .list_components(&scene_id, req.entity_id.as_deref(), req.component_type.as_deref())
+        .await?;
+    Ok(Json(success_response(json!({ "components": components }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteComponentRequest {
+    pub scene_id: String,
+    pub entity_id: String,
+    pub component_type: String,
+    pub name: String,
+}
+
+pub async fn delete_component(
+    State(state): State<AppState>,
+    Json(req): Json<DeleteComponentRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    repo.delete_component(&scene_id, &req.entity_id, &req.component_type, &req.name)
+        .await?;
+    Ok(Json(success_response(json!({ "deleted": true }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertBlueprintRequest {
+    pub scene_id: String,
+    pub blueprint_id: String,
+    pub class_name: String,
+    #[serde(default)]
+    pub parent_class: String,
+    #[serde(default)]
+    pub components: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub variables: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+pub async fn upsert_blueprint(
+    State(state): State<AppState>,
+    Json(req): Json<UpsertBlueprintRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let blueprint = repo
+        .upsert_blueprint(
+            &scene_id,
+            &req.blueprint_id,
+            &req.class_name,
+            &req.parent_class,
+            req.components,
+            req.variables,
+            req.metadata,
+        )
+        .await?;
+    Ok(Json(success_response(json!({ "blueprint": blueprint }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListBlueprintsRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub class_name: Option<String>,
+}
+
+pub async fn list_blueprints(
+    State(state): State<AppState>,
+    Json(req): Json<ListBlueprintsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let blueprints = repo.list_blueprints(&scene_id, req.class_name.as_deref()).await?;
+    Ok(Json(success_response(json!({ "blueprints": blueprints }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteBlueprintRequest {
+    pub scene_id: String,
+    pub blueprint_id: String,
+}
+
+pub async fn delete_blueprint(
+    State(state): State<AppState>,
+    Json(req): Json<DeleteBlueprintRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    repo.delete_blueprint(&scene_id, &req.blueprint_id).await?;
+    Ok(Json(success_response(json!({ "deleted": true }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertRealizationRequest {
+    pub scene_id: String,
+    pub entity_id: String,
+    pub policy: String,
+    #[serde(default = "default_realization_status")]
+    pub status: String,
+    #[serde(default)]
+    pub unreal_actor_name: Option<String>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+fn default_realization_status() -> String {
+    "pending".to_string()
+}
+
+pub async fn upsert_realization(
+    State(state): State<AppState>,
+    Json(req): Json<UpsertRealizationRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let realization = repo
+        .upsert_realization(
+            &scene_id,
+            &req.entity_id,
+            &req.policy,
+            &req.status,
+            req.unreal_actor_name,
+            req.metadata,
+        )
+        .await?;
+    Ok(Json(success_response(json!({ "realization": realization }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListRealizationsRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub entity_id: Option<String>,
+    #[serde(default)]
+    pub policy: Option<String>,
+}
+
+pub async fn list_realizations(
+    State(state): State<AppState>,
+    Json(req): Json<ListRealizationsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let realizations = repo
+        .list_realizations(&scene_id, req.entity_id.as_deref(), req.policy.as_deref())
+        .await?;
+    Ok(Json(success_response(json!({ "realizations": realizations }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateRealizationStatusRequest {
+    pub scene_id: String,
+    pub entity_id: String,
+    pub policy: String,
+    pub status: String,
+}
+
+pub async fn update_realization_status(
+    State(state): State<AppState>,
+    Json(req): Json<UpdateRealizationStatusRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let realization = repo
+        .update_realization_status(&scene_id, &req.entity_id, &req.policy, &req.status)
+        .await?;
+    Ok(Json(success_response(json!({ "realization": realization }))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::object_or_empty;

@@ -125,6 +125,43 @@ async fn main() -> anyhow::Result<()> {
             "/assets/list",
             post(scene_syncd::api::routes::list_assets),
         )
+        // P6: Component, Blueprint, Realization routes
+        .route(
+            "/components/upsert",
+            post(scene_syncd::api::routes::upsert_component),
+        )
+        .route(
+            "/components/list",
+            post(scene_syncd::api::routes::list_components),
+        )
+        .route(
+            "/components/delete",
+            post(scene_syncd::api::routes::delete_component),
+        )
+        .route(
+            "/blueprints/upsert",
+            post(scene_syncd::api::routes::upsert_blueprint),
+        )
+        .route(
+            "/blueprints/list",
+            post(scene_syncd::api::routes::list_blueprints),
+        )
+        .route(
+            "/blueprints/delete",
+            post(scene_syncd::api::routes::delete_blueprint),
+        )
+        .route(
+            "/realizations/upsert",
+            post(scene_syncd::api::routes::upsert_realization),
+        )
+        .route(
+            "/realizations/list",
+            post(scene_syncd::api::routes::list_realizations),
+        )
+        .route(
+            "/realizations/update-status",
+            post(scene_syncd::api::routes::update_realization_status),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(
             CorsLayer::new()

@@ -87,9 +87,27 @@ class TestCastleFortressGenerator:
         actors = graph.realize(policy=RealizationPolicy.GAME_READY)
         for actor in actors:
             if actor.actor_type == "StaticMeshActor":
-                assert actor.visual.get("collision_profile") == "BlockAllDynamic"
+                assert actor.visual.get("collision_profile") is not None
                 assert actor.visual.get("hism_candidate") is True
-                assert actor.visual.get("navmesh_behavior") == "walkable"
+                assert actor.visual.get("navmesh_behavior") is not None
+
+    def test_realize_game_ready_entity_components_override(self):
+        """Entity components should override default collision/navmesh values."""
+        from server.specs.component_spec import CollisionSpec, NavSpec
+
+        gen = CastleFortressGenerator(
+            castle_size="small",
+            name_prefix="CompTest",
+        )
+        graph = gen.generate()
+        actors = graph.realize(policy=RealizationPolicy.GAME_READY)
+        # Gate entity has NavSpec(behavior="blocked")
+        gate_entity = [e for e in graph.entities if e.kind == "gate"][0]
+        gate_actor_ids = set(gate_entity.mcp_ids)
+        gate_actors = [a for a in actors if a.mcp_id in gate_actor_ids]
+        for actor in gate_actors:
+            if actor.actor_type == "StaticMeshActor":
+                assert actor.visual.get("navmesh_behavior") == "blocked"
 
     def test_realize_cinematic_replaces_meshes(self):
         gen = CastleFortressGenerator(

@@ -161,16 +161,38 @@ class SpecGraph:
                     )
         return actors + light_actors
 
+    def _find_entity_for_actor(self, actor: ActorSpec) -> Optional[EntitySpec]:
+        """Find the entity whose mcp_ids include this actor's mcp_id."""
+        for entity in self.entities:
+            if actor.mcp_id in entity.mcp_ids:
+                return entity
+        return None
+
     def _realize_game_ready(
         self, scene_id: str = "main", group_id: Optional[str] = None
     ) -> List[ActorSpec]:
-        """Game-ready: prototype + collision proxies and HISM tags."""
+        """Game-ready: prototype + collision proxies and HISM tags.
+
+        If entities have CollisionSpec or NavSpec components, those take
+        precedence over the defaults.
+        """
+        from server.specs.component_spec import CollisionSpec, NavSpec
+
         actors = self._realize_prototype(scene_id, group_id, quality="game_ready")
         for actor in actors:
             if actor.actor_type == "StaticMeshActor":
                 actor.visual["collision_profile"] = "BlockAllDynamic"
                 actor.visual["hism_candidate"] = True
                 actor.visual["navmesh_behavior"] = "walkable"
+                # Override from entity components if available
+                entity = self._find_entity_for_actor(actor)
+                if entity is not None:
+                    for comp in entity.components:
+                        if isinstance(comp, CollisionSpec):
+                            actor.visual["collision_profile"] = comp.profile
+                            actor.visual["collision_shape"] = comp.shape
+                        elif isinstance(comp, NavSpec):
+                            actor.visual["navmesh_behavior"] = comp.behavior
         return actors
 
     def _realize_cinematic(
