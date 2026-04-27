@@ -94,8 +94,10 @@ class UnrealConnection:
         return sock
 
     def connect(self) -> bool:
-        for attempt in range(self.MAX_RETRIES + 1):
-            with self._lock:
+        with self._lock:
+            if self.connected and self.socket is not None:
+                return True
+            for attempt in range(self.MAX_RETRIES + 1):
                 self._close_socket_unsafe()
                 try:
                     logger.info(f"Connecting to Unreal at {UNREAL_HOST}:{UNREAL_PORT} (attempt {attempt + 1}/{self.MAX_RETRIES + 1})...")
@@ -119,12 +121,12 @@ class UnrealConnection:
                     logger.error(f"Unexpected connection error: {e} (attempt {attempt + 1})")
                 self._close_socket_unsafe()
                 self.connected = False
-            if attempt < self.MAX_RETRIES:
-                delay = min(self.BASE_RETRY_DELAY * (2 ** attempt), self.MAX_RETRY_DELAY)
-                logger.info(f"Retrying connection in {delay:.1f}s...")
-                time.sleep(delay)
-        logger.error(f"Failed to connect after {self.MAX_RETRIES + 1} attempts. Last error: {self._last_error}")
-        return False
+                if attempt < self.MAX_RETRIES:
+                    delay = min(self.BASE_RETRY_DELAY * (2 ** attempt), self.MAX_RETRY_DELAY)
+                    logger.info(f"Retrying connection in {delay:.1f}s...")
+                    time.sleep(delay)
+            logger.error(f"Failed to connect after {self.MAX_RETRIES + 1} attempts. Last error: {self._last_error}")
+            return False
 
     def _close_socket_unsafe(self):
         if self.socket:
@@ -262,10 +264,13 @@ class UnrealConnection:
             if not self.connect():
                 raise ConnectionError(f"Failed to connect to Unreal Engine: {self._last_error}")
             try:
-                command_obj = {
+                command_obj: Dict[str, Any] = {
                     "command": command,
-                    "params": params or {}
+                    "params": params or {},
                 }
+                auth_token = os.environ.get("UNREAL_MCP_AUTH_TOKEN")
+                if auth_token:
+                    command_obj["auth_token"] = auth_token
                 command_json = json.dumps(command_obj) + '\n'
                 logger.info(f"Sending command (attempt {attempt + 1}): {command}")
                 logger.debug(f"Command payload: {command_json[:500]}...")
@@ -284,8 +289,10 @@ class UnrealConnection:
                     error_msg = response.get("error", "Unknown error")
                     logger.warning(f"Unreal returned error: {error_msg}")
                 return response
-            finally:
+            except (ConnectionError, TimeoutError, socket.error, OSError, ValueError):
                 self._close_socket_unsafe()
+                self.connected = False
+                raise
 
 
 # Global connection instance

@@ -2,9 +2,11 @@ use crate::config::Config;
 use crate::error::AppError;
 use crate::sync::UnrealActorObservation;
 use serde_json::json;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
@@ -14,6 +16,7 @@ const READ_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct UnrealClient {
     host: String,
     port: u16,
+    stream: Arc<Mutex<Option<TcpStream>>>,
 }
 
 impl UnrealClient {
@@ -21,6 +24,7 @@ impl UnrealClient {
         Self {
             host: config.unreal_host.clone(),
             port: config.unreal_port,
+            stream: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -83,6 +87,25 @@ impl UnrealClient {
             .await
     }
 
+    pub async fn apply_scene_delta(
+        &self,
+        transaction_id: &str,
+        creates: Vec<serde_json::Value>,
+        updates: Vec<serde_json::Value>,
+        deletes: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "apply_scene_delta",
+            json!({
+                "transaction_id": transaction_id,
+                "creates": creates,
+                "updates": updates,
+                "deletes": deletes,
+            }),
+        )
+        .await
+    }
+
     pub async fn set_mesh_material_color(
         &self,
         actor_name: &str,
@@ -107,38 +130,70 @@ impl UnrealClient {
         command: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, AppError> {
-        let payload = json!({
-            "command": command,
-            "params": params,
-        });
+        let mut payload_obj = serde_json::Map::new();
+        payload_obj.insert("command".to_string(), json!(command));
+        payload_obj.insert("params".to_string(), params);
+
+        if let Ok(token) = std::env::var("UNREAL_MCP_AUTH_TOKEN") {
+            if !token.is_empty() {
+                payload_obj.insert("auth_token".to_string(), json!(token));
+            }
+        }
+
+        let payload = serde_json::Value::Object(payload_obj);
 
         let mut payload_bytes = serde_json::to_vec(&payload)
             .map_err(|e| AppError::UnrealBridge(format!("json encode error: {e}")))?;
         payload_bytes.push(b'\n');
 
-        let addr = format!("{}:{}", self.host, self.port);
+        let mut guard = self.stream.lock().await;
 
-        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
-            .await
-            .map_err(|_| AppError::UnrealBridge(format!("connect timeout to {addr}")))?
-            .map_err(|e| AppError::UnrealBridge(format!("connect error to {addr}: {e}")))?;
+        let mut stream = match guard.take() {
+            Some(s) => s,
+            None => {
+                let addr = format!("{}:{}", self.host, self.port);
+                let s = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
+                    .await
+                    .map_err(|_| AppError::UnrealBridge(format!("connect timeout to {addr}")))?
+                    .map_err(|e| AppError::UnrealBridge(format!("connect error to {addr}: {e}")))?;
+                s
+            }
+        };
 
-        let mut stream = stream;
-        stream
-            .write_all(&payload_bytes)
-            .await
-            .map_err(|e| AppError::UnrealBridge(format!("write payload error: {e}")))?;
+        let write_result = stream.write_all(&payload_bytes).await;
+        if let Err(e) = write_result {
+            let _ = stream.shutdown().await;
+            return Err(AppError::UnrealBridge(format!("write payload error: {e}")));
+        }
 
-        let resp_buf = timeout(
+        let resp_buf = match timeout(
             READ_TIMEOUT,
             read_line_limited(&mut stream, MAX_RESPONSE_SIZE),
         )
         .await
-        .map_err(|_| AppError::UnrealBridge("read timeout".to_string()))?
-        .map_err(|e| AppError::UnrealBridge(format!("read response error: {e}")))?;
+        {
+            Ok(Ok(buf)) => buf,
+            Ok(Err(e)) => {
+                let _ = stream.shutdown().await;
+                return Err(e);
+            }
+            Err(_) => {
+                let _ = stream.shutdown().await;
+                return Err(AppError::UnrealBridge("read timeout".to_string()));
+            }
+        };
 
-        let response: serde_json::Value = serde_json::from_slice(&resp_buf)
-            .map_err(|e| AppError::UnrealBridge(format!("json decode error: {e}")))?;
+        let response: serde_json::Value = match serde_json::from_slice(&resp_buf) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = stream.shutdown().await;
+                return Err(AppError::UnrealBridge(format!("json decode error: {e}")));
+            }
+        };
+
+        // keep the connection alive for reuse
+        *guard = Some(stream);
+        drop(guard);
 
         Ok(normalize_response(response))
     }
@@ -226,50 +281,55 @@ mod tests {
         tokio::spawn(async move {
             loop {
                 let (mut socket, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 4096];
-                let n = socket.read(&mut buf).await.unwrap();
-                if n == 0 {
-                    continue;
-                }
-                let req: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap_or(json!({}));
-                let command = req.get("command").and_then(|v| v.as_str());
-                let resp = match command {
-                    Some("ping") => json!({"status": "success", "result": {"message": "pong"}}),
-                    Some("get_actors_in_level") => json!({
-                        "status": "success",
-                        "result": {"actors": [
-                            {
-                                "name": "cube_01",
-                                "class": "/Script/Engine.StaticMeshActor",
-                                "location": [0.0, 0.0, 0.0],
-                                "rotation": [0.0, 0.0, 0.0],
-                                "scale": [1.0, 1.0, 1.0],
-                                "tags": ["managed_by_mcp", "mcp_id:cube_01"]
-                            }
-                        ]}}
-                    ),
-                    Some("spawn_actor") => json!({
-                        "status": "success",
-                        "result": {"actor_name": "cube_01", "success": true}
-                    }),
-                    Some("find_actor_by_mcp_id") => json!({
-                        "status": "success",
-                        "result": {"actor": {"name": "cube_01", "class": "StaticMeshActor"}, "success": true}
-                    }),
-                    Some("delete_actor_by_mcp_id") => json!({
-                        "status": "success",
-                        "result": {"deleted_actor": {"name": "cube_01"}, "success": true}
-                    }),
-                    Some("set_actor_transform_by_mcp_id") => json!({
-                        "status": "success",
-                        "result": {"success": true}
-                    }),
-                    _ => json!({"status": "error", "error": "unknown command"}),
-                };
-                let mut resp_bytes = serde_json::to_vec(&resp).unwrap();
-                resp_bytes.push(b'\n');
-                socket.write_all(&resp_bytes).await.unwrap();
-                socket.flush().await.unwrap();
+                tokio::spawn(async move {
+                    loop {
+                        let mut buf = vec![0u8; 4096];
+                        let n = match socket.read(&mut buf).await {
+                            Ok(0) => break,
+                            Ok(n) => n,
+                            Err(_) => break,
+                        };
+                        let req: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap_or(json!({}));
+                        let command = req.get("command").and_then(|v| v.as_str());
+                        let resp = match command {
+                            Some("ping") => json!({"status": "success", "result": {"message": "pong"}}),
+                            Some("get_actors_in_level") => json!({
+                                "status": "success",
+                                "result": {"actors": [
+                                    {
+                                        "name": "cube_01",
+                                        "class": "/Script/Engine.StaticMeshActor",
+                                        "location": [0.0, 0.0, 0.0],
+                                        "rotation": [0.0, 0.0, 0.0],
+                                        "scale": [1.0, 1.0, 1.0],
+                                        "tags": ["managed_by_mcp", "mcp_id:cube_01"]
+                                    }
+                                ]}}
+                            ),
+                            Some("spawn_actor") => json!({
+                                "status": "success",
+                                "result": {"actor_name": "cube_01", "success": true}
+                            }),
+                            Some("find_actor_by_mcp_id") => json!({
+                                "status": "success",
+                                "result": {"actor": {"name": "cube_01", "class": "StaticMeshActor"}, "success": true}
+                            }),
+                            Some("delete_actor_by_mcp_id") => json!({
+                                "status": "success",
+                                "result": {"deleted_actor": {"name": "cube_01"}, "success": true}
+                            }),
+                            Some("set_actor_transform_by_mcp_id") => json!({
+                                "status": "success",
+                                "result": {"success": true}
+                            }),
+                            _ => json!({"status": "error", "error": "unknown command"}),
+                        };
+                        let mut resp_bytes = serde_json::to_vec(&resp).unwrap();
+                        resp_bytes.push(b'\n');
+                        if socket.write_all(&resp_bytes).await.is_err() { break; }
+                        if socket.flush().await.is_err() { break; }
+                    }
+                });
             }
         })
     }
@@ -286,6 +346,7 @@ mod tests {
         let client = UnrealClient {
             host: "127.0.0.1".to_string(),
             port,
+            stream: Arc::new(Mutex::new(None)),
         };
         let resp = client.send_command("ping", json!({})).await.unwrap();
         assert_eq!(resp.get("success"), Some(&serde_json::Value::Bool(true)));
@@ -303,6 +364,7 @@ mod tests {
         let client = UnrealClient {
             host: "127.0.0.1".to_string(),
             port,
+            stream: Arc::new(Mutex::new(None)),
         };
         let actors = client.get_actors_in_level().await.unwrap();
         assert_eq!(actors.len(), 1);
@@ -321,6 +383,7 @@ mod tests {
         let client = UnrealClient {
             host: "127.0.0.1".to_string(),
             port,
+            stream: Arc::new(Mutex::new(None)),
         };
         let spawn_resp = client
             .spawn_actor(json!({"type": "StaticMeshActor"}))

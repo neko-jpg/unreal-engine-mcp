@@ -1,9 +1,14 @@
 use axum::routing::{get, post};
 use axum::Router;
+use axum::http::header;
+use axum::http::Method;
 use scene_syncd::api::routes::AppState;
 use scene_syncd::db::connect::connect_surreal;
 use scene_syncd::db::SurrealSceneRepository;
 use scene_syncd::Config;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -34,7 +39,11 @@ async fn main() -> anyhow::Result<()> {
 
     let bind_addr = config.bind_addr();
 
-    let state = AppState { db, config };
+    let state = AppState {
+        db,
+        config,
+        scene_locks: Arc::new(Mutex::new(HashMap::new())),
+    };
 
     let app = Router::new()
         .route("/health", get(scene_syncd::api::routes::health))
@@ -64,6 +73,14 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/groups/list", post(scene_syncd::api::routes::list_groups))
         .route(
+            "/generator-runs/create",
+            post(scene_syncd::api::routes::create_generator_run),
+        )
+        .route(
+            "/generator-runs/:run_id",
+            get(scene_syncd::api::routes::get_generator_run),
+        )
+        .route(
             "/snapshots/create",
             post(scene_syncd::api::routes::create_snapshot),
         )
@@ -83,8 +100,41 @@ async fn main() -> anyhow::Result<()> {
             "/sync/apply",
             post(scene_syncd::api::routes::apply_sync_route),
         )
+        // P3: Semantic routes
+        .route(
+            "/entities/bulk-upsert",
+            post(scene_syncd::api::routes::bulk_upsert_entities),
+        )
+        .route(
+            "/entities/list",
+            post(scene_syncd::api::routes::list_entities),
+        )
+        .route(
+            "/relations/bulk-upsert",
+            post(scene_syncd::api::routes::bulk_upsert_relations),
+        )
+        .route(
+            "/relations/list",
+            post(scene_syncd::api::routes::list_relations),
+        )
+        .route(
+            "/assets/upsert",
+            post(scene_syncd::api::routes::upsert_asset),
+        )
+        .route(
+            "/assets/list",
+            post(scene_syncd::api::routes::list_assets),
+        )
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_origin([
+                    "http://localhost:3000".parse().unwrap(),
+                    "http://127.0.0.1:3000".parse().unwrap(),
+                ])
+                .allow_methods([Method::GET, Method::POST])
+                .allow_headers([header::CONTENT_TYPE]),
+        )
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

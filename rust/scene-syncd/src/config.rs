@@ -25,7 +25,7 @@ impl Config {
             surreal_ns: env_or("SURREAL_NS", "unreal_mcp"),
             surreal_db: env_or("SURREAL_DB", "scene"),
             surreal_user: env_or("SURREAL_USER", "root"),
-            surreal_pass: env_or("SURREAL_PASS", "secret"),
+            surreal_pass: env_or("SURREAL_PASS", ""),
             unreal_host: env_or("UNREAL_MCP_HOST", "127.0.0.1"),
             unreal_port: env_or_parse("UNREAL_MCP_PORT", 55557),
             autosync: env_or_parse("SCENE_SYNCD_AUTOSYNC", false),
@@ -50,6 +50,12 @@ fn env_or(key: &str, default: &str) -> String {
 fn env_or_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
     env::var(key)
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|v| match v.parse() {
+            Ok(parsed) => Some(parsed),
+            Err(_) => {
+                eprintln!("Warning: failed to parse environment variable {key}='{v}', using default");
+                None
+            }
+        })
         .unwrap_or(default)
 }

@@ -2,9 +2,14 @@ use axum::extract::State;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 use surrealdb::engine::any::Any;
 use surrealdb::sql::Datetime;
 use surrealdb::Surreal;
+use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 use crate::config::Config;
 use crate::db::SurrealSceneRepository;
@@ -20,6 +25,7 @@ use crate::unreal::client::UnrealClient;
 pub struct AppState {
     pub db: Surreal<Any>,
     pub config: Config,
+    pub scene_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 fn success_response(data: Value) -> Value {
@@ -41,6 +47,10 @@ fn error_response(code: &str, message: &str) -> Value {
             "message": message
         }
     })
+}
+
+fn normalize_scene_id_input(id: &str) -> Result<String, AppError> {
+    crate::domain::ids::normalize_scene_id(id).map_err(AppError::Validation)
 }
 
 pub async fn health() -> Json<Value> {
@@ -65,13 +75,14 @@ pub async fn create_scene(
     State(state): State<AppState>,
     Json(req): Json<CreateSceneRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    let display_name = req.name.unwrap_or_else(|| req.scene_id.clone());
+    let display_name = req.name.unwrap_or_else(|| scene_id.clone());
     let scene = repo
-        .upsert_scene(&req.scene_id, &display_name, req.description)
+        .upsert_scene(&scene_id, &display_name, req.description)
         .await?;
     Ok(Json(success_response(
-        serde_json::to_value(scene).unwrap_or_default(),
+        serde_json::to_value(scene).map_err(|e| AppError::Internal(format!("serialize scene error: {e}")))?,
     )))
 }
 
@@ -93,6 +104,8 @@ pub struct UpsertObjectRequest {
     pub physics: Option<serde_json::Value>,
     #[serde(default)]
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
     #[serde(default)]
     pub group_id: Option<String>,
 }
@@ -167,6 +180,7 @@ pub async fn upsert_object(
     State(state): State<AppState>,
     Json(req): Json<UpsertObjectRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     if let Err(e) = validate_mcp_id(&req.mcp_id) {
         return Err(AppError::Validation(e));
     }
@@ -175,8 +189,8 @@ pub async fn upsert_object(
     let desired_name = req.desired_name.unwrap_or_else(|| req.mcp_id.clone());
 
     let mut obj = SceneObject {
-        id: format!("scene_object:{}:{}", req.scene_id, req.mcp_id),
-        scene: format!("scene:{}", req.scene_id),
+        id: format!("scene_object:{}:{}", scene_id, req.mcp_id),
+        scene: format!("scene:{}", scene_id),
         group: req.group_id.map(|g| format!("scene_group:{g}")),
         mcp_id: req.mcp_id.clone(),
         desired_name,
@@ -187,7 +201,7 @@ pub async fn upsert_object(
         visual: object_or_empty(req.visual),
         physics: object_or_empty(req.physics),
         tags: req.tags.unwrap_or_default(),
-        metadata: json!({}),
+        metadata: object_or_empty(req.metadata),
         desired_hash: String::new(),
         last_applied_hash: None,
         sync_status: "pending".to_string(),
@@ -203,7 +217,7 @@ pub async fn upsert_object(
     let saved = repo.upsert_object(&obj).await?;
 
     Ok(Json(success_response(
-        serde_json::to_value(saved).unwrap_or_default(),
+        serde_json::to_value(saved).map_err(|e| AppError::Internal(format!("serialize object error: {e}")))?,
     )))
 }
 
@@ -222,10 +236,11 @@ pub async fn list_objects(
     State(state): State<AppState>,
     Json(req): Json<ListObjectsRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
     let objects = repo
         .list_desired_objects(
-            &req.scene_id,
+            &scene_id,
             req.include_deleted,
             req.group_id.as_deref(),
             req.limit,
@@ -244,8 +259,9 @@ pub async fn delete_object(
     State(state): State<AppState>,
     Json(req): Json<DeleteObjectRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    repo.mark_object_deleted(&req.scene_id, &req.mcp_id).await?;
+    repo.mark_object_deleted(&scene_id, &req.mcp_id).await?;
     Ok(Json(success_response(
         json!({ "tombstoned": true, "mcp_id": req.mcp_id }),
     )))
@@ -268,10 +284,11 @@ pub async fn create_group(
     State(state): State<AppState>,
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
     let group = repo
         .create_group(
-            &req.scene_id,
+            &scene_id,
             &req.kind,
             &req.name,
             req.tool_name,
@@ -293,12 +310,62 @@ pub async fn list_groups(
     State(state): State<AppState>,
     Json(req): Json<ListGroupsRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    let groups = repo.list_groups(&req.scene_id, req.include_deleted).await?;
+    let groups = repo.list_groups(&scene_id, req.include_deleted).await?;
     Ok(Json(success_response(json!({
         "groups": groups,
         "count": groups.len(),
     }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateGeneratorRunRequest {
+    pub scene_id: String,
+    pub kind: String,
+    pub tool_name: String,
+    pub name: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+    #[serde(default)]
+    pub seed: Option<String>,
+    #[serde(default)]
+    pub group_id: Option<String>,
+    #[serde(default)]
+    pub generated_count: i64,
+}
+
+pub async fn create_generator_run(
+    State(state): State<AppState>,
+    Json(req): Json<CreateGeneratorRunRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let run = repo
+        .create_generator_run(
+            &scene_id,
+            &req.kind,
+            &req.tool_name,
+            &req.name,
+            req.params,
+            req.seed,
+            req.group_id,
+            req.generated_count,
+        )
+        .await?;
+    Ok(Json(success_response(json!({ "generator_run": run }))))
+}
+
+pub async fn get_generator_run(
+    State(state): State<AppState>,
+    axum::extract::Path(run_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let run = repo.get_generator_run(&run_id).await?;
+    match run {
+        Some(r) => Ok(Json(success_response(json!({ "generator_run": r })))),
+        None => Err(AppError::NotFound(format!("generator_run {run_id} not found"))),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -313,9 +380,10 @@ pub async fn create_snapshot(
     State(state): State<AppState>,
     Json(req): Json<CreateSnapshotRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
     let snapshot = repo
-        .create_snapshot(&req.scene_id, &req.name, req.description)
+        .create_snapshot(&scene_id, &req.name, req.description)
         .await?;
     let snapshot_id = snapshot.id.clone();
     let object_count = snapshot.objects.len();
@@ -335,8 +403,9 @@ pub async fn list_snapshots(
     State(state): State<AppState>,
     Json(req): Json<ListSnapshotsRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    let snapshots = repo.list_snapshots(&req.scene_id).await?;
+    let snapshots = repo.list_snapshots(&scene_id).await?;
     Ok(Json(success_response(json!({
         "snapshots": snapshots,
         "count": snapshots.len(),
@@ -373,10 +442,20 @@ pub struct BulkUpsertRequest {
     pub objects: Vec<UpsertObjectRequest>,
 }
 
+const MAX_BATCH_SIZE: usize = 500;
+
 pub async fn bulk_upsert_objects(
     State(state): State<AppState>,
     Json(req): Json<BulkUpsertRequest>,
 ) -> Result<Json<Value>, AppError> {
+    if req.objects.len() > MAX_BATCH_SIZE {
+        return Err(AppError::Validation(format!(
+            "bulk upsert exceeded maximum batch size of {MAX_BATCH_SIZE}; received {} objects",
+            req.objects.len()
+        )));
+    }
+
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
     let mut created = Vec::new();
     let mut errors = Vec::new();
@@ -397,8 +476,8 @@ pub async fn bulk_upsert_objects(
             .unwrap_or_else(|| obj_req.mcp_id.clone());
 
         let mut obj = SceneObject {
-            id: format!("scene_object:{}:{}", req.scene_id, obj_req.mcp_id),
-            scene: format!("scene:{}", req.scene_id),
+            id: format!("scene_object:{}:{}", scene_id, obj_req.mcp_id),
+            scene: format!("scene:{}", scene_id),
             group: obj_req
                 .group_id
                 .clone()
@@ -413,7 +492,7 @@ pub async fn bulk_upsert_objects(
             visual: object_or_empty(obj_req.visual),
             physics: object_or_empty(obj_req.physics),
             tags: obj_req.tags.unwrap_or_default(),
-            metadata: json!({}),
+            metadata: object_or_empty(obj_req.metadata),
             desired_hash: String::new(),
             last_applied_hash: None,
             sync_status: "pending".to_string(),
@@ -447,12 +526,23 @@ pub async fn bulk_upsert_objects(
         }
     }
 
-    Ok(Json(success_response(json!({
+    let response_body = json!({
         "upserted_count": created.len(),
         "error_count": errors.len(),
         "objects": created,
         "errors": errors,
-    }))))
+    });
+
+    if errors.is_empty() {
+        Ok(Json(success_response(response_body)))
+    } else if created.is_empty() {
+        Ok(Json(error_response("BULK_UPSERT_FAILED", "All bulk upsert operations failed")))
+    } else {
+        let mut body = response_body;
+        body["success"] = json!(false);
+        body["partial_success"] = json!(true);
+        Ok(Json(body))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -473,10 +563,11 @@ pub async fn plan_sync_route(
     State(state): State<AppState>,
     Json(req): Json<PlanSyncRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
 
     let desired_objects = repo
-        .list_desired_objects(&req.scene_id, true, None, None)
+        .list_desired_objects(&scene_id, true, None, None)
         .await?;
 
     let unreal_client = UnrealClient::new(&state.config);
@@ -491,7 +582,7 @@ pub async fn plan_sync_route(
         }
     };
 
-    let plan = plan_sync(&req.scene_id, &desired_objects, &actual_actors);
+    let plan = plan_sync(&scene_id, &desired_objects, &actual_actors);
 
     let mut warnings = plan.warnings.clone();
     if let Some(w) = plan_unreal_warning {
@@ -537,10 +628,11 @@ pub async fn apply_sync_route(
     State(state): State<AppState>,
     Json(req): Json<ApplySyncRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
 
     let desired_objects = repo
-        .list_desired_objects(&req.scene_id, true, None, None)
+        .list_desired_objects(&scene_id, true, None, None)
         .await?;
 
     let unreal_client = UnrealClient::new(&state.config);
@@ -555,7 +647,7 @@ pub async fn apply_sync_route(
         }
     };
 
-    let plan = plan_sync(&req.scene_id, &desired_objects, &actual_actors);
+    let plan = plan_sync(&scene_id, &desired_objects, &actual_actors);
 
     if plan.operations.len() > req.max_operations {
         return Err(AppError::Validation(
@@ -570,11 +662,252 @@ pub async fn apply_sync_route(
     let allow_delete = req.mode == "apply_all" || req.allow_delete;
     let mode = req.mode.as_str();
 
+    let scene_lock = {
+        let mut locks = state.scene_locks.lock().await;
+        locks
+            .entry(scene_id.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+
+    let _guard = match timeout(Duration::from_secs(30), scene_lock.lock()).await {
+        Ok(guard) => guard,
+        Err(_) => {
+            return Err(AppError::Validation(
+                format!("Could not acquire scene lock for '{}' within 30s; another sync apply is in progress.", scene_id),
+            ));
+        }
+    };
+
     let result = apply_sync(&state.config, &repo, &plan, mode, allow_delete).await?;
 
+    drop(_guard);
+    {
+        let mut locks = state.scene_locks.lock().await;
+        if let Some(lock_arc) = locks.get(&scene_id) {
+            if std::sync::Arc::strong_count(lock_arc) == 1 {
+                locks.remove(&scene_id);
+            }
+        }
+    }
+
     Ok(Json(success_response(
-        serde_json::to_value(result).unwrap_or_default(),
+        serde_json::to_value(result).map_err(|e| AppError::Internal(format!("serialize result error: {e}")))?,
     )))
+}
+
+// ------------------------------------------------------------------
+// P3: Semantic entity / relation / asset routes
+// ------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct BulkUpsertEntitiesRequest {
+    pub scene_id: String,
+    pub entities: Vec<EntityPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EntityPayload {
+    pub entity_id: String,
+    pub kind: String,
+    pub name: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub mcp_ids: Vec<String>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+pub async fn bulk_upsert_entities(
+    State(state): State<AppState>,
+    Json(req): Json<BulkUpsertEntitiesRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let mut created = Vec::new();
+    let mut errors = Vec::new();
+
+    for entity in req.entities {
+        match repo
+            .upsert_entity(
+                &scene_id,
+                &entity.entity_id,
+                &entity.kind,
+                &entity.name,
+                entity.properties,
+                entity.tags,
+                entity.mcp_ids,
+                entity.metadata,
+            )
+            .await
+        {
+            Ok(e) => created.push(serde_json::to_value(e).unwrap_or_default()),
+            Err(e) => errors.push(json!({"entity_id": entity.entity_id, "error": e.to_string()})),
+        }
+    }
+
+    Ok(Json(success_response(json!({
+        "upserted_count": created.len(),
+        "error_count": errors.len(),
+        "entities": created,
+        "errors": errors,
+    }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListEntitiesRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+pub async fn list_entities(
+    State(state): State<AppState>,
+    Json(req): Json<ListEntitiesRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let entities = repo.list_entities(&scene_id, req.kind.as_deref()).await?;
+    Ok(Json(success_response(json!({ "entities": entities }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkUpsertRelationsRequest {
+    pub scene_id: String,
+    pub relations: Vec<RelationPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RelationPayload {
+    pub relation_id: String,
+    pub source_entity_id: String,
+    pub target_entity_id: String,
+    pub relation_type: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+pub async fn bulk_upsert_relations(
+    State(state): State<AppState>,
+    Json(req): Json<BulkUpsertRelationsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let mut created = Vec::new();
+    let mut errors = Vec::new();
+
+    for relation in req.relations {
+        match repo
+            .upsert_relation(
+                &scene_id,
+                &relation.relation_id,
+                &relation.source_entity_id,
+                &relation.target_entity_id,
+                &relation.relation_type,
+                relation.properties,
+                relation.metadata,
+            )
+            .await
+        {
+            Ok(r) => created.push(serde_json::to_value(r).unwrap_or_default()),
+            Err(e) => errors.push(json!({"relation_id": relation.relation_id, "error": e.to_string()})),
+        }
+    }
+
+    Ok(Json(success_response(json!({
+        "upserted_count": created.len(),
+        "error_count": errors.len(),
+        "relations": created,
+        "errors": errors,
+    }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListRelationsRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub relation_type: Option<String>,
+}
+
+pub async fn list_relations(
+    State(state): State<AppState>,
+    Json(req): Json<ListRelationsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let relations = repo.list_relations(&scene_id, req.relation_type.as_deref()).await?;
+    Ok(Json(success_response(json!({ "relations": relations }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertAssetRequest {
+    pub scene_id: String,
+    pub asset_id: String,
+    pub kind: String,
+    #[serde(default = "default_asset_status")]
+    pub status: String,
+    #[serde(default)]
+    pub fallback: String,
+    #[serde(default)]
+    pub semantic_tags: Vec<String>,
+    #[serde(default = "default_asset_quality")]
+    pub quality: String,
+    #[serde(default)]
+    pub variants: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+fn default_asset_status() -> String {
+    "present".to_string()
+}
+
+fn default_asset_quality() -> String {
+    "prototype".to_string()
+}
+
+pub async fn upsert_asset(
+    State(state): State<AppState>,
+    Json(req): Json<UpsertAssetRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let asset = repo
+        .upsert_asset(
+            &scene_id,
+            &req.asset_id,
+            &req.kind,
+            &req.status,
+            &req.fallback,
+            req.semantic_tags,
+            &req.quality,
+            req.variants,
+            req.metadata,
+        )
+        .await?;
+    Ok(Json(success_response(json!({ "asset": asset }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListAssetsRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+pub async fn list_assets(
+    State(state): State<AppState>,
+    Json(req): Json<ListAssetsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let assets = repo.list_assets(&scene_id, req.kind.as_deref()).await?;
+    Ok(Json(success_response(json!({ "assets": assets }))))
 }
 
 #[cfg(test)]

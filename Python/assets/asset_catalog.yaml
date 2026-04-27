@@ -1,0 +1,73 @@
+assets:
+  wall_stone:
+    kind: static_mesh
+    variants:
+      medieval: { mesh: "/Game/Architecture/Walls/StoneWall_01" }
+      futuristic: { mesh: "/Game/SciFi/Walls/PanelWall_A" }
+    default_scale: [1.0, 1.0, 1.0]
+    collision_profile: "BlockAll"
+    navmesh: "obstacle"
+    fallback: "/Engine/BasicShapes/Cube.Cube"
+
+  floor_wood:
+    kind: static_mesh
+    variants:
+      medieval: { mesh: "/Game/Architecture/Floors/WoodFloor_01" }
+      modern: { mesh: "/Game/Architecture/Floors/ParquetFloor_A" }
+    default_scale: [1.0, 1.0, 1.0]
+    collision_profile: "BlockAll"
+    navmesh: "walkable"
+    fallback: "/Engine/BasicShapes/Plane.Plane"
+
+  roof_tile:
+    kind: static_mesh
+    variants:
+      medieval: { mesh: "/Game/Architecture/Roofs/TileRoof_01" }
+      asian: { mesh: "/Game/Architecture/Roofs/PagodaRoof_A" }
+    default_scale: [1.0, 1.0, 1.0]
+    collision_profile: "BlockAll"
+    navmesh: "obstacle"
+    fallback: "/Engine/BasicShapes/Cube.Cube"
+
+  door_wooden:
+    kind: static_mesh
+    variants:
+      medieval: { mesh: "/Game/Architecture/Doors/WoodenDoor_01" }
+      futuristic: { mesh: "/Game/SciFi/Doors/AutoDoor_A" }
+    default_scale: [1.0, 2.0, 0.2]
+    collision_profile: "BlockAllDynamic"
+    navmesh: "obstacle"
+    fallback: "/Engine/BasicShapes/Cube.Cube"
+
+  window_glass:
+    kind: static_mesh
+    variants:
+      medieval: { mesh: "/Game/Architecture/Windows/StainedGlass_01" }
+      modern: { mesh: "/Game/Architecture/Windows/GlassWindow_A" }
+    default_scale: [1.0, 1.0, 0.1]
+    collision_profile: "OverlapAll"
+    navmesh: "obstacle"
+    fallback: "/Engine/BasicShapes/Plane.Plane"
+
+  torch_wall:
+    kind: blueprint
+    variants:
+      medieval: { blueprint: "/Game/Blueprints/TorchWall_BP" }
+    default_scale: [1.0, 1.0, 1.0]
+    collision_profile: "NoCollision"
+    navmesh: "obstacle"
+    fallback: "/Engine/BasicShapes/Sphere.Sphere"
+
+  mat_stone:
+    kind: material
+    variants:
+      medieval: { material: "/Game/Materials/Stone_Mat" }
+      rough: { material: "/Game/Materials/RoughStone_Mat" }
+    fallback: "/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"
+
+  mat_wood:
+    kind: material
+    variants:
+      medieval: { material: "/Game/Materials/Wood_Mat" }
+      dark: { material: "/Game/Materials/DarkWood_Mat" }
+    fallback: "/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"

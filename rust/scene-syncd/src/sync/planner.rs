@@ -91,6 +91,15 @@ pub fn plan_sync(
                         actual: Some(serde_json::to_value(actual).unwrap_or_default()),
                     });
                     summary.update_transform += 1;
+                } else if tags_diff(desired, actual) {
+                    operations.push(SyncOperation {
+                        action: SyncAction::UpdateVisual,
+                        mcp_id: mcp_id.to_string(),
+                        reason: "Tags differ between desired and actual".to_string(),
+                        desired: Some(serde_json::to_value(desired).unwrap_or_default()),
+                        actual: Some(serde_json::to_value(actual).unwrap_or_default()),
+                    });
+                    summary.update_visual += 1;
                 } else {
                     let desired_hash = &desired.desired_hash;
                     let applied_hash = desired.last_applied_hash.as_deref().unwrap_or("");
@@ -167,6 +176,17 @@ fn transform_differs(desired: &SceneObject, actual: &UnrealActorObservation) -> 
         || (scl.x - actual.scale[0]).abs() > SCALE_EPSILON
         || (scl.y - actual.scale[1]).abs() > SCALE_EPSILON
         || (scl.z - actual.scale[2]).abs() > SCALE_EPSILON
+}
+
+fn tags_diff(desired: &SceneObject, actual: &UnrealActorObservation) -> bool {
+    fn is_system_tag(tag: &str) -> bool {
+        tag == "managed_by_mcp" || tag.starts_with("mcp_id:")
+    }
+    let mut desired_tags: Vec<&str> = desired.tags.iter().map(|s| s.as_str()).filter(|t| !is_system_tag(t)).collect();
+    let mut actual_tags: Vec<&str> = actual.tags.iter().map(|s| s.as_str()).filter(|t| !is_system_tag(t)).collect();
+    desired_tags.sort_unstable();
+    actual_tags.sort_unstable();
+    desired_tags != actual_tags
 }
 
 #[cfg(test)]

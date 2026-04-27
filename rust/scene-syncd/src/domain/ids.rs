@@ -26,3 +26,19 @@ pub fn validate_mcp_id(id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub fn normalize_scene_id(id: &str) -> Result<String, String> {
+    let id = id.trim();
+    let id = id.strip_prefix("scene:").unwrap_or(id);
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("scene_id must not be empty".to_string());
+    }
+    if id.contains('/') || id.contains('\\') {
+        return Err("scene_id must not contain slashes".to_string());
+    }
+    if id.chars().any(|c| c.is_control()) {
+        return Err("scene_id must not contain control characters".to_string());
+    }
+    Ok(id.to_string())
+}

@@ -169,6 +169,7 @@ class TestPacketIndependence:
         data = {"success": True, "message": "Hello world", "count": 42}
         payload = _payload(data)
         for chunk_size in [1, 7, 64, 1024, 8192, 16384]:
+            conn.disconnect()  # reset between iterations so connect() creates a new socket
             fake = fake_socket_factory(response_payloads=[payload], chunk_size=chunk_size)
             with patch.object(conn, "_create_socket", return_value=fake):
                 conn.connect()

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from server.core import mcp
 from server.scene_client import call_scene_syncd, call_scene_syncd_get
 from server.actor_sink import ActorSpec, SceneDbActorSink
-from server.validation import validate_string, ValidationError, make_validation_error_response_from_exception
+from server.validation import validate_string, ValidationError, make_validation_error_response_from_exception, sanitize_mcp_id, normalize_scene_id
 from utils.responses import make_error_response
 
 logger = logging.getLogger("UnrealMCP_Advanced")
@@ -57,8 +57,8 @@ def scene_upsert_actor(
 ) -> Dict[str, Any]:
     """Write desired actor state to the scene database. Does NOT touch Unreal."""
     try:
-        validate_string(mcp_id, "mcp_id")
-        validate_string(scene_id, "scene_id")
+        mcp_id = sanitize_mcp_id(mcp_id)
+        scene_id = normalize_scene_id(scene_id)
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
 
@@ -96,6 +96,14 @@ def scene_upsert_actors(
     """Bulk upsert multiple actors to the scene database. Does NOT touch Unreal."""
     if not objects:
         return make_error_response("objects list must not be empty")
+
+    try:
+        scene_id = normalize_scene_id(scene_id)
+        for i, obj in enumerate(objects):
+            if "mcp_id" in obj:
+                obj["mcp_id"] = sanitize_mcp_id(obj["mcp_id"])
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
 
     payload: Dict[str, Any] = {
         "scene_id": scene_id,

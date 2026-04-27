@@ -13,7 +13,8 @@ from server.validation import (
     ValidationError, make_validation_error_response_from_exception,
 )
 from utils.responses import make_error_response, is_success_response
-from server.actor_sink import ActorSpec, DryRunActorSink, UnrealActorSink
+from server.actor_sink import ActorSpec, DryRunActorSink, UnrealActorSink, make_actor_sink
+from server.scene_client import call_scene_syncd
 from helpers.infrastructure_creation import (
     _create_street_grid, _create_street_lights, _create_town_vehicles,
     _create_town_decorations, _create_traffic_lights, _create_street_signage,
@@ -37,6 +38,8 @@ from helpers.actor_utilities import spawn_blueprint_actor
 from helpers.bridge_aqueduct_creation import (
     build_suspension_bridge_structure, build_aqueduct_structure
 )
+from server.generators import CastleFortressGenerator
+from server.specs.realization_spec import RealizationPolicy
 
 logger = logging.getLogger("UnrealMCP_Advanced")
 
@@ -48,7 +51,10 @@ def create_pyramid(
     location: Optional[List[float]] = None,
     name_prefix: str = "PyramidBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Spawn a pyramid made of cube actors."""
     try:
@@ -62,7 +68,7 @@ def create_pyramid(
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         for level in range(base_size):
             count = base_size - level
             for x in range(count):
@@ -87,7 +93,7 @@ def create_pyramid(
 
         result = sink.flush()
         if dry_run:
-            result["message"] = f"Would spawn {len(sink.specs)} actors for pyramid (base_size={base_size})."
+            result["message"] = f"Would spawn {sink.count()} actors for pyramid (base_size={base_size})."
         else:
             result["message"] = f"Pyramid created: base_size={base_size}"
         return result
@@ -105,7 +111,10 @@ def create_wall(
     orientation: str = "x",
     name_prefix: str = "WallBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a simple wall from cubes."""
     try:
@@ -120,7 +129,7 @@ def create_wall(
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         for h in range(height):
             for i in range(length):
                 if orientation == "x":
@@ -146,7 +155,7 @@ def create_wall(
 
         result = sink.flush()
         if dry_run:
-            result["message"] = f"Would spawn {len(sink.specs)} actors for wall (length={length}, height={height})."
+            result["message"] = f"Would spawn {sink.count()} actors for wall (length={length}, height={height})."
         else:
             result["message"] = f"Wall created: length={length}, height={height}"
         return result
@@ -165,13 +174,16 @@ def create_tower(
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
     tower_style: str = "cylindrical",
     dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a realistic tower with various architectural styles."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         scale = block_size / 100.0
 
         for level in range(height):
@@ -301,7 +313,10 @@ def create_staircase(
     location: Optional[List[float]] = None,
     name_prefix: str = "Stair",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a staircase from cubes."""
     try:
@@ -310,7 +325,7 @@ def create_staircase(
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         sx, sy, sz = step_size
         for i in range(steps):
             mcp_id = f"{name_prefix}_{i}"
@@ -328,7 +343,7 @@ def create_staircase(
 
         result = sink.flush()
         if dry_run:
-            result["message"] = f"Would spawn {len(sink.specs)} actors for staircase ({steps} steps)."
+            result["message"] = f"Would spawn {sink.count()} actors for staircase ({steps} steps)."
         else:
             result["message"] = f"Staircase created: {steps} steps"
         return result
@@ -346,18 +361,21 @@ def construct_house(
     name_prefix: str = "House",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
     house_style: str = "modern",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Construct a realistic house with architectural details and multiple rooms."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         build_house(None, width, depth, height, location, name_prefix, mesh, house_style, sink=sink)
         result = sink.flush()
         if dry_run:
-            result["message"] = f"Would spawn {len(sink.specs)} actors for house ({house_style})."
+            result["message"] = f"Would spawn {sink.count()} actors for house ({house_style})."
         else:
             result["message"] = f"House ({house_style}) created."
         return result
@@ -372,7 +390,10 @@ def construct_mansion(
     mansion_scale: str = "large",
     location: Optional[List[float]] = None,
     name_prefix: str = "Mansion",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Construct a mansion with multiple wings, grand rooms, gardens, fountains, and luxury features."""
     try:
@@ -384,14 +405,14 @@ def construct_mansion(
         params = get_mansion_size_params(mansion_scale)
         layout = calculate_mansion_layout(params)
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         build_mansion_main_structure(None, name_prefix, location, layout, [], sink=sink)
         build_mansion_exterior(None, name_prefix, location, layout, [], sink=sink)
         add_mansion_interior(None, name_prefix, location, layout, [], sink=sink)
 
         result = sink.flush()
         if dry_run:
-            count = len(sink.specs) if hasattr(sink, 'specs') else 0
+            count = sink.count() if hasattr(sink, 'specs') else 0
             result["message"] = f"Would spawn {count} actors for {mansion_scale} mansion."
         else:
             count = result.get("count", 0)
@@ -421,14 +442,17 @@ def create_arch(
     location: Optional[List[float]] = None,
     name_prefix: str = "ArchBlock",
     mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a simple arch using cubes in a semicircle."""
     try:
         if location is None:
             location = [0.0, 0.0, 0.0]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         angle_step = math.pi / segments
         scale = radius / 300.0 / 2
         for i in range(segments + 1):
@@ -450,7 +474,7 @@ def create_arch(
 
         result = sink.flush()
         if dry_run:
-            result["message"] = f"Would spawn {len(sink.specs)} actors for arch (radius={radius}, segments={segments})."
+            result["message"] = f"Would spawn {sink.count()} actors for arch (radius={radius}, segments={segments})."
         else:
             result["message"] = f"Arch created: radius={radius}, segments={segments}"
         return result
@@ -540,7 +564,10 @@ def create_maze(
     cell_size: float = 300.0,
     wall_height: int = 3,
     location: Optional[List[float]] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a proper solvable maze with entrance, exit, and guaranteed path using recursive backtracking algorithm."""
     try:
@@ -597,7 +624,7 @@ def create_maze(
                 max_actors=MAX_ACTORS_PER_BATCH,
             )
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         maze_height = rows * 2 + 1
         maze_width = cols * 2 + 1
         wall_scale = cell_size / 100.0
@@ -674,7 +701,10 @@ def create_town(
     name_prefix: str = "Town",
     include_infrastructure: bool = True,
     architectural_style: str = "mixed",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a full dynamic town with buildings, streets, infrastructure, and vehicles."""
     try:
@@ -698,7 +728,7 @@ def create_town(
         target_population = int(params["population"] * building_density)
         skyscraper_chance = params["skyscraper_chance"]
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         street_width = block_size * 0.3
         building_area = block_size * 0.7
 
@@ -771,7 +801,7 @@ def create_town(
                 _create_central_plaza(blocks, block_size, location, name_prefix, [], sink=sink)
 
         result = sink.flush()
-        total = len(sink.specs) if hasattr(sink, 'specs') else result.get("count", 0)
+        total = sink.count() if hasattr(sink, 'specs') else result.get("count", 0)
         if dry_run:
             result["message"] = f"Would spawn {total} actors for {town_size} town."
         else:
@@ -800,7 +830,12 @@ def create_castle_fortress(
     include_siege_weapons: bool = True,
     include_village: bool = True,
     architectural_style: str = "medieval",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
+    apply: bool = False,
+    realization_policy: str = "prototype",
 ) -> Dict[str, Any]:
     """Create a massive castle fortress with walls, towers, courtyards, throne room, and surrounding village."""
     try:
@@ -809,36 +844,61 @@ def create_castle_fortress(
 
         logger.info(f"Creating {castle_size} {architectural_style} castle fortress")
 
-        params = get_castle_size_params(castle_size)
-        dimensions = calculate_scaled_dimensions(params, scale_factor=2.0)
+        # --- P2: Semantic generation via SpecGraph -------------------------
+        generator = CastleFortressGenerator(
+            castle_size=castle_size,
+            architectural_style=architectural_style,
+            location=location,
+            name_prefix=name_prefix,
+            include_siege_weapons=include_siege_weapons,
+            include_village=include_village,
+        )
+        graph = generator.generate()
+        policy = RealizationPolicy[realization_policy.upper()]
+        actors = graph.realize(policy=policy, group_id=group_id or name_prefix)
+        # -----------------------------------------------------------------
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
-        all_actors: List[Dict[str, Any]] = []
+        if dry_run:
+            sink = make_actor_sink(target="dry_run")
+        else:
+            sink = make_actor_sink(target=target, scene_id=scene_id, group_id=group_id or name_prefix)
 
-        build_outer_bailey_walls(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_inner_bailey_walls(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_gate_complex(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_corner_towers(None, name_prefix, location, dimensions, architectural_style, all_actors, sink=sink)
-        build_inner_corner_towers(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_intermediate_towers(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_central_keep(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_courtyard_complex(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        build_bailey_annexes(None, name_prefix, location, dimensions, all_actors, sink=sink)
+        for actor in actors:
+            sink.spawn(actor)
 
-        if include_siege_weapons:
-            build_siege_weapons(None, name_prefix, location, dimensions, all_actors, sink=sink)
-
-        if include_village:
-            build_village_settlement(None, name_prefix, location, dimensions, castle_size, all_actors, sink=sink)
-
-        build_drawbridge_and_moat(None, name_prefix, location, dimensions, all_actors, sink=sink)
-        add_decorative_flags(None, name_prefix, location, dimensions, all_actors, sink=sink)
-
-        logger.info(f"Castle fortress creation complete! Spawned {len(sink.specs)} actors")
+        total = sink.count()
+        logger.info(f"Castle fortress creation complete! Spawned {total} actors")
 
         result = sink.flush()
+        # Use the count saved before flush, or fall back to flush result
+        if result.get("success"):
+            total = result.get("generated_count", total)
+        params = get_castle_size_params(castle_size)
+        dimensions = calculate_scaled_dimensions(params, scale_factor=2.0)
         wall_sections = int(dimensions["outer_width"]/200) * 2 + int(dimensions["outer_depth"]/200) * 2
-        total = len(sink.specs)
+
+        # Record generator run in DB when using scene_db target
+        if not dry_run and target == "scene_db":
+            try:
+                call_scene_syncd("/generator-runs/create", {
+                    "scene_id": scene_id,
+                    "kind": "castle",
+                    "tool_name": "create_castle_fortress",
+                    "name": group_id or name_prefix,
+                    "params": {
+                        "castle_size": castle_size,
+                        "architectural_style": architectural_style,
+                        "include_village": include_village,
+                        "include_siege_weapons": include_siege_weapons,
+                        "realization_policy": realization_policy,
+                    },
+                    "seed": None,
+                    "group_id": group_id or name_prefix,
+                    "generated_count": total,
+                })
+            except Exception as e:
+                logger.warning(f"Failed to record generator run: {e}")
+
         if dry_run:
             result["message"] = f"Would spawn {total} actors for {castle_size} {architectural_style} castle fortress."
         else:
@@ -850,8 +910,29 @@ def create_castle_fortress(
             "towers": dimensions["tower_count"],
             "has_village": include_village,
             "has_siege_weapons": include_siege_weapons,
-            "total_actors": total
+            "total_actors": total,
         }
+        result["spec_graph"] = graph.summary()
+        result["cost_estimate"] = {
+            "actor_count": graph.estimate_cost().actor_count,
+            "estimated_draw_calls": graph.estimate_cost().estimated_draw_calls,
+            "estimated_memory_mb": round(graph.estimate_cost().estimated_memory_mb, 2),
+            "estimated_sync_time_ms": round(graph.estimate_cost().estimated_sync_time_ms, 2),
+        }
+
+        # Optionally apply sync to Unreal
+        if not dry_run and target == "scene_db" and apply:
+            try:
+                plan = call_scene_syncd("/sync/plan", {"scene_id": scene_id, "mode": "plan_only"})
+                if plan.get("success"):
+                    sync_result = call_scene_syncd("/sync/apply", {"scene_id": scene_id, "mode": "apply_safe", "allow_delete": False})
+                    result["sync"] = sync_result
+                else:
+                    result["sync_plan_error"] = plan.get("error", "unknown")
+            except Exception as e:
+                logger.warning(f"Failed to apply sync: {e}")
+                result["sync_error"] = str(e)
+
         return result
 
     except Exception as e:
@@ -873,7 +954,10 @@ def create_suspension_bridge(
     tower_mesh: str = "/Engine/BasicShapes/Cube.Cube",
     cable_mesh: str = "/Engine/BasicShapes/Cylinder.Cylinder",
     suspender_mesh: str = "/Engine/BasicShapes/Cylinder.Cylinder",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a suspension bridge with towers, deck, cables, and suspenders."""
     try:
@@ -883,7 +967,7 @@ def create_suspension_bridge(
 
         logger.info(f"Creating suspension bridge: span={span_length}, width={deck_width}, height={tower_height}")
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
 
         counts = build_suspension_bridge_structure(
             None,
@@ -910,7 +994,7 @@ def create_suspension_bridge(
 
         result = sink.flush()
         if dry_run:
-            actual_count = len(sink.specs) if hasattr(sink, 'specs') else total_actors
+            actual_count = sink.count() if hasattr(sink, 'specs') else total_actors
             result["message"] = f"Would spawn {actual_count} actors for suspension bridge."
         else:
             result["message"] = f"Created suspension bridge with {total_actors} components"
@@ -946,7 +1030,10 @@ def create_aqueduct(
     arch_mesh: str = "/Engine/BasicShapes/Cylinder.Cylinder",
     pier_mesh: str = "/Engine/BasicShapes/Cube.Cube",
     deck_mesh: str = "/Engine/BasicShapes/Cube.Cube",
-    dry_run: bool = False
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a multi-tier Roman-style aqueduct with arches and water channel."""
     try:
@@ -958,7 +1045,7 @@ def create_aqueduct(
 
         total_length = arches * (2 * arch_radius + pier_width) + pier_width
 
-        sink = DryRunActorSink() if dry_run else UnrealActorSink()
+        sink = DryRunActorSink() if dry_run else make_actor_sink(target=target, scene_id=scene_id, group_id=group_id)
         counts = build_aqueduct_structure(
             None,
             arches,
@@ -984,7 +1071,7 @@ def create_aqueduct(
 
         result = sink.flush()
         if dry_run:
-            actual_count = len(sink.specs) if hasattr(sink, 'specs') else total_actors
+            actual_count = sink.count() if hasattr(sink, 'specs') else total_actors
             result["message"] = f"Would spawn {actual_count} actors for aqueduct."
         else:
             result["message"] = f"Created {tiers}-tier aqueduct with {arches} arches ({total_actors} components)"

@@ -98,13 +98,9 @@ from server.scene_tools import (
 )
 
 
-# Import tool modules to register their @mcp.tool() decorated functions.
-# These side-effect imports attach tools to the shared `mcp` instance.
-from server import actor_tools        # noqa: F401
-from server import material_tools      # noqa: F401
-from server import blueprint_tools     # noqa: F401
-from server import blueprint_graph_tools  # noqa: F401
-from server import world_building_tools  # noqa: F401
+# Explicitly bootstrap tool registration to avoid heavy import side-effects.
+from server import bootstrap
+bootstrap()
 
 # Re-export the mcp instance for any external consumers
 __all__ = [

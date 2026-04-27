@@ -78,8 +78,8 @@ class TestDryRunActorSink:
         sink.spawn(_make_spec(mcp_id="a"))
         sink.spawn(_make_spec(mcp_id="b"))
         result = sink.flush()
-        assert result["count"] == 2
-        assert result["dry_run"] is True
+        assert result["generated_count"] == 2
+        assert result["target"] == "dry_run"
 
     def test_delete_records_mcp_id(self):
         sink = DryRunActorSink()
@@ -90,7 +90,7 @@ class TestDryRunActorSink:
     def test_empty_flush(self):
         sink = DryRunActorSink()
         result = sink.flush()
-        assert result["count"] == 0
+        assert result["generated_count"] == 0
 
 
 class TestSceneDbActorSink:
@@ -110,6 +110,7 @@ class TestSceneDbActorSink:
     def test_empty_flush_no_call(self):
         sink = SceneDbActorSink(scene_id="main")
         result = sink.flush()
+        assert result["generated_count"] == 0
         assert result["upserted_count"] == 0
 
 
@@ -148,13 +149,14 @@ class TestUnrealActorSink:
         sink = UnrealActorSink()
         result = sink.flush()
         assert result["success"] is True
-        assert result["count"] == 0
+        assert result["generated_count"] == 0
+        assert result["target"] == "unreal"
 
-    def test_delete_calls_safe_delete_actor(self):
+    def test_delete_calls_safe_delete_actor_by_mcp_id(self):
         sink = UnrealActorSink()
         mock_resp = {"status": "success"}
         with patch("server.core.get_unreal_connection") as mock_conn, \
-             patch("helpers.actor_name_manager.safe_delete_actor", return_value=mock_resp) as mock_delete:
+             patch("helpers.actor_name_manager.safe_delete_actor_by_mcp_id", return_value=mock_resp) as mock_delete:
             result = sink.delete("obj_42")
             mock_delete.assert_called_once()
             assert result == mock_resp

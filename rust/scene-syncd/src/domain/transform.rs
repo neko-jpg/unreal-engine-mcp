@@ -7,6 +7,8 @@ struct DesiredHashPayload {
     asset_ref: serde_json::Value,
     transform: TransformPayload,
     tags: Vec<String>,
+    visual: serde_json::Value,
+    physics: serde_json::Value,
 }
 
 #[derive(serde::Serialize)]
@@ -44,6 +46,8 @@ pub fn compute_desired_hash(obj: &SceneObject) -> Result<String, String> {
             ],
         },
         tags: sorted_tags,
+        visual: obj.visual.clone(),
+        physics: obj.physics.clone(),
     };
 
     let bytes =
@@ -132,6 +136,24 @@ mod tests {
         obj1.tags.push("pyramid".to_string());
         let h2 = compute_desired_hash(&obj1).unwrap();
         assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn hash_changes_on_visual() {
+        let mut obj1 = make_obj();
+        let h1 = compute_desired_hash(&obj1).unwrap();
+        obj1.visual = serde_json::json!({"color_r": 1.0, "color_g": 0.0, "color_b": 0.0});
+        let h2 = compute_desired_hash(&obj1).unwrap();
+        assert_ne!(h1, h2, "hash should change when visual fields change");
+    }
+
+    #[test]
+    fn hash_changes_on_physics() {
+        let mut obj1 = make_obj();
+        let h1 = compute_desired_hash(&obj1).unwrap();
+        obj1.physics = serde_json::json!({"simulate_physics": true, "mass": 10.0});
+        let h2 = compute_desired_hash(&obj1).unwrap();
+        assert_ne!(h1, h2, "hash should change when physics fields change");
     }
 
     #[test]

@@ -149,6 +149,44 @@ def validate_unreal_path(value: Any, field_name: str) -> str:
     return value
 
 
+import re
+
+_MCP_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_SCENE_ID_INVALID_CHARS = re.compile(r'[\s/\\\x00-\x1f\x7f]')
+
+
+def sanitize_mcp_id(value: str) -> str:
+    """Sanitize an mcp_id to match Rust-side validation rules.
+
+    Spaces and slashes are replaced with underscores. The result must
+    match ^[A-Za-z0-9_.:-]+$. Raises ValidationError if empty after sanitization.
+    """
+    if not isinstance(value, str):
+        raise ValidationError("mcp_id", f"must be a string, got {type(value).__name__}")
+    value = value.strip()
+    value = value.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    if not value:
+        raise ValidationError("mcp_id", "must not be empty after sanitization")
+    if not _MCP_ID_PATTERN.match(value):
+        raise ValidationError("mcp_id", f"contains invalid characters: '{value}'")
+    return value
+
+
+def normalize_scene_id(value: str) -> str:
+    """Normalize a scene_id by stripping the 'scene:' prefix and validating."""
+    if not isinstance(value, str):
+        raise ValidationError("scene_id", f"must be a string, got {type(value).__name__}")
+    value = value.strip()
+    if value.startswith("scene:"):
+        value = value[len("scene:"):]
+    value = value.strip()
+    if not value:
+        raise ValidationError("scene_id", "must not be empty after normalization")
+    if _SCENE_ID_INVALID_CHARS.search(value):
+        raise ValidationError("scene_id", f"contains invalid characters: '{value}'")
+    return value
+
+
 def make_validation_error_response(error: ValidationError) -> Dict[str, Any]:
     return make_error_response(f"Validation error: {error.field}: {error.message}")
 

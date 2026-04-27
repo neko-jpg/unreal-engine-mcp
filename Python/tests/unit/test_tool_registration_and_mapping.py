@@ -263,17 +263,24 @@ class TestPythonToCppCommandMapping:
     def _collect_cpp_commands(self):
         """Parse C++ dispatcher condition strings to find supported commands."""
         project_root = Path(__file__).resolve().parents[3]
-        cpp_dir = project_root / "FlopperamUnrealMCP" / "Plugins" / "UnrealMCP" / "Source" / "UnrealMCP" / "Private"
+        # Search both canonical locations (Flopperam project and root Plugins)
+        search_paths = [
+            project_root / "FlopperamUnrealMCP" / "Plugins" / "UnrealMCP" / "Source" / "UnrealMCP" / "Private",
+            project_root / "Plugins" / "UnrealMCP" / "Source" / "UnrealMCP" / "Private",
+        ]
         commands = set()
-        for cpp_file in cpp_dir.rglob("EpicUnrealMCP*.cpp"):
-            text = cpp_file.read_text(encoding="utf-8")
-            for m in re.finditer(r'CommandType\s*==\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
-                commands.add(m.group(1))
-            for m in re.finditer(r'HandleCommand\s*\(\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
-                commands.add(m.group(1))
-            # TMap-based dispatch: {TEXT("command_name"), bucket}
-            for m in re.finditer(r'\{\s*TEXT\s*\(\s*"([^"]+)"\s*\)\s*,\s*\d+\s*\}', text):
-                commands.add(m.group(1))
+        for cpp_dir in search_paths:
+            if not cpp_dir.exists():
+                continue
+            for cpp_file in cpp_dir.rglob("EpicUnrealMCP*.cpp"):
+                text = cpp_file.read_text(encoding="utf-8")
+                for m in re.finditer(r'CommandType\s*==\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
+                    commands.add(m.group(1))
+                for m in re.finditer(r'HandleCommand\s*\(\s*TEXT\s*\(\s*"([^"]+)"\s*\)', text, re.DOTALL):
+                    commands.add(m.group(1))
+                # TMap-based dispatch: {TEXT("command_name"), bucket}
+                for m in re.finditer(r'\{\s*TEXT\s*\(\s*"([^"]+)"\s*\)\s*,\s*\d+\s*\}', text):
+                    commands.add(m.group(1))
         return commands
 
     def _collect_python_commands(self):
@@ -311,7 +318,7 @@ class TestPythonToCppCommandMapping:
         py_cmds = self._collect_python_commands()
         cpp_cmds = self._collect_cpp_commands()
         missing = cpp_cmds - py_cmds
-        whitelist = {"ping"}
+        whitelist = {"ping", "apply_scene_delta"}
         actual_missing = missing - whitelist
         assert not actual_missing, (
             f"C++ supports these commands but Python tools never send them: {actual_missing}"
@@ -378,7 +385,7 @@ class TestPythonToCppCommandMapping:
         """All C++ commands should be reachable through at least one MCP tool."""
         py_cmds = self._collect_python_commands()
         cpp_cmds = self._collect_cpp_commands()
-        unreachable = cpp_cmds - py_cmds - {"ping"}
+        unreachable = cpp_cmds - py_cmds - {"ping", "apply_scene_delta"}
         assert not unreachable, (
             f"C++ commands not reachable through any Python tool: {unreachable}"
         )

@@ -11,68 +11,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from server.specs.actor_spec import ActorSpec, params_to_spec
+
 logger = logging.getLogger("UnrealMCP_Advanced")
-
-
-@dataclass
-class ActorSpec:
-    """Canonical actor description that generators produce.
-
-    All sinks accept this format. Conversion to backend-specific wire
-    formats happens inside each sink, not in generators.
-    """
-
-    mcp_id: str
-    desired_name: str
-    actor_type: str = "StaticMeshActor"
-    asset_ref: Dict[str, Any] = field(default_factory=lambda: {"path": "/Engine/BasicShapes/Cube.Cube"})
-    transform: Dict[str, Any] = field(default_factory=lambda: {
-        "location": {"x": 0.0, "y": 0.0, "z": 0.0},
-        "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
-        "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
-    })
-    tags: List[str] = field(default_factory=list)
-    group_id: Optional[str] = None
-    visual: Dict[str, Any] = field(default_factory=dict)
-    physics: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def to_db_dict(self, scene_id: str = "main") -> Dict[str, Any]:
-        """Convert to the dict format expected by the scene-syncd bulk-upsert API."""
-        d: Dict[str, Any] = {
-            "scene_id": scene_id,
-            "mcp_id": self.mcp_id,
-            "desired_name": self.desired_name,
-            "actor_type": self.actor_type,
-            "asset_ref": self.asset_ref,
-            "transform": self.transform,
-            "tags": self.tags,
-        }
-        if self.group_id is not None:
-            d["group_id"] = self.group_id
-        if self.visual:
-            d["visual"] = self.visual
-        if self.physics:
-            d["physics"] = self.physics
-        if self.metadata:
-            d["metadata"] = self.metadata
-        return d
-
-    def to_unreal_dict(self) -> Dict[str, Any]:
-        """Convert to the Unreal bridge wire format (arrays for location/rotation/scale)."""
-        loc = self.transform.get("location", {})
-        rot = self.transform.get("rotation", {})
-        scl = self.transform.get("scale", {})
-        return {
-            "name": self.desired_name,
-            "mcp_id": self.mcp_id,
-            "type": self.actor_type,
-            "location": [loc.get("x", 0.0), loc.get("y", 0.0), loc.get("z", 0.0)],
-            "rotation": [rot.get("pitch", 0.0), rot.get("yaw", 0.0), rot.get("roll", 0.0)],
-            "scale": [scl.get("x", 1.0), scl.get("y", 1.0), scl.get("z", 1.0)],
-            "static_mesh": self.asset_ref.get("path", ""),
-            "tags": self.tags,
-        }
 
 
 class ActorSink(ABC):
@@ -89,6 +30,11 @@ class ActorSink(ABC):
         ...
 
     @abstractmethod
+    def count(self) -> int:
+        """Return the number of actors managed by this sink."""
+        ...
+
+    @abstractmethod
     def delete(self, mcp_id: str) -> Dict[str, Any]:
         """Mark actor for deletion."""
         ...
@@ -101,14 +47,16 @@ class SceneDbActorSink(ActorSink):
         self.scene_id = scene_id
         self.group_id = group_id
         self._buffer: List[Dict[str, Any]] = []
+        self._total_count: int = 0
 
     def spawn(self, spec: ActorSpec) -> Dict[str, Any]:
         self._buffer.append(spec.to_db_dict(self.scene_id))
+        self._total_count += 1
         return {"success": True, "buffered": True, "mcp_id": spec.mcp_id}
 
     def flush(self) -> Dict[str, Any]:
         if not self._buffer:
-            return {"success": True, "upserted_count": 0, "message": "nothing to flush"}
+            return {"success": True, "target": "scene_db", "generated_count": 0, "upserted_count": 0, "error_count": 0, "total_spawned": self._total_count, "message": "nothing to flush"}
 
         from server.scene_client import call_scene_syncd
 
@@ -119,14 +67,24 @@ class SceneDbActorSink(ActorSink):
         if self.group_id is not None:
             payload["group_id"] = self.group_id
 
-        result = call_scene_syncd("/objects/bulk-upsert", payload)
+        raw = call_scene_syncd("/objects/bulk-upsert", payload)
         count = len(self._buffer)
-        self._buffer.clear()
-        if result.get("success") is False:
-            result["message"] = f"scene-syncd bulk-upsert failed after flushing {count} objects"
+
+        error_count = raw.get("error_count", 0)
+        partial_success = raw.get("partial_success", False)
+        success = raw.get("success", False)
+
+        if success and error_count == 0:
+            self._buffer.clear()
+            return {"success": True, "target": "scene_db", "generated_count": count, "upserted_count": count, "error_count": 0, "total_spawned": self._total_count, "message": f"Flushed {count} objects to scene-syncd"}
+        elif partial_success or (success and error_count > 0):
+            return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": count - error_count, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert partially failed: {error_count} of {count} objects failed"}
         else:
-            result["message"] = f"Flushed {count} objects to scene-syncd"
-        return result
+            self._buffer.clear()
+            return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": 0, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert failed after flushing {count} objects"}
+
+    def count(self) -> int:
+        return self._total_count
 
     def delete(self, mcp_id: str) -> Dict[str, Any]:
         from server.scene_client import call_scene_syncd
@@ -138,6 +96,7 @@ class UnrealActorSink(ActorSink):
 
     def __init__(self) -> None:
         self._count = 0
+        self._total_count = 0  # survives flush()
 
     def spawn(self, spec: ActorSpec) -> Dict[str, Any]:
         from helpers.actor_name_manager import safe_spawn_actor
@@ -147,12 +106,16 @@ class UnrealActorSink(ActorSink):
         result = safe_spawn_actor(unreal, spec.to_unreal_dict())
         if result and result.get("success"):
             self._count += 1
+            self._total_count += 1
         return result
 
     def flush(self) -> Dict[str, Any]:
         count = self._count
         self._count = 0
-        return {"success": True, "count": count, "message": f"UnrealActorSink: {count} actors spawned"}
+        return {"success": True, "target": "unreal", "generated_count": count, "upserted_count": None, "error_count": None, "total_spawned": self._total_count, "message": f"UnrealActorSink: {count} actors spawned (total: {self._total_count})"}
+
+    def count(self) -> int:
+        return self._total_count
 
     def delete(self, mcp_id: str) -> Dict[str, Any]:
         from helpers.actor_name_manager import safe_delete_actor_by_mcp_id
@@ -177,26 +140,37 @@ class DryRunActorSink(ActorSink):
         count = len(self.specs)
         return {
             "success": True,
+            "target": "dry_run",
             "dry_run": True,
-            "count": count,
-            "specs": self.specs,
+            "count": count,  # backward compat alias
+            "generated_count": count,
+            "upserted_count": None,
+            "error_count": None,
+            "total_spawned": count,
             "message": f"Dry run: {count} actors would be spawned",
         }
+
+    def count(self) -> int:
+        return len(self.specs)
 
     def delete(self, mcp_id: str) -> Dict[str, Any]:
         self.deletions.append(mcp_id)
         return {"success": True, "dry_run": True, "mcp_id": mcp_id}
 
 
-def _coerce_vec3(value: Any, default: List[float]) -> List[float]:
-    """Coerce a value to a 3-element float list, accepting both list and dict forms."""
-    if isinstance(value, dict):
-        return [float(value.get("x", default[0])), float(value.get("y", default[1])), float(value.get("z", default[2]))]
-    if isinstance(value, (list, tuple)) and len(value) >= 3:
-        return [float(value[0]), float(value[1]), float(value[2])]
-    if isinstance(value, (list, tuple)):
-        return default
-    return default
+def make_actor_sink(
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
+) -> ActorSink:
+    """Factory for creating the appropriate ActorSink based on target."""
+    if target == "dry_run":
+        return DryRunActorSink()
+    if target == "scene_db":
+        return SceneDbActorSink(scene_id=scene_id, group_id=group_id)
+    if target == "unreal":
+        return UnrealActorSink()
+    raise ValueError(f"Unknown target: {target}")
 
 
 def _spawn_actor_via_sink_or_direct(
@@ -220,30 +194,3 @@ def _spawn_actor_via_sink_or_direct(
     return resp is not None and is_success_response(resp)
 
 
-def params_to_spec(
-    params: Dict[str, Any],
-    tags: Optional[List[str]] = None,
-    group_id: Optional[str] = None,
-) -> ActorSpec:
-    """Convert an Unreal wire-format params dict to an ActorSpec.
-
-    This is the inverse of ActorSpec.to_unreal_dict() and is used when
-    migrating helper modules that construct params dicts for safe_spawn_actor.
-    """
-    loc = _coerce_vec3(params.get("location"), [0.0, 0.0, 0.0])
-    rot = _coerce_vec3(params.get("rotation"), [0.0, 0.0, 0.0])
-    scl = _coerce_vec3(params.get("scale"), [1.0, 1.0, 1.0])
-    mcp_id = params.get("mcp_id") or params.get("name", "")
-    return ActorSpec(
-        mcp_id=mcp_id,
-        desired_name=params.get("name", ""),
-        actor_type=params.get("type", "StaticMeshActor"),
-        asset_ref={"path": params.get("static_mesh", "/Engine/BasicShapes/Cube.Cube")},
-        transform={
-            "location": {"x": loc[0], "y": loc[1], "z": loc[2]},
-            "rotation": {"pitch": rot[0], "yaw": rot[1], "roll": rot[2]},
-            "scale": {"x": scl[0], "y": scl[1], "z": scl[2]},
-        },
-        tags=tags or [],
-        group_id=group_id,
-    )

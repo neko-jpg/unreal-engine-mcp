@@ -6,7 +6,8 @@ use surrealdb::Surreal;
 
 /// Build a scene_object record key, stripping any `scene:` prefix from the scene id.
 pub fn scene_object_record_key(scene_id: &str, mcp_id: &str) -> String {
-    format!("{}:{}", scene_id.replace("scene:", ""), mcp_id)
+    let id = scene_id.strip_prefix("scene:").unwrap_or(scene_id);
+    format!("{}:{}", id, mcp_id)
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +127,100 @@ impl SurrealSceneRepository {
             "DEFINE FIELD tags ON TABLE actor_observation TYPE array;",
             "DEFINE FIELD raw ON TABLE actor_observation TYPE option<object>;",
             "DEFINE FIELD observed_at ON TABLE actor_observation TYPE datetime DEFAULT time::now();",
+
+            "DEFINE TABLE generator_run SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE generator_run TYPE string;",
+            "DEFINE FIELD kind ON TABLE generator_run TYPE string;",
+            "DEFINE FIELD tool_name ON TABLE generator_run TYPE string;",
+            "DEFINE FIELD name ON TABLE generator_run TYPE string;",
+            "DEFINE FIELD params ON TABLE generator_run TYPE object DEFAULT {};",
+            "DEFINE FIELD seed ON TABLE generator_run TYPE option<string>;",
+            "DEFINE FIELD group_id ON TABLE generator_run TYPE option<string>;",
+            "DEFINE FIELD generated_count ON TABLE generator_run TYPE int DEFAULT 0;",
+            "DEFINE FIELD status ON TABLE generator_run TYPE string DEFAULT 'completed';",
+            "DEFINE FIELD created_at ON TABLE generator_run TYPE datetime DEFAULT time::now();",
+
+            // P3: Semantic tables
+            "DEFINE TABLE scene_entity SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD entity_id ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD kind ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD name ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD properties ON TABLE scene_entity TYPE object DEFAULT {};",
+            "DEFINE FIELD tags ON TABLE scene_entity TYPE array DEFAULT [];",
+            "DEFINE FIELD tags.* ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD mcp_ids ON TABLE scene_entity TYPE array DEFAULT [];",
+            "DEFINE FIELD mcp_ids.* ON TABLE scene_entity TYPE string;",
+            "DEFINE FIELD metadata ON TABLE scene_entity TYPE object DEFAULT {};",
+            "DEFINE FIELD deleted ON TABLE scene_entity TYPE bool DEFAULT false;",
+            "DEFINE FIELD revision ON TABLE scene_entity TYPE int DEFAULT 1;",
+            "DEFINE FIELD created_at ON TABLE scene_entity TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_entity TYPE datetime DEFAULT time::now();",
+            "DEFINE INDEX scene_entity_scene_entity_id ON TABLE scene_entity COLUMNS scene, entity_id UNIQUE;",
+
+            "DEFINE TABLE scene_relation SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_relation TYPE string;",
+            "DEFINE FIELD relation_id ON TABLE scene_relation TYPE string;",
+            "DEFINE FIELD source_entity_id ON TABLE scene_relation TYPE string;",
+            "DEFINE FIELD target_entity_id ON TABLE scene_relation TYPE string;",
+            "DEFINE FIELD relation_type ON TABLE scene_relation TYPE string;",
+            "DEFINE FIELD properties ON TABLE scene_relation TYPE object DEFAULT {};",
+            "DEFINE FIELD metadata ON TABLE scene_relation TYPE object DEFAULT {};",
+            "DEFINE FIELD created_at ON TABLE scene_relation TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_relation TYPE datetime DEFAULT time::now();",
+            "DEFINE INDEX scene_relation_scene_id ON TABLE scene_relation COLUMNS scene, relation_id UNIQUE;",
+
+            // Reserved for P6 (NavMesh/Collision/AI) and future implementation.
+            "DEFINE TABLE scene_component SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_component TYPE string;",
+            "DEFINE FIELD entity_id ON TABLE scene_component TYPE string;",
+            "DEFINE FIELD component_type ON TABLE scene_component TYPE string;",
+            "DEFINE FIELD name ON TABLE scene_component TYPE string;",
+            "DEFINE FIELD properties ON TABLE scene_component TYPE object DEFAULT {};",
+            "DEFINE FIELD metadata ON TABLE scene_component TYPE object DEFAULT {};",
+            "DEFINE FIELD created_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
+
+            "DEFINE TABLE scene_asset SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_asset TYPE string;",
+            "DEFINE FIELD asset_id ON TABLE scene_asset TYPE string;",
+            "DEFINE FIELD kind ON TABLE scene_asset TYPE string;",
+            "DEFINE FIELD status ON TABLE scene_asset TYPE string DEFAULT 'present';",
+            "DEFINE FIELD fallback ON TABLE scene_asset TYPE string DEFAULT '';",
+            "DEFINE FIELD semantic_tags ON TABLE scene_asset TYPE array DEFAULT [];",
+            "DEFINE FIELD semantic_tags.* ON TABLE scene_asset TYPE string;",
+            "DEFINE FIELD quality ON TABLE scene_asset TYPE string DEFAULT 'prototype';",
+            "DEFINE FIELD variants ON TABLE scene_asset TYPE object DEFAULT {};",
+            "DEFINE FIELD metadata ON TABLE scene_asset TYPE object DEFAULT {};",
+            "DEFINE FIELD created_at ON TABLE scene_asset TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_asset TYPE datetime DEFAULT time::now();",
+            "DEFINE INDEX scene_asset_scene_id ON TABLE scene_asset COLUMNS scene, asset_id UNIQUE;",
+
+            // Reserved for P6 (NavMesh/Collision/AI) and future implementation.
+            "DEFINE TABLE scene_blueprint SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_blueprint TYPE string;",
+            "DEFINE FIELD blueprint_id ON TABLE scene_blueprint TYPE string;",
+            "DEFINE FIELD class_name ON TABLE scene_blueprint TYPE string;",
+            "DEFINE FIELD parent_class ON TABLE scene_blueprint TYPE string DEFAULT '';",
+            "DEFINE FIELD components ON TABLE scene_blueprint TYPE array DEFAULT [];",
+            "DEFINE FIELD components.* ON TABLE scene_blueprint TYPE object;",
+            "DEFINE FIELD variables ON TABLE scene_blueprint TYPE array DEFAULT [];",
+            "DEFINE FIELD variables.* ON TABLE scene_blueprint TYPE object;",
+            "DEFINE FIELD metadata ON TABLE scene_blueprint TYPE object DEFAULT {};",
+            "DEFINE FIELD created_at ON TABLE scene_blueprint TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_blueprint TYPE datetime DEFAULT time::now();",
+            "DEFINE INDEX scene_blueprint_scene_id ON TABLE scene_blueprint COLUMNS scene, blueprint_id UNIQUE;",
+
+            // Reserved for P6 (NavMesh/Collision/AI) and future implementation.
+            "DEFINE TABLE scene_realization SCHEMAFULL;",
+            "DEFINE FIELD OVERWRITE scene ON TABLE scene_realization TYPE string;",
+            "DEFINE FIELD entity_id ON TABLE scene_realization TYPE string;",
+            "DEFINE FIELD policy ON TABLE scene_realization TYPE string;",
+            "DEFINE FIELD status ON TABLE scene_realization TYPE string DEFAULT 'pending';",
+            "DEFINE FIELD unreal_actor_name ON TABLE scene_realization TYPE option<string>;",
+            "DEFINE FIELD metadata ON TABLE scene_realization TYPE object DEFAULT {};",
+            "DEFINE FIELD created_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
+            "DEFINE FIELD updated_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
         ];
 
         for query in &queries {
@@ -243,25 +338,7 @@ impl SurrealSceneRepository {
         let updated: Option<SceneObject> = self
             .db
             .query(
-                "IF type::thing($table, $key).id THEN \
-                 UPDATE type::thing($table, $key) SET \
-                    scene = $scene, \
-                    group = $group, \
-                    mcp_id = $mcp_id, \
-                    desired_name = $desired_name, \
-                    actor_type = $actor_type, \
-                    asset_ref = $asset_ref, \
-                    transform = $transform, \
-                    visual = $visual, \
-                    physics = $physics, \
-                    tags = $tags, \
-                    metadata = $metadata, \
-                    desired_hash = $desired_hash, \
-                    deleted = $deleted, \
-                    sync_status = 'pending', \
-                    updated_at = time::now() \
-                 ELSE \
-                 CREATE type::thing($table, $key) CONTENT { \
+                "UPSERT type::thing($table, $key) MERGE { \
                     scene: $scene, \
                     group: $group, \
                     mcp_id: $mcp_id, \
@@ -276,10 +353,8 @@ impl SurrealSceneRepository {
                     desired_hash: $desired_hash, \
                     deleted: $deleted, \
                     sync_status: 'pending', \
-                    created_at: time::now(), \
                     updated_at: time::now() \
-                 } \
-                 END",
+                 }",
             )
             .bind(("table", "scene_object"))
             .bind(("key", key_owned))
@@ -320,14 +395,17 @@ impl SurrealSceneRepository {
         }
         let where_clause = conditions.join(" AND ");
         let mut query = format!("SELECT * FROM scene_object WHERE {where_clause}");
-        if let Some(n) = limit {
-            query.push_str(&format!(" LIMIT {n}"));
+        if limit.is_some() {
+            query.push_str(" LIMIT $limit");
         }
 
         let mut q = self
             .db
             .query(query)
             .bind(("scene", format!("scene:{scene}")));
+        if let Some(n) = limit {
+            q = q.bind(("limit", n));
+        }
         if let Some(gid) = group_id {
             q = q.bind(("group", format!("scene_group:{gid}")));
         }
@@ -419,6 +497,55 @@ impl SurrealSceneRepository {
             .map_err(|e| AppError::Database(format!("list groups parse error: {e}")))?;
 
         Ok(groups)
+    }
+
+    pub async fn create_generator_run(
+        &self,
+        scene_id: &str,
+        kind: &str,
+        tool_name: &str,
+        name: &str,
+        params: serde_json::Value,
+        seed: Option<String>,
+        group_id: Option<String>,
+        generated_count: i64,
+    ) -> Result<GeneratorRun, AppError> {
+        let now = Datetime::from(chrono::Utc::now());
+        let run_id = format!("{scene_id}:{tool_name}:{}", ulid::Ulid::new());
+        let run = GeneratorRun {
+            id: format!("generator_run:{run_id}"),
+            scene: format!("scene:{scene_id}"),
+            kind: kind.to_string(),
+            tool_name: tool_name.to_string(),
+            name: name.to_string(),
+            params,
+            seed,
+            group_id,
+            generated_count,
+            status: "completed".to_string(),
+            created_at: now,
+        };
+
+        let created: Option<GeneratorRun> = self
+            .db
+            .create(("generator_run", run_id.as_str()))
+            .content(run)
+            .await
+            .map_err(|e| AppError::Database(format!("create generator_run error: {e}")))?;
+
+        created.ok_or_else(|| AppError::Internal("failed to create generator_run".to_string()))
+    }
+
+    pub async fn get_generator_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<GeneratorRun>, AppError> {
+        let run: Option<GeneratorRun> = self
+            .db
+            .select(("generator_run", run_id))
+            .await
+            .map_err(|e| AppError::Database(format!("get generator_run error: {e}")))?;
+        Ok(run)
     }
 
     pub async fn create_snapshot(
@@ -669,6 +796,212 @@ impl SurrealSceneRepository {
 
         Ok(())
     }
+
+    // ------------------------------------------------------------------
+    // P3: Semantic repository methods
+    // ------------------------------------------------------------------
+
+    pub async fn upsert_entity(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        kind: &str,
+        name: &str,
+        properties: serde_json::Value,
+        tags: Vec<String>,
+        mcp_ids: Vec<String>,
+        metadata: serde_json::Value,
+    ) -> Result<SceneEntity, AppError> {
+        let record_key = format!("{scene_id}:{entity_id}");
+        let updated: Option<SceneEntity> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    entity_id: $entity_id, \
+                    kind: $kind, \
+                    name: $name, \
+                    properties: $properties, \
+                    tags: $tags, \
+                    mcp_ids: $mcp_ids, \
+                    metadata: $metadata, \
+                    deleted: $deleted, \
+                    revision: $revision, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_entity"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("entity_id", entity_id.to_string()))
+            .bind(("kind", kind.to_string()))
+            .bind(("name", name.to_string()))
+            .bind(("properties", properties))
+            .bind(("tags", tags))
+            .bind(("mcp_ids", mcp_ids))
+            .bind(("metadata", metadata))
+            .bind(("deleted", false))
+            .bind(("revision", 1))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert entity error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert entity parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert entity".to_string()))
+    }
+
+    pub async fn list_entities(
+        &self,
+        scene_id: &str,
+        kind: Option<&str>,
+    ) -> Result<Vec<SceneEntity>, AppError> {
+        let mut query = "SELECT * FROM scene_entity WHERE scene = $scene AND deleted = false".to_string();
+        if kind.is_some() {
+            query.push_str(" AND kind = $kind");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(k) = kind {
+            q = q.bind(("kind", k.to_string()));
+        }
+        let entities: Vec<SceneEntity> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list entities error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list entities parse error: {e}")))?;
+        Ok(entities)
+    }
+
+    pub async fn upsert_relation(
+        &self,
+        scene_id: &str,
+        relation_id: &str,
+        source_entity_id: &str,
+        target_entity_id: &str,
+        relation_type: &str,
+        properties: serde_json::Value,
+        metadata: serde_json::Value,
+    ) -> Result<SceneRelation, AppError> {
+        let record_key = format!("{scene_id}:{relation_id}");
+        let updated: Option<SceneRelation> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    relation_id: $relation_id, \
+                    source_entity_id: $source_entity_id, \
+                    target_entity_id: $target_entity_id, \
+                    relation_type: $relation_type, \
+                    properties: $properties, \
+                    metadata: $metadata, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_relation"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("relation_id", relation_id.to_string()))
+            .bind(("source_entity_id", source_entity_id.to_string()))
+            .bind(("target_entity_id", target_entity_id.to_string()))
+            .bind(("relation_type", relation_type.to_string()))
+            .bind(("properties", properties))
+            .bind(("metadata", metadata))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert relation error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert relation parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert relation".to_string()))
+    }
+
+    pub async fn list_relations(
+        &self,
+        scene_id: &str,
+        relation_type: Option<&str>,
+    ) -> Result<Vec<SceneRelation>, AppError> {
+        let mut query = "SELECT * FROM scene_relation WHERE scene = $scene".to_string();
+        if relation_type.is_some() {
+            query.push_str(" AND relation_type = $relation_type");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(rt) = relation_type {
+            q = q.bind(("relation_type", rt.to_string()));
+        }
+        let relations: Vec<SceneRelation> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list relations error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list relations parse error: {e}")))?;
+        Ok(relations)
+    }
+
+    pub async fn upsert_asset(
+        &self,
+        scene_id: &str,
+        asset_id: &str,
+        kind: &str,
+        status: &str,
+        fallback: &str,
+        semantic_tags: Vec<String>,
+        quality: &str,
+        variants: serde_json::Value,
+        metadata: serde_json::Value,
+    ) -> Result<SceneAsset, AppError> {
+        let record_key = format!("{scene_id}:{asset_id}");
+        let updated: Option<SceneAsset> = self
+            .db
+            .query(
+                "UPSERT type::thing($table, $key) MERGE { \
+                    scene: $scene, \
+                    asset_id: $asset_id, \
+                    kind: $kind, \
+                    status: $status, \
+                    fallback: $fallback, \
+                    semantic_tags: $semantic_tags, \
+                    quality: $quality, \
+                    variants: $variants, \
+                    metadata: $metadata, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_asset"))
+            .bind(("key", record_key.clone()))
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("asset_id", asset_id.to_string()))
+            .bind(("kind", kind.to_string()))
+            .bind(("status", status.to_string()))
+            .bind(("fallback", fallback.to_string()))
+            .bind(("semantic_tags", semantic_tags))
+            .bind(("quality", quality.to_string()))
+            .bind(("variants", variants))
+            .bind(("metadata", metadata))
+            .await
+            .map_err(|e| AppError::Database(format!("upsert asset error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("upsert asset parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::Internal("failed to upsert asset".to_string()))
+    }
+
+    pub async fn list_assets(
+        &self,
+        scene_id: &str,
+        kind: Option<&str>,
+    ) -> Result<Vec<SceneAsset>, AppError> {
+        let mut query = "SELECT * FROM scene_asset WHERE scene = $scene".to_string();
+        if kind.is_some() {
+            query.push_str(" AND kind = $kind");
+        }
+        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        if let Some(k) = kind {
+            q = q.bind(("kind", k.to_string()));
+        }
+        let assets: Vec<SceneAsset> = q
+            .await
+            .map_err(|e| AppError::Database(format!("list assets error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("list assets parse error: {e}")))?;
+        Ok(assets)
+    }
 }
 
 #[cfg(test)]
@@ -693,8 +1026,8 @@ mod tests {
     }
 
     #[test]
-    fn record_key_double_prefix_stripped() {
-        // .replace replaces all occurrences
-        assert_eq!(scene_object_record_key("scene:scene:x", "obj"), "x:obj");
+    fn record_key_strips_only_first_prefix() {
+        // strip_prefix removes only the first occurrence
+        assert_eq!(scene_object_record_key("scene:scene:x", "obj"), "scene:x:obj");
     }
 }

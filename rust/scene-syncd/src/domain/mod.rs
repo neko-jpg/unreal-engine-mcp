@@ -86,6 +86,26 @@ pub struct SceneGroup {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub struct GeneratorRun {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub kind: String,
+    pub tool_name: String,
+    pub name: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    pub generated_count: i64,
+    pub status: String,
+    pub created_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneObject {
     #[serde(default, skip_serializing, skip_deserializing)]
     #[allow(dead_code)]
@@ -133,4 +153,120 @@ pub struct SceneSnapshot {
     #[serde(default)]
     pub objects: Vec<SceneObject>,
     pub created_at: Datetime,
+}
+
+// ------------------------------------------------------------------
+// P3: Semantic layer domain types
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneEntity {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub entity_id: String,
+    pub kind: String,
+    pub name: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub mcp_ids: Vec<String>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub deleted: bool,
+    pub revision: i64,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneRelation {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub relation_id: String,
+    pub source_entity_id: String,
+    pub target_entity_id: String,
+    pub relation_type: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneComponent {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub entity_id: String,
+    pub component_type: String,
+    pub name: String,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneAsset {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub asset_id: String,
+    pub kind: String,
+    pub status: String,
+    #[serde(default)]
+    pub fallback: String,
+    #[serde(default)]
+    pub semantic_tags: Vec<String>,
+    pub quality: String,
+    #[serde(default)]
+    pub variants: serde_json::Value,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneBlueprint {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub blueprint_id: String,
+    pub class_name: String,
+    #[serde(default)]
+    pub parent_class: String,
+    #[serde(default)]
+    pub components: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub variables: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneRealization {
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub id: String,
+    pub scene: String,
+    pub entity_id: String,
+    pub policy: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unreal_actor_name: Option<String>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    pub created_at: Datetime,
+    pub updated_at: Datetime,
 }
