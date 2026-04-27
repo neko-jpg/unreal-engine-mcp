@@ -36,14 +36,15 @@ uint32 FMCPServerRunnable::Run()
         bool bPending = false;
         if (ListenerSocket && ListenerSocket->HasPendingConnection(bPending) && bPending)
         {
-            ClientSocket = ListenerSocket->Accept(TEXT("MCPClient"));
-            if (ClientSocket)
+            FSocket* NewClientSocket = ListenerSocket->Accept(TEXT("MCPClient"));
+            ClientSocket.store(NewClientSocket);
+            if (NewClientSocket)
             {
-                ClientSocket->SetNonBlocking(true);
-                ClientSocket->SetNoDelay(true);
+                NewClientSocket->SetNonBlocking(true);
+                NewClientSocket->SetNoDelay(true);
                 int32 SocketBufferSize = 65536;
-                ClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
-                ClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
+                NewClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
+                NewClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
 
                 // Receive loop with newline-delimited framing
                 const int32 ChunkSize = 65536;
@@ -53,12 +54,12 @@ uint32 FMCPServerRunnable::Run()
                 while (bRunning)
                 {
                     int32 BytesRead = 0;
-                    if (!ClientSocket->Recv(Buffer, ChunkSize - 1, BytesRead))
+                    if (!NewClientSocket->Recv(Buffer, ChunkSize - 1, BytesRead))
                     {
                         int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
                         if (LastError == SE_EWOULDBLOCK)
                         {
-                            ClientSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(50));
+                            NewClientSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(50));
                             continue;
                         }
                         else if (LastError == SE_EINTR)
@@ -91,24 +92,26 @@ uint32 FMCPServerRunnable::Run()
                         Line.TrimStartAndEndInline();
                         if (!Line.IsEmpty())
                         {
-                            ProcessMessage(ClientSocket, Line);
+                            ProcessMessage(NewClientSocket, Line);
                         }
                     }
 
                     // Prevent unbounded growth of accumulator from malformed input
-                    if (Accumulator.Len() > 65536)
+                    constexpr int32 MAX_REQUEST_SIZE = 1048576; // 1MB
+                    if (Accumulator.Len() > MAX_REQUEST_SIZE)
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Accumulator exceeded 64KB without newline; dropping buffer."));
+                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Accumulator exceeded 1MB without newline; sending error."));
+                        SendJsonError(TEXT("PAYLOAD_TOO_LARGE"), TEXT("Request payload exceeded 1MB limit"));
                         Accumulator.Empty();
                     }
                 }
 
-                ClientSocket->Close();
+                NewClientSocket->Close();
                 if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
                 {
-                    SocketSubsystem->DestroySocket(ClientSocket);
+                    SocketSubsystem->DestroySocket(NewClientSocket);
                 }
-                ClientSocket = nullptr;
+                ClientSocket.store(nullptr);
             }
             else
             {
@@ -137,7 +140,7 @@ void FMCPServerRunnable::Exit()
 
 void FMCPServerRunnable::ProcessMessage(FSocket* Client, const FString& Message)
 {
-    auto SendJsonError = [Client](const FString& ErrorCode, const FString& ErrorMessage) {
+    auto SendJsonError = [Client](const FString& ErrorCode, const FString& ErrorMessage) mutable {
         if (!Client)
         {
             return;

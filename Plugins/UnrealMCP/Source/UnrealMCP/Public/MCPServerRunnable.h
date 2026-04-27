@@ -29,6 +29,6 @@ protected:
 private:
 	UEpicUnrealMCPBridge* Bridge;
 	FSocket* ListenerSocket;
-	FSocket* ClientSocket;
+	std::atomic<FSocket*> ClientSocket{nullptr};
 	std::atomic<bool> bRunning;
 }; 

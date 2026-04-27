@@ -56,6 +56,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
         {TEXT("find_actor_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleFindActorByMcpId},
         {TEXT("set_actor_transform_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleSetActorTransformByMcpId},
         {TEXT("delete_actor_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId},
+        {TEXT("apply_scene_delta"), &FEpicUnrealMCPEditorCommands::HandleApplySceneDelta},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -277,6 +278,246 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnActor(const TSh
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create actor"));
 }
 
+// --- P4.3: Pre-parse and execute helpers for batch scene delta ---
+
+FParsedCreateParams FEpicUnrealMCPEditorCommands::ParseCreateParams(const TSharedPtr<FJsonObject>& Params) const
+{
+    FParsedCreateParams Parsed;
+
+    if (!Params->TryGetStringField(TEXT("name"), Parsed.Name) || Parsed.Name.IsEmpty())
+    {
+        Parsed.ErrorString = TEXT("Missing or empty 'name' parameter");
+        return Parsed;
+    }
+
+    if (!Params->TryGetStringField(TEXT("type"), Parsed.Type) || Parsed.Type.IsEmpty())
+    {
+        Parsed.ErrorString = TEXT("Missing or empty 'type' parameter");
+        return Parsed;
+    }
+
+    // Validate actor type
+    static const TSet<FString> ValidTypes = {
+        TEXT("StaticMeshActor"), TEXT("PointLight"), TEXT("SpotLight"),
+        TEXT("DirectionalLight"), TEXT("CameraActor")
+    };
+    if (!ValidTypes.Contains(Parsed.Type))
+    {
+        Parsed.ErrorString = FString::Printf(TEXT("Unknown actor type: %s"), *Parsed.Type);
+        return Parsed;
+    }
+
+    Params->TryGetStringField(TEXT("mcp_id"), Parsed.McpId);
+    Params->TryGetStringField(TEXT("static_mesh"), Parsed.StaticMeshPath);
+
+    // Parse transform
+    FString ParamError;
+    if (Params->HasField(TEXT("location")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("location"), Parsed.Location, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'location': %s"), *ParamError);
+            return Parsed;
+        }
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetRotatorFromJson(Params, TEXT("rotation"), Parsed.Rotation, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'rotation': %s"), *ParamError);
+            return Parsed;
+        }
+    }
+    if (Params->HasField(TEXT("scale")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("scale"), Parsed.Scale, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'scale': %s"), *ParamError);
+            return Parsed;
+        }
+    }
+
+    // Parse tags
+    if (Params->HasField(TEXT("tags")))
+    {
+        const TArray<TSharedPtr<FJsonValue>>* TagsJsonArray;
+        if (Params->TryGetArrayField(TEXT("tags"), TagsJsonArray))
+        {
+            for (const TSharedPtr<FJsonValue>& TagValue : *TagsJsonArray)
+            {
+                if (TagValue->Type == EJson::String)
+                {
+                    FString TagStr = TagValue->AsString();
+                    if (!TagStr.IsEmpty())
+                    {
+                        Parsed.Tags.Add(TagStr);
+                    }
+                }
+            }
+        }
+    }
+
+    Parsed.bValid = true;
+    return Parsed;
+}
+
+FParsedUpdateParams FEpicUnrealMCPEditorCommands::ParseUpdateParams(const TSharedPtr<FJsonObject>& Params) const
+{
+    FParsedUpdateParams Parsed;
+
+    if (!Params->TryGetStringField(TEXT("mcp_id"), Parsed.McpId) || Parsed.McpId.IsEmpty())
+    {
+        Parsed.ErrorString = TEXT("Missing or empty 'mcp_id' parameter");
+        return Parsed;
+    }
+
+    FString ParamError;
+    if (Params->HasField(TEXT("location")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("location"), Parsed.Location, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'location': %s"), *ParamError);
+            return Parsed;
+        }
+        Parsed.bHasLocation = true;
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetRotatorFromJson(Params, TEXT("rotation"), Parsed.Rotation, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'rotation': %s"), *ParamError);
+            return Parsed;
+        }
+        Parsed.bHasRotation = true;
+    }
+    if (Params->HasField(TEXT("scale")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("scale"), Parsed.Scale, ParamError))
+        {
+            Parsed.ErrorString = FString::Printf(TEXT("Invalid 'scale': %s"), *ParamError);
+            return Parsed;
+        }
+        Parsed.bHasScale = true;
+    }
+
+    Parsed.bValid = true;
+    return Parsed;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteCreateActor(const FParsedCreateParams& Parsed)
+{
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Check if an actor with this name already exists (O(1) via index)
+    if (GetActorIndex().FindByName(FName(*Parsed.Name)))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor with name '%s' already exists"), *Parsed.Name));
+    }
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Spawn Actor")));
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *Parsed.Name;
+
+    AActor* NewActor = nullptr;
+
+    if (Parsed.Type == TEXT("StaticMeshActor"))
+    {
+        AStaticMeshActor* NewMeshActor = World->SpawnActor<AStaticMeshActor>(
+            AStaticMeshActor::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+        if (NewMeshActor && !Parsed.StaticMeshPath.IsEmpty())
+        {
+            UStaticMesh* Mesh = Cast<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Parsed.StaticMeshPath));
+            if (Mesh)
+            {
+                NewMeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+            }
+        }
+        NewActor = NewMeshActor;
+    }
+    else if (Parsed.Type == TEXT("PointLight"))
+    {
+        NewActor = World->SpawnActor<APointLight>(APointLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+    }
+    else if (Parsed.Type == TEXT("SpotLight"))
+    {
+        NewActor = World->SpawnActor<ASpotLight>(ASpotLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+    }
+    else if (Parsed.Type == TEXT("DirectionalLight"))
+    {
+        NewActor = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+    }
+    else if (Parsed.Type == TEXT("CameraActor"))
+    {
+        NewActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+    }
+
+    if (NewActor)
+    {
+        // Set scale
+        FTransform Transform = NewActor->GetTransform();
+        Transform.SetScale3D(Parsed.Scale);
+        NewActor->SetActorTransform(Transform);
+
+        // Apply mcp_id tag
+        if (!Parsed.McpId.IsEmpty())
+        {
+            NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+            NewActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *Parsed.McpId)));
+        }
+
+        // Apply additional tags
+        for (const FString& Tag : Parsed.Tags)
+        {
+            NewActor->Tags.AddUnique(FName(*Tag));
+        }
+
+        // Add to index
+        GetActorIndex().AddActor(NewActor);
+
+        return FEpicUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
+    }
+
+    return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create actor"));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteUpdateActor(const FParsedUpdateParams& Parsed)
+{
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* Actor = FindActorByMcpId(World, Parsed.McpId);
+    if (!Actor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor with mcp_id '%s' not found"), *Parsed.McpId));
+    }
+
+    FTransform Transform = Actor->GetTransform();
+    if (Parsed.bHasLocation)
+    {
+        Transform.SetLocation(Parsed.Location);
+    }
+    if (Parsed.bHasRotation)
+    {
+        Transform.SetRotation(Parsed.Rotation.Quaternion());
+    }
+    if (Parsed.bHasScale)
+    {
+        Transform.SetScale3D(Parsed.Scale);
+    }
+    Actor->SetActorTransform(Transform);
+
+    return FEpicUnrealMCPCommonUtils::ActorToJsonObject(Actor, true);
+}
+
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActor(const TSharedPtr<FJsonObject>& Params)
 {
     FString ActorName;
@@ -408,8 +649,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleFindActorByMcpId(con
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
     }
 
-    // O(1) lookup via index
-    AActor* FoundActor = GetActorIndex().FindByMcpId(McpId);
+    // Index lookup + fallback world scan for consistency with other handlers
+    AActor* FoundActor = FindActorByMcpId(World, McpId);
 
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
     if (!FoundActor)
@@ -548,4 +789,170 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnBlueprintActor(
     // This function will now correctly call the implementation in BlueprintCommands
     FEpicUnrealMCPBlueprintCommands BlueprintCommands;
     return BlueprintCommands.HandleCommand(TEXT("spawn_blueprint_actor"), Params);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(const TSharedPtr<FJsonObject>& Params)
+{
+    FString TransactionId = TEXT("batch");
+    Params->TryGetStringField(TEXT("transaction_id"), TransactionId);
+
+    const TArray<TSharedPtr<FJsonValue>>* CreatesArray = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* UpdatesArray = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* DeletesArray = nullptr;
+
+    Params->TryGetArrayField(TEXT("creates"), CreatesArray);
+    Params->TryGetArrayField(TEXT("updates"), UpdatesArray);
+    Params->TryGetArrayField(TEXT("deletes"), DeletesArray);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("UnrealMCP: Apply Scene Delta %s"), *TransactionId)));
+
+    int32 CreatedCount = 0;
+    int32 UpdatedCount = 0;
+    int32 DeletedCount = 0;
+    TArray<TSharedPtr<FJsonValue>> CreatedActors;
+    TArray<TSharedPtr<FJsonValue>> UpdatedActors;
+    TArray<TSharedPtr<FJsonValue>> DeletedActors;
+    TArray<TSharedPtr<FJsonValue>> Errors;
+
+    // --- P4.3: Pre-parse, pre-validate, then execute ------------------------
+
+    // Phase 1: Parse all create params and validate for duplicates
+    TArray<FParsedCreateParams> ParsedCreates;
+    if (CreatesArray)
+    {
+        ParsedCreates.Reserve(CreatesArray->Num());
+        TSet<FString> CreateNames;
+        for (const TSharedPtr<FJsonValue>& Value : *CreatesArray)
+        {
+            if (!Value.IsValid() || Value->Type != EJson::Object)
+            {
+                FParsedCreateParams Invalid;
+                Invalid.bValid = false;
+                Invalid.ErrorString = TEXT("Invalid JSON object in creates array");
+                ParsedCreates.Add(Invalid);
+                continue;
+            }
+            FParsedCreateParams Parsed = ParseCreateParams(Value->AsObject());
+            // Check for duplicate names within this batch
+            if (Parsed.bValid && CreateNames.Contains(Parsed.Name))
+            {
+                Parsed.bValid = false;
+                Parsed.ErrorString = FString::Printf(TEXT("Duplicate actor name in batch: %s"), *Parsed.Name);
+            }
+            if (Parsed.bValid)
+            {
+                CreateNames.Add(Parsed.Name);
+            }
+            ParsedCreates.Add(Parsed);
+        }
+        CreatedActors.Reserve(ParsedCreates.Num());
+    }
+
+    // Phase 2: Parse all update params
+    TArray<FParsedUpdateParams> ParsedUpdates;
+    if (UpdatesArray)
+    {
+        ParsedUpdates.Reserve(UpdatesArray->Num());
+        for (const TSharedPtr<FJsonValue>& Value : *UpdatesArray)
+        {
+            if (!Value.IsValid() || Value->Type != EJson::Object)
+            {
+                FParsedUpdateParams Invalid;
+                Invalid.bValid = false;
+                Invalid.ErrorString = TEXT("Invalid JSON object in updates array");
+                ParsedUpdates.Add(Invalid);
+                continue;
+            }
+            ParsedUpdates.Add(ParseUpdateParams(Value->AsObject()));
+        }
+        UpdatedActors.Reserve(ParsedUpdates.Num());
+    }
+
+    // Phase 3: Execute creates
+    for (const FParsedCreateParams& Parsed : ParsedCreates)
+    {
+        if (!Parsed.bValid)
+        {
+            Errors.Add(MakeShared<FJsonValueObject>(
+                FEpicUnrealMCPCommonUtils::CreateErrorResponse(Parsed.ErrorString)));
+            continue;
+        }
+        TSharedPtr<FJsonObject> Result = ExecuteCreateActor(Parsed);
+        if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
+        {
+            CreatedCount++;
+            CreatedActors.Add(MakeShared<FJsonValueObject>(Result));
+        }
+        else
+        {
+            Errors.Add(MakeShared<FJsonValueObject>(Result));
+        }
+    }
+
+    // Phase 4: Execute updates
+    for (const FParsedUpdateParams& Parsed : ParsedUpdates)
+    {
+        if (!Parsed.bValid)
+        {
+            Errors.Add(MakeShared<FJsonValueObject>(
+                FEpicUnrealMCPCommonUtils::CreateErrorResponse(Parsed.ErrorString)));
+            continue;
+        }
+        TSharedPtr<FJsonObject> Result = ExecuteUpdateActor(Parsed);
+        if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
+        {
+            UpdatedCount++;
+            UpdatedActors.Add(MakeShared<FJsonValueObject>(Result));
+        }
+        else
+        {
+            Errors.Add(MakeShared<FJsonValueObject>(Result));
+        }
+    }
+
+    // Phase 5: Execute deletes (simple, no pre-parse needed)
+    if (DeletesArray)
+    {
+        DeletedActors.Reserve(DeletesArray->Num());
+        for (const TSharedPtr<FJsonValue>& Value : *DeletesArray)
+        {
+            if (!Value.IsValid() || Value->Type != EJson::Object)
+            {
+                continue;
+            }
+            TSharedPtr<FJsonObject> Result = HandleDeleteActorByMcpId(Value->AsObject());
+            if (Result.IsValid() && Result->HasField(TEXT("deleted")) && Result->GetBoolField(TEXT("deleted")))
+            {
+                DeletedCount++;
+                DeletedActors.Add(MakeShared<FJsonValueObject>(Result));
+            }
+            else if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
+            {
+                DeletedCount++;
+            }
+            else
+            {
+                Errors.Add(MakeShared<FJsonValueObject>(Result));
+            }
+        }
+    }
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("transaction_id"), TransactionId);
+    ResultObj->SetNumberField(TEXT("created_count"), CreatedCount);
+    ResultObj->SetNumberField(TEXT("updated_count"), UpdatedCount);
+    ResultObj->SetNumberField(TEXT("deleted_count"), DeletedCount);
+    ResultObj->SetNumberField(TEXT("error_count"), Errors.Num());
+    ResultObj->SetArrayField(TEXT("created"), CreatedActors);
+    ResultObj->SetArrayField(TEXT("updated"), UpdatedActors);
+    ResultObj->SetArrayField(TEXT("deleted"), DeletedActors);
+    ResultObj->SetArrayField(TEXT("errors"), Errors);
+    return ResultObj;
 }

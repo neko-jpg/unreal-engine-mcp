@@ -100,23 +100,12 @@ def main():
         apply_data = assert_success(apply_resp, "apply sync")
         print(f"    OK - summary: {json.dumps(apply_data.get('summary', {}), indent=2)}\n")
 
-        # Step 5: Mark object as synced (simulating Unreal actor creation)
-        print("[5/11] Mark object synced...")
-        mark_resp = api_call("POST", "/objects/mark-synced", {
-            "scene_id": "main",
-            "mcp_id": "e2e_cube_01",
-            "applied_hash": plan_data.get("operations", [{}])[0].get("desired_hash", "hash_v1"),
-            "unreal_actor_name": "E2E_Test_Cube",
-        })
-        assert_success(mark_resp, "mark synced")
-        print("    OK\n")
     else:
-        # Simulate sync by marking object synced directly
-        print("[4-5/11] Skip apply/mark-synced (no Unreal)...")
+        print("[4/11] Skip apply (no Unreal)...")
         print("    SKIPPED\n")
 
-    # Step 6: Plan again (should show NOOP if synced, otherwise CREATE again)
-    print("[6/11] Plan sync again (expect NOOP if synced)...")
+    # Step 5: Plan again (should show NOOP if synced, otherwise CREATE again)
+    print("[5/11] Plan sync again (expect NOOP if synced)...")
     plan2_resp = api_call("POST", "/sync/plan", {"scene_id": "main"})
     plan2_data = assert_success(plan2_resp, "second plan")
     ops2 = plan2_data.get("operations", [])
@@ -130,8 +119,8 @@ def main():
         assert len(noop_ops) >= 1, f"Expected NOOP, got: {json.dumps(ops2, indent=2)}"
         print(f"    OK - {len(noop_ops)} NOOP operation(s)\n")
 
-    # Step 7: Update transform
-    print("[7/11] Update transform...")
+    # Step 6: Update transform
+    print("[6/11] Update transform...")
     update_resp = api_call("POST", "/objects/upsert", {
         "scene_id": "main",
         "mcp_id": "e2e_cube_01",
@@ -144,8 +133,8 @@ def main():
     assert_success(update_resp, "update transform")
     print("    OK\n")
 
-    # Step 8: Plan again (should show UPDATE if synced, otherwise CREATE)
-    print("[8/11] Plan sync again (expect UPDATE if synced)...")
+    # Step 7: Plan again (should show UPDATE if synced, otherwise CREATE)
+    print("[7/11] Plan sync again (expect UPDATE if synced)...")
     plan3_resp = api_call("POST", "/sync/plan", {"scene_id": "main"})
     plan3_data = assert_success(plan3_resp, "third plan")
     ops3 = plan3_data.get("operations", [])
@@ -158,8 +147,8 @@ def main():
         assert len(update_ops) >= 1, f"Expected UPDATE, got: {json.dumps(ops3, indent=2)}"
         print(f"    OK - {len(update_ops)} UPDATE operation(s)\n")
 
-    # Step 9: Tombstone (mark deleted)
-    print("[9/11] Tombstone object...")
+    # Step 8: Tombstone (mark deleted)
+    print("[8/11] Tombstone object...")
     del_resp = api_call("POST", "/objects/delete", {
         "scene_id": "main",
         "mcp_id": "e2e_cube_01",
@@ -168,8 +157,8 @@ def main():
     print("    OK\n")
 
     if not args.skip_unreal:
-        # Step 10: Apply with allow_delete=false (delete should be skipped)
-        print("[10/11] Apply with allow_delete=false (delete should be skipped)...")
+        # Step 9: Apply with allow_delete=false (delete should be skipped)
+        print("[9/11] Apply with allow_delete=false (delete should be skipped)...")
         apply2_resp = api_call("POST", "/sync/apply", {
             "scene_id": "main",
             "mode": "apply_safe",
@@ -177,11 +166,11 @@ def main():
         })
         apply2_data = assert_success(apply2_resp, "apply with no-delete")
         summary2 = apply2_data.get("summary", {})
-        assert summary2.get("delete", 0) == 0, f"Expected 0 deletes, got: {summary2}"
-        print(f"    OK - deletes: {summary2.get('delete', 0)}\n")
+        assert summary2.get("deletes", 0) == 0, f"Expected 0 deletes, got: {summary2}"
+        print(f"    OK - deletes: {summary2.get('deletes', 0)}\n")
 
-        # Step 11: Apply with allow_delete=true (delete should execute)
-        print("[11/11] Apply with allow_delete=true (delete should execute)...")
+        # Step 10: Apply with allow_delete=true (delete should execute)
+        print("[10/11] Apply with allow_delete=true (delete should execute)...")
         apply3_resp = api_call("POST", "/sync/apply", {
             "scene_id": "main",
             "mode": "apply_safe",
@@ -191,11 +180,11 @@ def main():
         summary3 = apply3_data.get("summary", {})
         print(f"    OK - summary: {json.dumps(summary3, indent=2)}\n")
     else:
-        print("[10-11/11] Skip delete apply tests (no Unreal)...")
+        print("[8-10/11] Skip delete apply tests (no Unreal)...")
         print("    SKIPPED\n")
 
-    # Step 12: Snapshot create/restore
-    print("[12/12] Snapshot create/restore...")
+    # Step 11: Snapshot create/restore
+    print("[11/11] Snapshot create/restore...")
     snap_resp = api_call("POST", "/snapshots/create", {
         "scene_id": "main",
         "name": "e2e_test_snapshot",
@@ -218,6 +207,9 @@ def main():
     if args.skip_unreal:
         print("(Run without --skip-unreal when Unreal Editor is open for full apply tests)")
     return 0
+
+
+# API version: 2025-04-27 (matches current rust/scene-syncd routes)
 
 
 if __name__ == "__main__":

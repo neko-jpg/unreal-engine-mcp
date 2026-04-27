@@ -22,6 +22,8 @@ class FMCPServerRunnable;
  * through a TCP socket connection. Commands are received as JSON and
  * routed to appropriate command handlers.
  */
+#if WITH_EDITOR
+
 UCLASS()
 class UNREALMCP_API UEpicUnrealMCPBridge : public UEditorSubsystem
 {
@@ -57,7 +59,7 @@ private:
 	FSocket* ListenerSocket;
 	FSocket* ConnectionSocket;
 	FRunnableThread* ServerThread;
-	FMCPServerRunnable* Runnable;
+	TUniquePtr<FMCPServerRunnable> Runnable;
 
 	// Server configuration
 	FIPv4Address ServerAddress;
@@ -67,4 +69,6 @@ private:
 	TSharedPtr<FEpicUnrealMCPEditorCommands> EditorCommands;
 	TSharedPtr<FEpicUnrealMCPBlueprintCommands> BlueprintCommands;
 	TSharedPtr<FEpicUnrealMCPBlueprintGraphCommands> BlueprintGraphCommands;
-}; 
+};
+
+#endif // WITH_EDITOR

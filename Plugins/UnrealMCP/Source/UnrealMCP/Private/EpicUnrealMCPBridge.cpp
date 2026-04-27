@@ -189,9 +189,9 @@ void UEpicUnrealMCPBridge::StartServer()
     bIsRunning = true;
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Server started on %s:%d"), *ServerAddress.ToString(), Port);
 
-    Runnable = new FMCPServerRunnable(this, ListenerSocket);
+    Runnable = MakeUnique<FMCPServerRunnable>(this, ListenerSocket);
     ServerThread = FRunnableThread::Create(
-        Runnable,
+        Runnable.Get(),
         TEXT("UnrealMCPServerThread"),
         0, TPri_Normal
     );
@@ -199,6 +199,7 @@ void UEpicUnrealMCPBridge::StartServer()
     if (!ServerThread)
     {
         UE_LOG(LogTemp, Error, TEXT("EpicUnrealMCPBridge: Failed to create server thread"));
+        Runnable.Reset();
         StopServer();
         return;
     }
@@ -213,7 +214,7 @@ void UEpicUnrealMCPBridge::StopServer()
 
     bIsRunning = false;
 
-    if (Runnable)
+    if (Runnable.IsValid())
     {
         Runnable->Stop();
     }
@@ -234,11 +235,7 @@ void UEpicUnrealMCPBridge::StopServer()
         ServerThread = nullptr;
     }
 
-    if (Runnable)
-    {
-        delete Runnable;
-        Runnable = nullptr;
-    }
+    Runnable.Reset();
 
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
 
@@ -291,6 +288,7 @@ namespace
             {TEXT("find_actor_by_mcp_id"), 1},
             {TEXT("set_actor_transform_by_mcp_id"), 1},
             {TEXT("delete_actor_by_mcp_id"), 1},
+            {TEXT("apply_scene_delta"), 1},
             {TEXT("create_blueprint"), 2},
             {TEXT("add_component_to_blueprint"), 2},
             {TEXT("set_physics_properties"), 2},

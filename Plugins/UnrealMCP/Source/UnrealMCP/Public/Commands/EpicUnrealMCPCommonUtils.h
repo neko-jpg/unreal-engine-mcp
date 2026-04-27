@@ -24,8 +24,8 @@ class UFunction;
  */
 struct UNREALMCP_API FActorIndex
 {
-    TMap<FName, AActor*> NameIndex;
-    TMap<FString, AActor*> McpIdIndex;
+    TMap<FName, TWeakObjectPtr<AActor>> NameIndex;
+    TMap<FString, TWeakObjectPtr<AActor>> McpIdIndex;
 
     void AddActor(AActor* Actor);
     void RemoveActor(AActor* Actor);

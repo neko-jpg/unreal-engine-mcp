@@ -31,7 +31,7 @@
 
 void FActorIndex::AddActor(AActor* Actor)
 {
-    if (!Actor) return;
+    if (!Actor || !IsValid(Actor)) return;
     NameIndex.Add(FName(*Actor->GetName()), Actor);
 
     for (const FName& Tag : Actor->Tags)
@@ -64,14 +64,22 @@ void FActorIndex::RemoveActor(AActor* Actor)
 
 AActor* FActorIndex::FindByName(const FName& Name)
 {
-    AActor** Found = NameIndex.Find(Name);
-    return Found ? *Found : nullptr;
+    TWeakObjectPtr<AActor>* Found = NameIndex.Find(Name);
+    if (Found && Found->IsValid())
+    {
+        return Found->Get();
+    }
+    return nullptr;
 }
 
 AActor* FActorIndex::FindByMcpId(const FString& McpId)
 {
-    AActor** Found = McpIdIndex.Find(McpId);
-    return Found ? *Found : nullptr;
+    TWeakObjectPtr<AActor>* Found = McpIdIndex.Find(McpId);
+    if (Found && Found->IsValid())
+    {
+        return Found->Get();
+    }
+    return nullptr;
 }
 
 void FActorIndex::RebuildFromWorld(UWorld* World)
