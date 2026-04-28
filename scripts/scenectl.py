@@ -318,7 +318,10 @@ def cmd_stop(args: argparse.Namespace) -> int:
     if args.scene_syncd:
         names.append("scene-syncd")
     for name in names:
-        subprocess.run(["powershell", "-NoProfile", "-Command", f"Get-Process {name} -ErrorAction SilentlyContinue | Stop-Process"], check=False)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Get-Process $args[0] -ErrorAction SilentlyContinue | Stop-Process", name],
+            check=False,
+        )
         print(f"stopped {name} if it was running")
     return 0
 
