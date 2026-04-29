@@ -12,9 +12,8 @@
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
+#include "MCPServerRunnable.h"
 #include "EpicUnrealMCPBridge.generated.h"
-
-class FMCPServerRunnable;
 
 /**
  * Editor subsystem for MCP Bridge

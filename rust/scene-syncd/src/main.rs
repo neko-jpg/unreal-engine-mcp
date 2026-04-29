@@ -1,7 +1,8 @@
-use axum::routing::{get, post};
-use axum::Router;
+use scene_syncd::unreal::client::UnrealClient;
 use axum::http::header;
 use axum::http::Method;
+use axum::routing::{get, post};
+use axum::Router;
 use scene_syncd::api::routes::AppState;
 use scene_syncd::db::connect::connect_surreal;
 use scene_syncd::db::SurrealSceneRepository;
@@ -41,8 +42,9 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         db,
-        config,
+        config: config.clone(),
         scene_locks: Arc::new(Mutex::new(HashMap::new())),
+        unreal_client: UnrealClient::new(&config),
     };
 
     let app = Router::new()
@@ -77,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
             post(scene_syncd::api::routes::create_generator_run),
         )
         .route(
-            "/generator-runs/:run_id",
+            "/generator-runs/{run_id}",
             get(scene_syncd::api::routes::get_generator_run),
         )
         .route(
@@ -121,10 +123,7 @@ async fn main() -> anyhow::Result<()> {
             "/assets/upsert",
             post(scene_syncd::api::routes::upsert_asset),
         )
-        .route(
-            "/assets/list",
-            post(scene_syncd::api::routes::list_assets),
-        )
+        .route("/assets/list", post(scene_syncd::api::routes::list_assets))
         // P6: Component, Blueprint, Realization routes
         .route(
             "/components/upsert",

@@ -636,27 +636,38 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::ActorToJsonObject(AActor* Act
     TSharedPtr<FJsonObject> ActorObject = MakeShared<FJsonObject>();
     ActorObject->SetStringField(TEXT("name"), Actor->GetName());
     ActorObject->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
-    
+
     FVector Location = Actor->GetActorLocation();
     TArray<TSharedPtr<FJsonValue>> LocationArray;
     LocationArray.Add(MakeShared<FJsonValueNumber>(Location.X));
     LocationArray.Add(MakeShared<FJsonValueNumber>(Location.Y));
     LocationArray.Add(MakeShared<FJsonValueNumber>(Location.Z));
     ActorObject->SetArrayField(TEXT("location"), LocationArray);
-    
+
     FRotator Rotation = Actor->GetActorRotation();
     TArray<TSharedPtr<FJsonValue>> RotationArray;
     RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Pitch));
     RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Yaw));
     RotationArray.Add(MakeShared<FJsonValueNumber>(Rotation.Roll));
     ActorObject->SetArrayField(TEXT("rotation"), RotationArray);
-    
+
     FVector Scale = Actor->GetActorScale3D();
     TArray<TSharedPtr<FJsonValue>> ScaleArray;
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.X));
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Y));
     ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
     ActorObject->SetArrayField(TEXT("scale"), ScaleArray);
+
+    if (bDetailed)
+    {
+        FString StaticMeshPath;
+        UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetComponentByClass(UStaticMeshComponent::StaticClass()));
+        if (MeshComp && MeshComp->GetStaticMesh())
+        {
+            StaticMeshPath = MeshComp->GetStaticMesh()->GetPathName();
+        }
+        ActorObject->SetStringField(TEXT("static_mesh"), StaticMeshPath);
+    }
 
     TArray<TSharedPtr<FJsonValue>> TagsArray;
     for (const FName& Tag : Actor->Tags)
@@ -665,14 +676,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::ActorToJsonObject(AActor* Act
     }
     ActorObject->SetArrayField(TEXT("tags"), TagsArray);
 
-    FString StaticMeshPath;
-    UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetComponentByClass(UStaticMeshComponent::StaticClass()));
-    if (MeshComp && MeshComp->GetStaticMesh())
-    {
-        StaticMeshPath = MeshComp->GetStaticMesh()->GetPathName();
-    }
-    ActorObject->SetStringField(TEXT("static_mesh"), StaticMeshPath);
-    
+    ActorObject->SetBoolField(TEXT("success"), true);
+
     return ActorObject;
 }
 

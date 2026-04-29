@@ -7,7 +7,9 @@ flush path produces correct API payloads.
 import pytest
 from unittest.mock import patch, MagicMock
 
+from server.actor_sink import SceneDbActorSink
 from server.scene_tools import scene_create_wall, scene_create_pyramid
+from server.specs.actor_spec import ActorSpec
 
 
 def _make_syncd_mock():
@@ -119,3 +121,42 @@ class TestSceneCreatePyramidE2E:
     def test_rejects_negative_block_size(self):
         result = scene_create_pyramid(block_size=-1)
         assert result["success"] is False
+
+
+class TestSceneDbActorSink:
+    def test_flush_chunks_large_bulk_upserts(self):
+        calls = []
+
+        def mock_call(path, payload):
+            calls.append((path, payload))
+            return {
+                "success": True,
+                "data": {
+                    "upserted_count": len(payload["objects"]),
+                    "error_count": 0,
+                },
+            }
+
+        sink = SceneDbActorSink(scene_id="large_scene", group_id="large_group")
+        for index in range(SceneDbActorSink.MAX_BULK_UPSERT_SIZE + 1):
+            sink.spawn(ActorSpec(
+                mcp_id=f"actor_{index}",
+                desired_name=f"actor_{index}",
+                actor_type="StaticMeshActor",
+                asset_ref={"path": "/Engine/BasicShapes/Cube.Cube"},
+                transform={
+                    "location": {"x": float(index), "y": 0.0, "z": 0.0},
+                    "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+                    "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
+                },
+            ))
+
+        with patch("server.scene_client.call_scene_syncd", side_effect=mock_call):
+            result = sink.flush()
+
+        assert result["success"] is True
+        assert result["generated_count"] == SceneDbActorSink.MAX_BULK_UPSERT_SIZE + 1
+        assert result["upserted_count"] == SceneDbActorSink.MAX_BULK_UPSERT_SIZE + 1
+        assert len(calls) == 2
+        assert len(calls[0][1]["objects"]) == SceneDbActorSink.MAX_BULK_UPSERT_SIZE
+        assert len(calls[1][1]["objects"]) == 1

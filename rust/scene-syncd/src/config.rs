@@ -53,7 +53,9 @@ fn env_or_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
         .and_then(|v| match v.parse() {
             Ok(parsed) => Some(parsed),
             Err(_) => {
-                eprintln!("Warning: failed to parse environment variable {key}='{v}', using default");
+                eprintln!(
+                    "Warning: failed to parse environment variable {key}='{v}', using default"
+                );
                 None
             }
         })

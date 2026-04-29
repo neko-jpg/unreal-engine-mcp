@@ -182,8 +182,18 @@ fn tags_diff(desired: &SceneObject, actual: &UnrealActorObservation) -> bool {
     fn is_system_tag(tag: &str) -> bool {
         tag == "managed_by_mcp" || tag.starts_with("mcp_id:")
     }
-    let mut desired_tags: Vec<&str> = desired.tags.iter().map(|s| s.as_str()).filter(|t| !is_system_tag(t)).collect();
-    let mut actual_tags: Vec<&str> = actual.tags.iter().map(|s| s.as_str()).filter(|t| !is_system_tag(t)).collect();
+    let mut desired_tags: Vec<&str> = desired
+        .tags
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|t| !is_system_tag(t))
+        .collect();
+    let mut actual_tags: Vec<&str> = actual
+        .tags
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|t| !is_system_tag(t))
+        .collect();
     desired_tags.sort_unstable();
     actual_tags.sort_unstable();
     desired_tags != actual_tags

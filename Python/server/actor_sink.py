@@ -43,6 +43,8 @@ class ActorSink(ABC):
 class SceneDbActorSink(ActorSink):
     """Sink that writes desired actor state to the scene-syncd database."""
 
+    MAX_BULK_UPSERT_SIZE = 500
+
     def __init__(self, scene_id: str = "main", group_id: Optional[str] = None):
         self.scene_id = scene_id
         self.group_id = group_id
@@ -60,28 +62,40 @@ class SceneDbActorSink(ActorSink):
 
         from server.scene_client import call_scene_syncd
 
-        payload: Dict[str, Any] = {
-            "scene_id": self.scene_id,
-            "objects": self._buffer,
-        }
-        if self.group_id is not None:
-            payload["group_id"] = self.group_id
-
-        raw = call_scene_syncd("/objects/bulk-upsert", payload)
         count = len(self._buffer)
+        upserted_count = 0
+        error_count = 0
+        failed_chunks = 0
 
-        error_count = raw.get("error_count", 0)
-        partial_success = raw.get("partial_success", False)
-        success = raw.get("success", False)
+        for start in range(0, count, self.MAX_BULK_UPSERT_SIZE):
+            chunk = self._buffer[start:start + self.MAX_BULK_UPSERT_SIZE]
+            payload: Dict[str, Any] = {
+                "scene_id": self.scene_id,
+                "objects": chunk,
+            }
+            if self.group_id is not None:
+                payload["group_id"] = self.group_id
 
-        if success and error_count == 0:
-            self._buffer.clear()
-            return {"success": True, "target": "scene_db", "generated_count": count, "upserted_count": count, "error_count": 0, "total_spawned": self._total_count, "message": f"Flushed {count} objects to scene-syncd"}
-        elif partial_success or (success and error_count > 0):
-            return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": count - error_count, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert partially failed: {error_count} of {count} objects failed"}
-        else:
-            self._buffer.clear()
-            return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": 0, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert failed after flushing {count} objects"}
+            raw = call_scene_syncd("/objects/bulk-upsert", payload)
+            data = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+            chunk_errors = data.get("error_count", 0) or 0
+            chunk_upserted = data.get("upserted_count", 0) or 0
+
+            if raw.get("success") and chunk_errors == 0:
+                upserted_count += chunk_upserted
+                continue
+
+            failed_chunks += 1
+            error_count += chunk_errors
+            upserted_count += chunk_upserted
+
+        self._buffer.clear()
+
+        if failed_chunks == 0 and error_count == 0:
+            return {"success": True, "target": "scene_db", "generated_count": count, "upserted_count": upserted_count, "error_count": 0, "total_spawned": self._total_count, "message": f"Flushed {count} objects to scene-syncd"}
+        if upserted_count > 0:
+            return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": upserted_count, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert partially failed: {error_count} of {count} objects failed"}
+        return {"success": False, "target": "scene_db", "generated_count": count, "upserted_count": 0, "error_count": error_count, "total_spawned": self._total_count, "message": f"scene-syncd bulk-upsert failed after flushing {count} objects"}
 
     def count(self) -> int:
         return self._total_count
@@ -192,5 +206,4 @@ def _spawn_actor_via_sink_or_direct(
 
     resp = safe_spawn_actor(unreal, params)
     return resp is not None and is_success_response(resp)
-
 

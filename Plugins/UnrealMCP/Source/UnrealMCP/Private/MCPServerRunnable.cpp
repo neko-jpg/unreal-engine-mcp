@@ -40,7 +40,7 @@ uint32 FMCPServerRunnable::Run()
             ClientSocket.store(NewClientSocket);
             if (NewClientSocket)
             {
-                NewClientSocket->SetNonBlocking(true);
+                NewClientSocket->SetNonBlocking(false);
                 NewClientSocket->SetNoDelay(true);
                 int32 SocketBufferSize = 65536;
                 NewClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
@@ -100,9 +100,9 @@ uint32 FMCPServerRunnable::Run()
                     constexpr int32 MAX_REQUEST_SIZE = 1048576; // 1MB
                     if (Accumulator.Len() > MAX_REQUEST_SIZE)
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Accumulator exceeded 1MB without newline; sending error."));
-                        SendJsonError(TEXT("PAYLOAD_TOO_LARGE"), TEXT("Request payload exceeded 1MB limit"));
+                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Accumulator exceeded 1MB without newline; closing connection."));
                         Accumulator.Empty();
+                        break;
                     }
                 }
 

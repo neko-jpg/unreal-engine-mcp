@@ -469,6 +469,22 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
         UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Rotation set to (%f, %f, %f)"), Rotation.Pitch, Rotation.Yaw, Rotation.Roll);
     }
 
+    // Parse scale (default 1,1,1)
+    FVector Scale(1.0f, 1.0f, 1.0f);
+    if (Params->HasField(TEXT("scale")))
+    {
+        FString ParamError;
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("scale"), Scale, ParamError))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("HandleSpawnBlueprintActor: Invalid scale parameter: %s"), *ParamError);
+            Scale = FVector::OneVector;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Scale set to (%f, %f, %f)"), Scale.X, Scale.Y, Scale.Z);
+        }
+    }
+
     UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Getting editor world"));
 
     // Spawn the actor
@@ -484,6 +500,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
     FTransform SpawnTransform;
     SpawnTransform.SetLocation(Location);
     SpawnTransform.SetRotation(FQuat(Rotation));
+    SpawnTransform.SetScale3D(Scale);
 
     // Ensure blueprint class is ready (retry loop instead of fixed 200ms sleep)
     if (!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->ClassDefaultObject)
@@ -514,10 +531,23 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSpawnBlueprintAct
     {
         UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: Setting actor label to '%s'"), *ActorName);
         NewActor->SetActorLabel(*ActorName);
-        
+
+        NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+        FString McpId;
+        if (Params->TryGetStringField(TEXT("mcp_id"), McpId) && !McpId.IsEmpty())
+        {
+            NewActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *McpId)));
+        }
+
+        // Register in actor index for O(1) lookup
+        if (UEpicUnrealMCPBridge* Bridge = GEditor ? GEditor->GetEditorSubsystem<UEpicUnrealMCPBridge>() : nullptr)
+        {
+            Bridge->ActorIndex.AddActor(NewActor);
+        }
+
         UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: About to convert actor to JSON"));
         TSharedPtr<FJsonObject> Result = FEpicUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
-        
+
         UE_LOG(LogTemp, Verbose, TEXT("HandleSpawnBlueprintActor: JSON conversion completed, returning result"));
         return Result;
     }

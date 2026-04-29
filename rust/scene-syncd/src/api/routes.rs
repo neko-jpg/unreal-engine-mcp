@@ -26,6 +26,7 @@ pub struct AppState {
     pub db: Surreal<Any>,
     pub config: Config,
     pub scene_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    pub unreal_client: UnrealClient,
 }
 
 fn success_response(data: Value) -> Value {
@@ -82,7 +83,8 @@ pub async fn create_scene(
         .upsert_scene(&scene_id, &display_name, req.description)
         .await?;
     Ok(Json(success_response(
-        serde_json::to_value(scene).map_err(|e| AppError::Internal(format!("serialize scene error: {e}")))?,
+        serde_json::to_value(scene)
+            .map_err(|e| AppError::Internal(format!("serialize scene error: {e}")))?,
     )))
 }
 
@@ -217,7 +219,8 @@ pub async fn upsert_object(
     let saved = repo.upsert_object(&obj).await?;
 
     Ok(Json(success_response(
-        serde_json::to_value(saved).map_err(|e| AppError::Internal(format!("serialize object error: {e}")))?,
+        serde_json::to_value(saved)
+            .map_err(|e| AppError::Internal(format!("serialize object error: {e}")))?,
     )))
 }
 
@@ -364,7 +367,9 @@ pub async fn get_generator_run(
     let run = repo.get_generator_run(&run_id).await?;
     match run {
         Some(r) => Ok(Json(success_response(json!({ "generator_run": r })))),
-        None => Err(AppError::NotFound(format!("generator_run {run_id} not found"))),
+        None => Err(AppError::NotFound(format!(
+            "generator_run {run_id} not found"
+        ))),
     }
 }
 
@@ -536,7 +541,10 @@ pub async fn bulk_upsert_objects(
     if errors.is_empty() {
         Ok(Json(success_response(response_body)))
     } else if created.is_empty() {
-        Ok(Json(error_response("BULK_UPSERT_FAILED", "All bulk upsert operations failed")))
+        Ok(Json(error_response(
+            "BULK_UPSERT_FAILED",
+            "All bulk upsert operations failed",
+        )))
     } else {
         let mut body = response_body;
         body["success"] = json!(false);
@@ -570,7 +578,7 @@ pub async fn plan_sync_route(
         .list_desired_objects(&scene_id, true, None, None)
         .await?;
 
-    let unreal_client = UnrealClient::new(&state.config);
+    let unreal_client = state.unreal_client.clone();
     let (actual_actors, plan_unreal_warning) = match unreal_client.get_actors_in_level().await {
         Ok(actors) => (actors, None),
         Err(e) => {
@@ -635,19 +643,33 @@ pub async fn apply_sync_route(
         .list_desired_objects(&scene_id, true, None, None)
         .await?;
 
-    let unreal_client = UnrealClient::new(&state.config);
-    let actual_actors = match unreal_client.get_actors_in_level().await {
-        Ok(actors) => actors,
+    let allow_delete = req.mode == "apply_all" || req.allow_delete;
+    let mode = req.mode.as_str();
+
+    let unreal_client = state.unreal_client.clone();
+    let (actual_actors, apply_unreal_warning) = match unreal_client.get_actors_in_level().await {
+        Ok(actors) => (actors, None),
         Err(e) => {
             tracing::warn!("Could not reach Unreal for apply_sync: {e}");
-            return Ok(Json(error_response(
+            if !allow_delete {
+                let msg = format!(
+                    "Could not read Unreal actual state for apply_sync: {e}. Proceeding with empty actual state because deletes are disabled."
+                );
+                tracing::warn!("{}", msg);
+                (Vec::new(), Some(msg))
+            } else {
+                return Ok(Json(error_response(
                 "unreal_unreachable",
                 &format!("Could not reach Unreal for apply_sync: {e}. Apply aborted to avoid unsafe operations on empty actual state."),
             )));
+            }
         }
     };
 
-    let plan = plan_sync(&scene_id, &desired_objects, &actual_actors);
+    let mut plan = plan_sync(&scene_id, &desired_objects, &actual_actors);
+    if let Some(warning) = apply_unreal_warning {
+        plan.warnings.push(warning);
+    }
 
     if plan.operations.len() > req.max_operations {
         return Err(AppError::Validation(
@@ -658,9 +680,6 @@ pub async fn apply_sync_route(
             ),
         ));
     }
-
-    let allow_delete = req.mode == "apply_all" || req.allow_delete;
-    let mode = req.mode.as_str();
 
     let scene_lock = {
         let mut locks = state.scene_locks.lock().await;
@@ -679,7 +698,7 @@ pub async fn apply_sync_route(
         }
     };
 
-    let result = apply_sync(&state.config, &repo, &plan, mode, allow_delete).await?;
+    let result = apply_sync(&unreal_client, &repo, &plan, mode, allow_delete).await?;
 
     drop(_guard);
     {
@@ -692,7 +711,8 @@ pub async fn apply_sync_route(
     }
 
     Ok(Json(success_response(
-        serde_json::to_value(result).map_err(|e| AppError::Internal(format!("serialize result error: {e}")))?,
+        serde_json::to_value(result)
+            .map_err(|e| AppError::Internal(format!("serialize result error: {e}")))?,
     )))
 }
 
@@ -815,7 +835,9 @@ pub async fn bulk_upsert_relations(
             .await
         {
             Ok(r) => created.push(serde_json::to_value(r).unwrap_or_default()),
-            Err(e) => errors.push(json!({"relation_id": relation.relation_id, "error": e.to_string()})),
+            Err(e) => {
+                errors.push(json!({"relation_id": relation.relation_id, "error": e.to_string()}))
+            }
         }
     }
 
@@ -840,7 +862,9 @@ pub async fn list_relations(
 ) -> Result<Json<Value>, AppError> {
     let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    let relations = repo.list_relations(&scene_id, req.relation_type.as_deref()).await?;
+    let relations = repo
+        .list_relations(&scene_id, req.relation_type.as_deref())
+        .await?;
     Ok(Json(success_response(json!({ "relations": relations }))))
 }
 
@@ -961,7 +985,11 @@ pub async fn list_components(
     let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
     let components = repo
-        .list_components(&scene_id, req.entity_id.as_deref(), req.component_type.as_deref())
+        .list_components(
+            &scene_id,
+            req.entity_id.as_deref(),
+            req.component_type.as_deref(),
+        )
         .await?;
     Ok(Json(success_response(json!({ "components": components }))))
 }
@@ -1033,7 +1061,9 @@ pub async fn list_blueprints(
 ) -> Result<Json<Value>, AppError> {
     let scene_id = normalize_scene_id_input(&req.scene_id)?;
     let repo = SurrealSceneRepository::new(state.db.clone());
-    let blueprints = repo.list_blueprints(&scene_id, req.class_name.as_deref()).await?;
+    let blueprints = repo
+        .list_blueprints(&scene_id, req.class_name.as_deref())
+        .await?;
     Ok(Json(success_response(json!({ "blueprints": blueprints }))))
 }
 
@@ -1086,7 +1116,9 @@ pub async fn upsert_realization(
             req.metadata,
         )
         .await?;
-    Ok(Json(success_response(json!({ "realization": realization }))))
+    Ok(Json(success_response(
+        json!({ "realization": realization }),
+    )))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1107,7 +1139,9 @@ pub async fn list_realizations(
     let realizations = repo
         .list_realizations(&scene_id, req.entity_id.as_deref(), req.policy.as_deref())
         .await?;
-    Ok(Json(success_response(json!({ "realizations": realizations }))))
+    Ok(Json(success_response(
+        json!({ "realizations": realizations }),
+    )))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1127,7 +1161,9 @@ pub async fn update_realization_status(
     let realization = repo
         .update_realization_status(&scene_id, &req.entity_id, &req.policy, &req.status)
         .await?;
-    Ok(Json(success_response(json!({ "realization": realization }))))
+    Ok(Json(success_response(
+        json!({ "realization": realization }),
+    )))
 }
 
 #[cfg(test)]

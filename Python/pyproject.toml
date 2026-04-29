@@ -10,7 +10,8 @@ dependencies = [
   "uvicorn",
   "fastapi",
   "pydantic>=2.6.1",
-  "requests"
+  "requests",
+  "PyYAML>=6.0"
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = "requires_unreal: test needs a running Unreal Editor"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning"
@@ -54,4 +56,9 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise AssertionError",
     "raise NotImplementedError"
+]
+
+[dependency-groups]
+dev = [
+    "pillow>=12.2.0",
 ]

@@ -289,6 +289,9 @@ namespace
             {TEXT("set_actor_transform_by_mcp_id"), 1},
             {TEXT("delete_actor_by_mcp_id"), 1},
             {TEXT("apply_scene_delta"), 1},
+            {TEXT("create_nav_mesh_volume"), 1},
+            {TEXT("create_patrol_route"), 1},
+            {TEXT("set_ai_behavior"), 1},
             {TEXT("create_blueprint"), 2},
             {TEXT("add_component_to_blueprint"), 2},
             {TEXT("set_physics_properties"), 2},
@@ -326,12 +329,12 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 {
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Executing command: %s"), *CommandType);
 
-    EnsureActorIndexInitialized();
-
     const int32 Route = RouteCommand(CommandType);
 
     auto ExecuteOnCurrentThread = [this, &CommandType, &Params, Route]() -> FString
     {
+        EnsureActorIndexInitialized();
+
         TSharedPtr<FJsonObject> ResponseJson = MakeShareable(new FJsonObject);
 
         try

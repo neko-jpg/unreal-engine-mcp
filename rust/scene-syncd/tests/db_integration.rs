@@ -327,3 +327,252 @@ async fn ensure_schema_is_idempotent() {
         .unwrap();
     assert_eq!(objects.len(), 0);
 }
+
+// --- P6: Component CRUD tests ---
+
+#[tokio::test]
+async fn test_component_crud() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    repo.upsert_scene("test_scene", "Test Scene", Some("For testing".to_string()))
+        .await
+        .expect("create scene");
+
+    // Upsert component
+    let component = repo
+        .upsert_component(
+            "test_scene",
+            "entity_01",
+            "navmesh",
+            "nav_volume_main",
+            serde_json::json!({
+                "location": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "extent": {"x": 500.0, "y": 500.0, "z": 500.0}
+            }),
+            serde_json::json!({}),
+        )
+        .await
+        .expect("upsert component");
+
+    assert_eq!(component.scene, "scene:test_scene");
+    assert_eq!(component.entity_id, "entity_01");
+    assert_eq!(component.component_type, "navmesh");
+    assert_eq!(component.name, "nav_volume_main");
+
+    // List components
+    let components = repo
+        .list_components("test_scene", Some("entity_01"), None)
+        .await
+        .expect("list components");
+    assert!(!components.is_empty());
+    assert_eq!(components[0].component_type, "navmesh");
+
+    // Delete component
+    repo.delete_component("test_scene", "entity_01", "navmesh", "nav_volume_main")
+        .await
+        .expect("delete component");
+
+    // Verify deletion
+    let components_after = repo
+        .list_components("test_scene", Some("entity_01"), None)
+        .await
+        .expect("list components after delete");
+    assert!(components_after.is_empty());
+}
+
+// --- P6: Blueprint CRUD tests ---
+
+#[tokio::test]
+async fn test_blueprint_crud() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    repo.upsert_scene("test_scene", "Test Scene", Some("For testing".to_string()))
+        .await
+        .expect("create scene");
+
+    // Upsert blueprint
+    let blueprint = repo
+        .upsert_blueprint(
+            "test_scene",
+            "bp_guard_tower",
+            "AStaticMeshActor",
+            "AActor",
+            vec![
+                serde_json::json!({"type": "collision", "profile": "BlockAll"}),
+                serde_json::json!({"type": "navmesh", "behavior": "blocked"}),
+            ],
+            vec![serde_json::json!({"name": "Health", "type": "float", "default": 100.0})],
+            serde_json::json!({}),
+        )
+        .await
+        .expect("upsert blueprint");
+
+    assert_eq!(blueprint.scene, "scene:test_scene");
+    assert_eq!(blueprint.blueprint_id, "bp_guard_tower");
+    assert_eq!(blueprint.class_name, "AStaticMeshActor");
+
+    // List blueprints
+    let blueprints = repo
+        .list_blueprints("test_scene", None)
+        .await
+        .expect("list blueprints");
+    assert!(!blueprints.is_empty());
+
+    // Delete blueprint
+    repo.delete_blueprint("test_scene", "bp_guard_tower")
+        .await
+        .expect("delete blueprint");
+
+    // Verify deletion
+    let blueprints_after = repo
+        .list_blueprints("test_scene", None)
+        .await
+        .expect("list blueprints after delete");
+    assert!(blueprints_after.is_empty());
+}
+
+// --- P6: Realization CRUD tests ---
+
+#[tokio::test]
+async fn test_realization_crud() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    repo.upsert_scene("test_scene", "Test Scene", Some("For testing".to_string()))
+        .await
+        .expect("create scene");
+
+    // Upsert realization
+    let realization = repo
+        .upsert_realization(
+            "test_scene",
+            "entity_01",
+            "blueprint",
+            "pending",
+            None,
+            serde_json::json!({
+                "blueprint_path": "/Game/Blueprints/BP_Tower.BP_Tower"
+            }),
+        )
+        .await
+        .expect("upsert realization");
+
+    assert_eq!(realization.scene, "scene:test_scene");
+    assert_eq!(realization.entity_id, "entity_01");
+    assert_eq!(realization.policy, "blueprint");
+    assert_eq!(realization.status, "pending");
+
+    // List realizations
+    let realizations = repo
+        .list_realizations("test_scene", Some("entity_01"), None)
+        .await
+        .expect("list realizations");
+    assert!(!realizations.is_empty());
+    assert_eq!(realizations[0].policy, "blueprint");
+
+    // Update realization status
+    let updated = repo
+        .update_realization_status("test_scene", "entity_01", "blueprint", "realized")
+        .await
+        .expect("update realization status");
+    assert_eq!(updated.status, "realized");
+}
+
+// --- P6: Combined query tests ---
+
+#[tokio::test]
+async fn test_find_entity_and_realization_combined() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    repo.upsert_scene("test_scene", "Test Scene", Some("For testing".to_string()))
+        .await
+        .expect("create scene");
+
+    // Create a semantic entity with an mcp_id
+    let entity = repo
+        .upsert_entity(
+            "test_scene",
+            "entity_01",
+            "actor",
+            "GuardTower",
+            serde_json::json!({"health": 100}),
+            vec!["e2e".to_string()],
+            vec!["guard_01".to_string()],
+            serde_json::json!({}),
+        )
+        .await
+        .expect("upsert entity");
+
+    assert_eq!(entity.entity_id, "entity_01");
+
+    // Create a realization for the same entity
+    let realization = repo
+        .upsert_realization(
+            "test_scene",
+            "entity_01",
+            "blueprint",
+            "pending",
+            None,
+            serde_json::json!({"blueprint_path": "/Game/Blueprints/BP_Tower.BP_Tower"}),
+        )
+        .await
+        .expect("upsert realization");
+
+    assert_eq!(realization.policy, "blueprint");
+
+    // Combined query: find entity by mcp_id, then find realization for that entity
+    let found_entity = repo
+        .find_entity_by_mcp_id("test_scene", "guard_01")
+        .await
+        .expect("find_entity_by_mcp_id")
+        .expect("entity should exist");
+    assert_eq!(found_entity.entity_id, "entity_01");
+
+    let found_realization = repo
+        .find_realization_for_entity("test_scene", &found_entity.entity_id)
+        .await
+        .expect("find_realization_for_entity")
+        .expect("realization should exist");
+    assert_eq!(found_realization.policy, "blueprint");
+    assert_eq!(found_realization.entity_id, "entity_01");
+    assert_eq!(found_realization.status, "pending");
+}
+
+#[tokio::test]
+async fn test_find_entity_by_mcp_id_returns_none_for_missing() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    let result = repo
+        .find_entity_by_mcp_id("test_scene", "nonexistent")
+        .await
+        .expect("query should not fail");
+    assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn test_find_realization_for_entity_returns_none_for_missing() {
+    let db = setup_db().await;
+    let repo = SurrealSceneRepository::new(db);
+    repo.ensure_schema().await.unwrap();
+    repo.ensure_default_scene().await.unwrap();
+
+    let result = repo
+        .find_realization_for_entity("test_scene", "nonexistent")
+        .await
+        .expect("query should not fail");
+    assert!(result.is_none());
+}

@@ -23,6 +23,10 @@
 #include "Engine/BlueprintGeneratedClass.h"
 #include "EditorAssetLibrary.h"
 #include "ScopedTransaction.h"
+#include "NavMesh/NavMeshBoundsVolume.h"
+#include "NavigationSystem.h"
+#include "Components/SplineComponent.h"
+#include "EngineUtils.h"
 
 FEpicUnrealMCPEditorCommands::FEpicUnrealMCPEditorCommands()
 {
@@ -57,6 +61,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
         {TEXT("set_actor_transform_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleSetActorTransformByMcpId},
         {TEXT("delete_actor_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId},
         {TEXT("apply_scene_delta"), &FEpicUnrealMCPEditorCommands::HandleApplySceneDelta},
+        {TEXT("create_nav_mesh_volume"), &FEpicUnrealMCPEditorCommands::HandleCreateNavMeshVolume},
+        {TEXT("create_patrol_route"), &FEpicUnrealMCPEditorCommands::HandleCreatePatrolRoute},
+        {TEXT("set_ai_behavior"), &FEpicUnrealMCPEditorCommands::HandleSetAIBehavior},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -82,9 +89,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetActorsInLevel(con
     TArray<TSharedPtr<FJsonValue>> ActorArray;
     for (AActor* Actor : AllActors)
     {
-        if (Actor)
+        if (Actor && Actor->Tags.Contains(FName(TEXT("managed_by_mcp"))))
         {
-            ActorArray.Add(FEpicUnrealMCPCommonUtils::ActorToJson(Actor));
+            // Light-weight summary to keep response small (avoids TCP
+            // send-buffer overflow with large actor counts).
+            ActorArray.Add(MakeShared<FJsonValueObject>(
+                FEpicUnrealMCPCommonUtils::ActorToJsonObject(Actor, false)));
         }
     }
     
@@ -242,9 +252,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnActor(const TSh
 
         // Apply mcp_id tag if provided
         FString McpId;
-        if (Params->TryGetStringField(TEXT("mcp_id"), McpId) && !McpId.IsEmpty())
+        Params->TryGetStringField(TEXT("mcp_id"), McpId);
+        NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+        if (!McpId.IsEmpty())
         {
-            NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
             NewActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *McpId)));
         }
 
@@ -464,9 +475,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteCreateActor(const F
         NewActor->SetActorTransform(Transform);
 
         // Apply mcp_id tag
+        NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
         if (!Parsed.McpId.IsEmpty())
         {
-            NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
             NewActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *Parsed.McpId)));
         }
 
@@ -657,7 +668,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleFindActorByMcpId(con
     {
         ResultObj->SetBoolField(TEXT("success"), true);
         ResultObj->SetStringField(TEXT("message"), TEXT("No actor found with the given mcp_id"));
-        ResultObj->SetObjectField(TEXT("actor"), nullptr);
     }
     else
     {
@@ -784,11 +794,247 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId(c
     return ResultObj;
 }
 
-TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params)
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCreateNavMeshVolume(const TSharedPtr<FJsonObject>& Params)
 {
-    // This function will now correctly call the implementation in BlueprintCommands
-    FEpicUnrealMCPBlueprintCommands BlueprintCommands;
-    return BlueprintCommands.HandleCommand(TEXT("spawn_blueprint_actor"), Params);
+    // Parse parameters
+    FString VolumeName = TEXT("NavMeshVolume");
+    Params->TryGetStringField(TEXT("volume_name"), VolumeName);
+
+    // Parse location
+    FVector Location = FVector::ZeroVector;
+    FString ParamError;
+    if (Params->HasField(TEXT("location")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("location"), Location, ParamError))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Invalid 'location': %s"), *ParamError));
+        }
+    }
+
+    // Parse extent (default 500,500,500)
+    FVector Extent(500.0f, 500.0f, 500.0f);
+    if (Params->HasField(TEXT("extent")))
+    {
+        if (!FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(Params, TEXT("extent"), Extent, ParamError))
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Invalid 'extent': %s"), *ParamError));
+        }
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Create NavMeshBoundsVolume
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Create NavMesh Volume")));
+    ANavMeshBoundsVolume* NavMeshVolume = World->SpawnActor<ANavMeshBoundsVolume>(Location, FRotator::ZeroRotator);
+    if (!NavMeshVolume)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn NavMeshBoundsVolume"));
+    }
+
+    // UE 5.7 no longer exposes the old brush-building helper used here. Scaling
+    // the spawned volume keeps this command usable while preserving the extent
+    // in the response for callers.
+    NavMeshVolume->SetActorScale3D(FVector(
+        FMath::Max(Extent.X / 100.0f, 0.01f),
+        FMath::Max(Extent.Y / 100.0f, 0.01f),
+        FMath::Max(Extent.Z / 100.0f, 0.01f)
+    ));
+
+    // Set name and folder
+    NavMeshVolume->SetActorLabel(*VolumeName);
+    NavMeshVolume->SetFolderPath(FName(TEXT("NavMesh")));
+
+    NavMeshVolume->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+
+    // Add to actor index
+    GetActorIndex().AddActor(NavMeshVolume);
+
+    // Request NavMesh rebuild
+    UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+    if (NavSys)
+    {
+        NavSys->Build();
+    }
+
+    // Build result JSON
+    auto MakeVecJson = [](const FVector& V) -> TSharedPtr<FJsonObject> {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetNumberField(TEXT("x"), V.X);
+        Obj->SetNumberField(TEXT("y"), V.Y);
+        Obj->SetNumberField(TEXT("z"), V.Z);
+        return Obj;
+    };
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("volume_name"), VolumeName);
+    ResultObj->SetStringField(TEXT("actor_name"), NavMeshVolume->GetName());
+    ResultObj->SetObjectField(TEXT("location"), MakeVecJson(Location));
+    ResultObj->SetObjectField(TEXT("extent"), MakeVecJson(Extent));
+    ResultObj->SetBoolField(TEXT("navmesh_rebuilt"), NavSys != nullptr);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCreatePatrolRoute(const TSharedPtr<FJsonObject>& Params)
+{
+    FString RouteName = TEXT("PatrolRoute");
+    Params->TryGetStringField(TEXT("patrol_route_name"), RouteName);
+
+    // Parse patrol points
+    const TArray<TSharedPtr<FJsonValue>>* PointsArray = nullptr;
+    if (!Params->TryGetArrayField(TEXT("points"), PointsArray) || !PointsArray || PointsArray->Num() < 2)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Patrol route requires at least 2 points"));
+    }
+
+    bool bClosedLoop = false;
+    Params->TryGetBoolField(TEXT("closed_loop"), bClosedLoop);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Create a spline-based actor for the patrol route
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *RouteName;
+    AActor* RouteActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+    if (!RouteActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn patrol route actor"));
+    }
+
+    RouteActor->SetActorLabel(*RouteName);
+
+    // Bare AActor has no RootComponent by default; create one so the
+    // SplineComponent has something to attach to.
+    if (!RouteActor->GetRootComponent())
+    {
+        USceneComponent* RootComp = NewObject<USceneComponent>(RouteActor, USceneComponent::StaticClass(), TEXT("DefaultSceneRoot"));
+        RootComp->RegisterComponent();
+        RouteActor->SetRootComponent(RootComp);
+    }
+
+    // Add SplineComponent
+    USplineComponent* SplineComp = NewObject<USplineComponent>(RouteActor, USplineComponent::StaticClass(), *FString::Printf(TEXT("PatrolSpline_%s"), *RouteName));
+    if (!SplineComp)
+    {
+        RouteActor->Destroy();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create SplineComponent"));
+    }
+
+    SplineComp->RegisterComponent();
+    SplineComp->AttachToComponent(RouteActor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+
+    // Set spline points from params
+    SplineComp->ClearSplinePoints();
+    auto MakeVecJson = [](const FVector& V) {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetNumberField(TEXT("x"), V.X);
+        Obj->SetNumberField(TEXT("y"), V.Y);
+        Obj->SetNumberField(TEXT("z"), V.Z);
+        return Obj;
+    };
+
+    TArray<TSharedPtr<FJsonValue>> PointJsonArray;
+    for (int32 i = 0; i < PointsArray->Num(); ++i)
+    {
+        const TSharedPtr<FJsonObject>* PointObj = nullptr;
+        if (!(*PointsArray)[i]->TryGetObject(PointObj) || !PointObj)
+        {
+            continue;
+        }
+        double X = 0.0, Y = 0.0, Z = 0.0;
+        (*PointObj)->TryGetNumberField(TEXT("x"), X);
+        (*PointObj)->TryGetNumberField(TEXT("y"), Y);
+        (*PointObj)->TryGetNumberField(TEXT("z"), Z);
+        FVector Point(X, Y, Z);
+        SplineComp->AddSplinePoint(Point, ESplineCoordinateSpace::World, false);
+        PointJsonArray.Add(MakeShared<FJsonValueObject>(MakeVecJson(Point)));
+    }
+
+    SplineComp->SetClosedLoop(bClosedLoop);
+    SplineComp->UpdateSpline();
+
+    // Add mcp_id tag
+    RouteActor->Tags.Add(FName(TEXT("managed_by_mcp")));
+    RouteActor->Tags.Add(FName(*FString::Printf(TEXT("mcp_id:%s"), *RouteName)));
+
+    // Register in actor index
+    GetActorIndex().AddActor(RouteActor);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("route_name"), RouteName);
+    ResultObj->SetStringField(TEXT("actor_name"), RouteActor->GetName());
+    ResultObj->SetArrayField(TEXT("points"), PointJsonArray);
+    ResultObj->SetBoolField(TEXT("closed_loop"), bClosedLoop);
+    ResultObj->SetNumberField(TEXT("point_count"), PointsArray->Num());
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetAIBehavior(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing required parameter: actor_name"));
+    }
+
+    FString BehaviorTreePath;
+    Params->TryGetStringField(TEXT("behavior_tree_path"), BehaviorTreePath);
+
+    double PerceptionRadius = 1000.0;
+    Params->TryGetNumberField(TEXT("perception_radius"), PerceptionRadius);
+
+    FString Faction = TEXT("neutral");
+    Params->TryGetStringField(TEXT("faction"), Faction);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Find the actor
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName() == ActorName || It->GetActorLabel() == ActorName)
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+
+    if (!TargetActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+    }
+
+    // Store AI behavior configuration as tags on the actor for runtime lookup
+    TargetActor->Tags.Add(FName(*FString::Printf(TEXT("ai_faction:%s"), *Faction)));
+    TargetActor->Tags.Add(FName(*FString::Printf(TEXT("ai_perception_radius:%.1f"), PerceptionRadius)));
+
+    if (!BehaviorTreePath.IsEmpty())
+    {
+        TargetActor->Tags.Add(FName(*FString::Printf(TEXT("ai_behavior_tree:%s"), *BehaviorTreePath)));
+    }
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    ResultObj->SetStringField(TEXT("faction"), Faction);
+    ResultObj->SetNumberField(TEXT("perception_radius"), PerceptionRadius);
+    if (!BehaviorTreePath.IsEmpty())
+    {
+        ResultObj->SetStringField(TEXT("behavior_tree_path"), BehaviorTreePath);
+    }
+    ResultObj->SetBoolField(TEXT("success"), true);
+    return ResultObj;
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(const TSharedPtr<FJsonObject>& Params)
@@ -887,7 +1133,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
         if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
         {
             CreatedCount++;
-            CreatedActors.Add(MakeShared<FJsonValueObject>(Result));
+            TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+            Summary->SetStringField(TEXT("name"), Result->GetStringField(TEXT("name")));
+            CreatedActors.Add(MakeShared<FJsonValueObject>(Summary));
         }
         else
         {
@@ -908,7 +1156,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
         if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
         {
             UpdatedCount++;
-            UpdatedActors.Add(MakeShared<FJsonValueObject>(Result));
+            TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+            Summary->SetStringField(TEXT("name"), Result->GetStringField(TEXT("name")));
+            UpdatedActors.Add(MakeShared<FJsonValueObject>(Summary));
         }
         else
         {
@@ -930,7 +1180,13 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
             if (Result.IsValid() && Result->HasField(TEXT("deleted")) && Result->GetBoolField(TEXT("deleted")))
             {
                 DeletedCount++;
-                DeletedActors.Add(MakeShared<FJsonValueObject>(Result));
+                TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+                const TSharedPtr<FJsonObject>* DeletedActorObj = nullptr;
+                if (Result->TryGetObjectField(TEXT("deleted_actor"), DeletedActorObj) && DeletedActorObj)
+                {
+                    Summary->SetStringField(TEXT("name"), (*DeletedActorObj)->GetStringField(TEXT("name")));
+                }
+                DeletedActors.Add(MakeShared<FJsonValueObject>(Summary));
             }
             else if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
             {
@@ -942,6 +1198,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
             }
         }
     }
+
+    // Rebuild index to ensure consistency after batch mutations
+    GetActorIndex().RebuildFromWorld(World);
 
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetBoolField(TEXT("success"), true);

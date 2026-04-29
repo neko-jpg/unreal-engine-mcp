@@ -4,6 +4,29 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-04-29] - Castle generation E2E reliability
+
+### Fixed
+
+- Fixed `scene-syncd` Unreal bridge calls to retry transient Windows socket aborts and close each request socket instead of reusing stale bridge connections.
+- Fixed scene delta apply bookkeeping so partial `apply_scene_delta` failures no longer mark every create as synced.
+- Reduced scene delta create chunks to one actor per bridge command with retry, avoiding large-response bridge aborts during castle generation.
+- Fixed the dev-stack launcher to avoid starting a stale `scene-syncd.exe` when Rust sources are newer than the built binary.
+- Hardened castle E2E verification by bulk-checking actor `mcp_id` tags from `get_actors_in_level` instead of issuing one bridge lookup per actor.
+- Allowed non-destructive `apply_safe` sync to proceed with an empty actual-state snapshot when Unreal actor listing is temporarily unavailable; deletes still abort without a valid Unreal snapshot.
+- Switched create-only sync application to the lighter `spawn_actor` bridge command instead of `apply_scene_delta`, reducing castle generation timeouts.
+
+### Verification
+
+- Ran `cargo test unreal::client --lib` in `rust/scene-syncd`.
+- Ran `cargo test sync::applier --lib` in `rust/scene-syncd`.
+- Ran `uv run pytest tests/e2e/test_castle_generation.py --skip-unreal -v` in `Python`.
+- Rebuilt and restarted local `scene-syncd`; `GET /health` returned `success: true`.
+- Removed stale `castle_*` Unreal actors left by earlier failed runs using `delete_actor_by_mcp_id`.
+- Ran full castle E2E successfully once while Unreal MCP Bridge was listening; after later editor/bridge shutdowns, the same test correctly skipped because `127.0.0.1:55557` was no longer listening.
+
+---
+
 ## [2026-04-26] - Scene-sync Phase 4/5 hardening
 
 ### Added

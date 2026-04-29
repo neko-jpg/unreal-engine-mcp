@@ -57,6 +57,11 @@ namespace UnrealMCP::Tests
 		return MakeArrayValue(Values);
 	}
 
+	inline TSharedPtr<FJsonValue> MakeArrayValueJson(const TArray<TSharedPtr<FJsonValue>>& Values)
+	{
+		return MakeShared<FJsonValueArray>(Values);
+	}
+
 	inline TSharedPtr<FJsonValue> MakeObjectValue(const TSharedPtr<FJsonObject>& Value)
 	{
 		return MakeShared<FJsonValueObject>(Value);

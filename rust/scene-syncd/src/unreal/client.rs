@@ -7,12 +7,13 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[derive(Debug, Clone)]
 pub struct UnrealClient {
     host: String,
     port: u16,
@@ -53,6 +54,27 @@ impl UnrealClient {
         params: serde_json::Value,
     ) -> Result<serde_json::Value, AppError> {
         self.send_command("spawn_actor", params).await
+    }
+
+    pub async fn spawn_blueprint_actor(
+        &self,
+        blueprint_path: &str,
+        actor_name: &str,
+        location: [f64; 3],
+        rotation: [f64; 3],
+        scale: [f64; 3],
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "spawn_blueprint_actor",
+            json!({
+                "blueprint_name": blueprint_path,
+                "actor_name": actor_name,
+                "location": location,
+                "rotation": rotation,
+                "scale": scale,
+            }),
+        )
+        .await
     }
 
     pub async fn find_actor_by_mcp_id(&self, mcp_id: &str) -> Result<serde_json::Value, AppError> {
@@ -130,6 +152,28 @@ impl UnrealClient {
         command: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, AppError> {
+        let mut last_error = None;
+        for attempt in 0..6 {
+            match self.send_command_once(command, params.clone()).await {
+                Ok(response) => return Ok(response),
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < 5 {
+                        sleep(Duration::from_millis(500 * (attempt + 1) as u64)).await;
+                    }
+                }
+            }
+        }
+        Err(last_error.unwrap_or_else(|| {
+            AppError::UnrealBridge(format!("command {command} failed without error detail"))
+        }))
+    }
+
+    async fn send_command_once(
+        &self,
+        command: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, AppError> {
         let mut payload_obj = serde_json::Map::new();
         payload_obj.insert("command".to_string(), json!(command));
         payload_obj.insert("params".to_string(), params);
@@ -191,7 +235,7 @@ impl UnrealClient {
             }
         };
 
-        // keep the connection alive for reuse
+        // Keep connection alive for reuse (server handles graceful close).
         *guard = Some(stream);
         drop(guard);
 
@@ -289,10 +333,13 @@ mod tests {
                             Ok(n) => n,
                             Err(_) => break,
                         };
-                        let req: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap_or(json!({}));
+                        let req: serde_json::Value =
+                            serde_json::from_slice(&buf[..n]).unwrap_or(json!({}));
                         let command = req.get("command").and_then(|v| v.as_str());
                         let resp = match command {
-                            Some("ping") => json!({"status": "success", "result": {"message": "pong"}}),
+                            Some("ping") => {
+                                json!({"status": "success", "result": {"message": "pong"}})
+                            }
                             Some("get_actors_in_level") => json!({
                                 "status": "success",
                                 "result": {"actors": [
@@ -322,12 +369,20 @@ mod tests {
                                 "status": "success",
                                 "result": {"success": true}
                             }),
+                            Some("spawn_blueprint_actor") => json!({
+                                "status": "success",
+                                "result": {"actor_name": "bp_actor_01", "success": true}
+                            }),
                             _ => json!({"status": "error", "error": "unknown command"}),
                         };
                         let mut resp_bytes = serde_json::to_vec(&resp).unwrap();
                         resp_bytes.push(b'\n');
-                        if socket.write_all(&resp_bytes).await.is_err() { break; }
-                        if socket.flush().await.is_err() { break; }
+                        if socket.write_all(&resp_bytes).await.is_err() {
+                            break;
+                        }
+                        if socket.flush().await.is_err() {
+                            break;
+                        }
                     }
                 });
             }
@@ -399,5 +454,32 @@ mod tests {
             find_resp.get("success"),
             Some(&serde_json::Value::Bool(true))
         );
+    }
+
+    #[tokio::test]
+    async fn mock_bridge_spawn_blueprint_actor() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let _server = mock_bridge_server(port).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = UnrealClient {
+            host: "127.0.0.1".to_string(),
+            port,
+            stream: Arc::new(Mutex::new(None)),
+        };
+        let resp = client
+            .spawn_blueprint_actor(
+                "/Game/Blueprints/TestActor.TestActor",
+                "bp_actor_01",
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 1.0],
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.get("success"), Some(&serde_json::Value::Bool(true)));
     }
 }

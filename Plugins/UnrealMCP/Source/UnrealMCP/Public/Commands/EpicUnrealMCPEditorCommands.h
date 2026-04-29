@@ -73,8 +73,12 @@ private:
     TSharedPtr<FJsonObject> ExecuteCreateActor(const FParsedCreateParams& Parsed);
     TSharedPtr<FJsonObject> ExecuteUpdateActor(const FParsedUpdateParams& Parsed);
 
-    // Blueprint actor spawning
-    TSharedPtr<FJsonObject> HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params);
+    // NavMesh commands
+    TSharedPtr<FJsonObject> HandleCreateNavMeshVolume(const TSharedPtr<FJsonObject>& Params);
+
+    // AI commands
+    TSharedPtr<FJsonObject> HandleCreatePatrolRoute(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetAIBehavior(const TSharedPtr<FJsonObject>& Params);
 
     // Batch scene delta (P4)
     TSharedPtr<FJsonObject> HandleApplySceneDelta(const TSharedPtr<FJsonObject>& Params);

@@ -538,10 +538,7 @@ impl SurrealSceneRepository {
         created.ok_or_else(|| AppError::Internal("failed to create generator_run".to_string()))
     }
 
-    pub async fn get_generator_run(
-        &self,
-        run_id: &str,
-    ) -> Result<Option<GeneratorRun>, AppError> {
+    pub async fn get_generator_run(&self, run_id: &str) -> Result<Option<GeneratorRun>, AppError> {
         let run: Option<GeneratorRun> = self
             .db
             .select(("generator_run", run_id))
@@ -857,11 +854,15 @@ impl SurrealSceneRepository {
         scene_id: &str,
         kind: Option<&str>,
     ) -> Result<Vec<SceneEntity>, AppError> {
-        let mut query = "SELECT * FROM scene_entity WHERE scene = $scene AND deleted = false".to_string();
+        let mut query =
+            "SELECT * FROM scene_entity WHERE scene = $scene AND deleted = false".to_string();
         if kind.is_some() {
             query.push_str(" AND kind = $kind");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(k) = kind {
             q = q.bind(("kind", k.to_string()));
         }
@@ -924,7 +925,10 @@ impl SurrealSceneRepository {
         if relation_type.is_some() {
             query.push_str(" AND relation_type = $relation_type");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(rt) = relation_type {
             q = q.bind(("relation_type", rt.to_string()));
         }
@@ -993,7 +997,10 @@ impl SurrealSceneRepository {
         if kind.is_some() {
             query.push_str(" AND kind = $kind");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(k) = kind {
             q = q.bind(("kind", k.to_string()));
         }
@@ -1061,7 +1068,10 @@ impl SurrealSceneRepository {
         if component_type.is_some() {
             query.push_str(" AND component_type = $component_type");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(eid) = entity_id {
             q = q.bind(("entity_id", eid.to_string()));
         }
@@ -1145,7 +1155,10 @@ impl SurrealSceneRepository {
         if class_name.is_some() {
             query.push_str(" AND class_name = $class_name");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(cn) = class_name {
             q = q.bind(("class_name", cn.to_string()));
         }
@@ -1225,7 +1238,10 @@ impl SurrealSceneRepository {
         if policy.is_some() {
             query.push_str(" AND policy = $policy");
         }
-        let mut q = self.db.query(query).bind(("scene", format!("scene:{scene_id}")));
+        let mut q = self
+            .db
+            .query(query)
+            .bind(("scene", format!("scene:{scene_id}")));
         if let Some(eid) = entity_id {
             q = q.bind(("entity_id", eid.to_string()));
         }
@@ -1238,6 +1254,40 @@ impl SurrealSceneRepository {
             .take(0)
             .map_err(|e| AppError::Database(format!("list realizations parse error: {e}")))?;
         Ok(realizations)
+    }
+
+    pub async fn find_realization_for_entity(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+    ) -> Result<Option<SceneRealization>, AppError> {
+        let realizations: Vec<SceneRealization> = self
+            .db
+            .query("SELECT * FROM scene_realization WHERE scene = $scene AND entity_id = $entity_id LIMIT 1")
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("entity_id", entity_id.to_string()))
+            .await
+            .map_err(|e| AppError::Database(format!("find realization for entity error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("find realization for entity parse error: {e}")))?;
+        Ok(realizations.into_iter().next())
+    }
+
+    pub async fn find_entity_by_mcp_id(
+        &self,
+        scene_id: &str,
+        mcp_id: &str,
+    ) -> Result<Option<SceneEntity>, AppError> {
+        let entities: Vec<SceneEntity> = self
+            .db
+            .query("SELECT * FROM scene_entity WHERE scene = $scene AND deleted = false AND mcp_ids CONTAINS $mcp_id LIMIT 1")
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("mcp_id", mcp_id.to_string()))
+            .await
+            .map_err(|e| AppError::Database(format!("find entity by mcp_id error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("find entity by mcp_id parse error: {e}")))?;
+        Ok(entities.into_iter().next())
     }
 
     pub async fn update_realization_status(
@@ -1289,6 +1339,9 @@ mod tests {
     #[test]
     fn record_key_strips_only_first_prefix() {
         // strip_prefix removes only the first occurrence
-        assert_eq!(scene_object_record_key("scene:scene:x", "obj"), "scene:x:obj");
+        assert_eq!(
+            scene_object_record_key("scene:scene:x", "obj"),
+            "scene:x:obj"
+        );
     }
 }
