@@ -4,6 +4,28 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-04-29] - Semantic layout graph draft visualization
+
+### Added
+
+- Added relation-aware layout denormalization for `curtain_wall` and `bridge` entities:
+  - explicit `from` / `to` spans still work
+  - `connected_by`, `connects`, `spans`, `spans_between`, and `attached_to` relations can derive spans from endpoint entity locations
+  - diagonal spans now produce yaw-aligned scene objects
+- Added wall and bridge expansion with `segments` or `segment_length`, allowing a semantic wall node to generate many reviewable blockout pieces.
+- Added optional wall `crenellations` expansion for richer castle blockouts while preserving the original source entity through semantic metadata and tags.
+- Added draft visualization metadata to generated objects, including `layout_kind:*`, `layout_entity:*`, and per-kind draft colors.
+- Added Python MCP tools:
+  - `scene_create_layout` for bulk creating Semantic Layout Graph nodes and edges
+  - `scene_show_draft_proxy` for previewing a layout in Unreal as kind-grouped HISM draft proxies
+- Documented the layout graph, preview, draft proxy, and denormalization tool flow in `docs/scene-sync/07_mcp_tool_api_spec.md`.
+
+### Verification
+
+- Added Rust unit coverage for relation-derived diagonal walls and wall expansion into segments plus crenellations.
+
+---
+
 ## [2026-04-29] - Castle generation E2E reliability
 
 ### Fixed

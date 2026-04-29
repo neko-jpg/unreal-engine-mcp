@@ -338,6 +338,9 @@ class TestPythonToCppCommandMapping:
             "scene_delete_actor", "scene_snapshot_create", "scene_snapshot_restore",
             "scene_list_objects", "scene_create_wall", "scene_create_pyramid",
             "scene_health", "scene_plan_sync", "scene_sync",
+            "scene_create_layout", "scene_generate_layout_objects",
+            "scene_update_layout_node", "scene_preview_layout", "scene_approve_layout",
+            "scene_realize_layout", "scene_show_draft_proxy",
         }
         registered = self._collect_registered_tool_names()
         missing = []

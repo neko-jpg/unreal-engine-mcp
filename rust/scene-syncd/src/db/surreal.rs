@@ -332,6 +332,28 @@ impl SurrealSceneRepository {
         }
     }
 
+    pub async fn update_scene_status(
+        &self,
+        scene_id: &str,
+        status: &str,
+    ) -> Result<Scene, AppError> {
+        let existing: Option<Scene> = self
+            .db
+            .select(("scene", scene_id))
+            .await
+            .map_err(|e| AppError::Database(format!("select scene error: {e}")))?;
+        let mut scene = existing.ok_or_else(|| AppError::NotFound(format!("scene {scene_id} not found")))?;
+        scene.status = status.to_string();
+        scene.updated_at = Datetime::from(chrono::Utc::now());
+        let updated: Option<Scene> = self
+            .db
+            .update(("scene", scene_id))
+            .content(scene.clone())
+            .await
+            .map_err(|e| AppError::Database(format!("update scene status error: {e}")))?;
+        updated.ok_or_else(|| AppError::Internal("failed to update scene status".to_string()))
+    }
+
     pub async fn upsert_object(&self, obj: &SceneObject) -> Result<SceneObject, AppError> {
         let record_key = scene_object_record_key(&obj.scene, &obj.mcp_id);
         let key_owned = record_key.clone();
@@ -942,6 +964,32 @@ impl SurrealSceneRepository {
             .take(0)
             .map_err(|e| AppError::Database(format!("list entities parse error: {e}")))?;
         Ok(entities)
+    }
+
+    pub async fn update_entity_transform(
+        &self,
+        scene_id: &str,
+        entity_id: &str,
+        properties: serde_json::Value,
+    ) -> Result<SceneEntity, AppError> {
+        let record_key = format!("{scene_id}:{entity_id}");
+        let updated: Option<SceneEntity> = self
+            .db
+            .query(
+                "UPDATE type::thing($table, $key) MERGE { \
+                    properties: $properties, \
+                    updated_at: time::now() \
+                 }",
+            )
+            .bind(("table", "scene_entity"))
+            .bind(("key", record_key))
+            .bind(("properties", properties))
+            .await
+            .map_err(|e| AppError::Database(format!("update entity transform error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("update entity transform parse error: {e}")))?;
+
+        updated.ok_or_else(|| AppError::NotFound(format!("entity {entity_id} not found in scene {scene_id}")))
     }
 
     pub async fn upsert_relation(

@@ -26,7 +26,9 @@
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "NavigationSystem.h"
 #include "Components/SplineComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "EngineUtils.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 FEpicUnrealMCPEditorCommands::FEpicUnrealMCPEditorCommands()
 {
@@ -65,6 +67,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
         {TEXT("create_nav_mesh_volume"), &FEpicUnrealMCPEditorCommands::HandleCreateNavMeshVolume},
         {TEXT("create_patrol_route"), &FEpicUnrealMCPEditorCommands::HandleCreatePatrolRoute},
         {TEXT("set_ai_behavior"), &FEpicUnrealMCPEditorCommands::HandleSetAIBehavior},
+        {TEXT("create_draft_proxy"), &FEpicUnrealMCPEditorCommands::HandleCreateDraftProxy},
+        {TEXT("update_draft_proxy"), &FEpicUnrealMCPEditorCommands::HandleUpdateDraftProxy},
+        {TEXT("delete_draft_proxy"), &FEpicUnrealMCPEditorCommands::HandleDeleteDraftProxy},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -1366,5 +1371,329 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
     ResultObj->SetArrayField(TEXT("updated"), UpdatedActors);
     ResultObj->SetArrayField(TEXT("deleted"), DeletedActors);
     ResultObj->SetArrayField(TEXT("errors"), Errors);
+    return ResultObj;
+}
+
+// ------------------------------------------------------------------
+// Draft Proxy commands (HISM-based lightweight visualization)
+// ------------------------------------------------------------------
+
+static AActor* FindDraftProxyActor(UWorld* World, const FString& ProxyName)
+{
+    if (!World) return nullptr;
+    FString McpIdTag = FString::Printf(TEXT("mcp_id:draft_%s"), *ProxyName);
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->Tags.Contains(FName(*McpIdTag)))
+        {
+            return *It;
+        }
+    }
+    return nullptr;
+}
+
+static UMaterialInterface* LoadDraftMaterial(UObject* Outer, bool bUseDither)
+{
+    if (!Outer) return nullptr;
+
+    // Try project-specific preset material first
+    UMaterialInterface* Mat = Cast<UMaterialInterface>(
+        UEditorAssetLibrary::LoadAsset(TEXT("/Game/Materials/M_DraftProxy"))
+    );
+    if (Mat) return Mat;
+
+    // Fallback: try dither variant
+    if (bUseDither)
+    {
+        Mat = Cast<UMaterialInterface>(
+            UEditorAssetLibrary::LoadAsset(TEXT("/Game/Materials/M_DraftProxy_Dither"))
+        );
+        if (Mat) return Mat;
+    }
+
+    // Final fallback: use the engine default translucent material
+    Mat = Cast<UMaterialInterface>(
+        UEditorAssetLibrary::LoadAsset(TEXT("/Engine/BasicShapes/BasicShapeMaterial"))
+    );
+    return Mat;
+}
+
+static UHierarchicalInstancedStaticMeshComponent* GetOrCreateHismComponent(AActor* Actor)
+{
+    if (!Actor) return nullptr;
+    UHierarchicalInstancedStaticMeshComponent* HISM = Actor->FindComponentByClass<UHierarchicalInstancedStaticMeshComponent>();
+    if (!HISM)
+    {
+        HISM = NewObject<UHierarchicalInstancedStaticMeshComponent>(Actor, UHierarchicalInstancedStaticMeshComponent::StaticClass(), TEXT("DraftHISM"));
+        HISM->RegisterComponent();
+        if (Actor->GetRootComponent())
+        {
+            HISM->AttachToComponent(Actor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+        }
+        else
+        {
+            Actor->SetRootComponent(HISM);
+        }
+    }
+    return HISM;
+}
+
+static bool ParseInstanceEntry(const TSharedPtr<FJsonObject>& Obj, FVector& OutLocation, FVector& OutScale, FRotator& OutRotation)
+{
+    if (!Obj.IsValid()) return false;
+    const TSharedPtr<FJsonObject>* LocPtr = nullptr;
+    if (Obj->TryGetObjectField(TEXT("location"), LocPtr) && LocPtr)
+    {
+        double X = 0, Y = 0, Z = 0;
+        (*LocPtr)->TryGetNumberField(TEXT("x"), X);
+        (*LocPtr)->TryGetNumberField(TEXT("y"), Y);
+        (*LocPtr)->TryGetNumberField(TEXT("z"), Z);
+        OutLocation = FVector(X, Y, Z);
+    }
+    const TSharedPtr<FJsonObject>* ScalePtr = nullptr;
+    if (Obj->TryGetObjectField(TEXT("scale"), ScalePtr) && ScalePtr)
+    {
+        double X = 1, Y = 1, Z = 1;
+        (*ScalePtr)->TryGetNumberField(TEXT("x"), X);
+        (*ScalePtr)->TryGetNumberField(TEXT("y"), Y);
+        (*ScalePtr)->TryGetNumberField(TEXT("z"), Z);
+        OutScale = FVector(X, Y, Z);
+    }
+    const TSharedPtr<FJsonObject>* RotPtr = nullptr;
+    if (Obj->TryGetObjectField(TEXT("rotation"), RotPtr) && RotPtr)
+    {
+        double Pitch = 0, Yaw = 0, Roll = 0;
+        (*RotPtr)->TryGetNumberField(TEXT("pitch"), Pitch);
+        (*RotPtr)->TryGetNumberField(TEXT("yaw"), Yaw);
+        (*RotPtr)->TryGetNumberField(TEXT("roll"), Roll);
+        OutRotation = FRotator(Pitch, Yaw, Roll);
+    }
+    return true;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCreateDraftProxy(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ProxyName;
+    if (!Params->TryGetStringField(TEXT("proxy_name"), ProxyName) || ProxyName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'proxy_name' parameter"));
+    }
+
+    FString MeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
+    Params->TryGetStringField(TEXT("mesh_path"), MeshPath);
+
+    FString MaterialPath;
+    Params->TryGetStringField(TEXT("material_path"), MaterialPath);
+
+    bool bUseDither = false;
+    Params->TryGetBoolField(TEXT("use_dither"), bUseDither);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Prevent duplicate proxy names
+    if (FindDraftProxyActor(World, ProxyName))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Draft proxy '%s' already exists. Use update_draft_proxy instead."), *ProxyName));
+    }
+
+    FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("UnrealMCP: Create Draft Proxy %s"), *ProxyName)));
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *FString::Printf(TEXT("DraftProxy_%s"), *ProxyName);
+    AActor* ProxyActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+    if (!ProxyActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn draft proxy actor"));
+    }
+
+    ProxyActor->SetActorLabel(*ProxyName);
+    ProxyActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+    ProxyActor->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:draft_%s"), *ProxyName)));
+
+    UHierarchicalInstancedStaticMeshComponent* HISM = GetOrCreateHismComponent(ProxyActor);
+    if (!HISM)
+    {
+        ProxyActor->Destroy();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create HISM component"));
+    }
+
+    // Load static mesh
+    UStaticMesh* Mesh = Cast<UStaticMesh>(UEditorAssetLibrary::LoadAsset(MeshPath));
+    if (!Mesh)
+    {
+        ProxyActor->Destroy();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to load static mesh: %s"), *MeshPath));
+    }
+    HISM->SetStaticMesh(Mesh);
+
+    // Load material if provided, otherwise create a default Unlit translucent draft material
+    UMaterialInterface* Material = nullptr;
+    if (!MaterialPath.IsEmpty())
+    {
+        Material = Cast<UMaterialInterface>(UEditorAssetLibrary::LoadAsset(MaterialPath));
+        if (!Material)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Could not load material at path: %s, falling back to default draft material"), *MaterialPath);
+        }
+    }
+    if (!Material)
+    {
+        Material = LoadDraftMaterial(ProxyActor, bUseDither);
+    }
+    if (Material)
+    {
+        HISM->SetMaterial(0, Material);
+    }
+
+    // Disable collision and shadows for draft visualization
+    HISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    HISM->SetCastShadow(false);
+
+    // Parse and add instances
+    const TArray<TSharedPtr<FJsonValue>>* InstancesArray = nullptr;
+    int32 InstanceCount = 0;
+    if (Params->TryGetArrayField(TEXT("instances"), InstancesArray) && InstancesArray)
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *InstancesArray)
+        {
+            if (!Value.IsValid() || Value->Type != EJson::Object) continue;
+            FVector Location = FVector::ZeroVector;
+            FVector Scale = FVector::OneVector;
+            FRotator Rotation = FRotator::ZeroRotator;
+            if (ParseInstanceEntry(Value->AsObject(), Location, Scale, Rotation))
+            {
+                FTransform InstanceTransform(Rotation, Location, Scale);
+                HISM->AddInstance(InstanceTransform);
+                InstanceCount++;
+            }
+        }
+    }
+
+    HISM->MarkRenderStateDirty();
+
+    GetActorIndex().AddActor(ProxyActor);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("proxy_name"), ProxyName);
+    ResultObj->SetStringField(TEXT("actor_name"), ProxyActor->GetName());
+    ResultObj->SetNumberField(TEXT("instance_count"), InstanceCount);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleUpdateDraftProxy(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ProxyName;
+    if (!Params->TryGetStringField(TEXT("proxy_name"), ProxyName) || ProxyName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'proxy_name' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* ProxyActor = FindDraftProxyActor(World, ProxyName);
+    if (!ProxyActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Draft proxy '%s' not found"), *ProxyName));
+    }
+
+    UHierarchicalInstancedStaticMeshComponent* HISM = GetOrCreateHismComponent(ProxyActor);
+    if (!HISM)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get HISM component"));
+    }
+
+    // Clear existing instances and re-add
+    HISM->ClearInstances();
+
+    FString MaterialPath;
+    Params->TryGetStringField(TEXT("material_path"), MaterialPath);
+    bool bUseDither = false;
+    Params->TryGetBoolField(TEXT("use_dither"), bUseDither);
+
+    UMaterialInterface* Material = nullptr;
+    if (!MaterialPath.IsEmpty())
+    {
+        Material = Cast<UMaterialInterface>(UEditorAssetLibrary::LoadAsset(MaterialPath));
+    }
+    if (!Material)
+    {
+        Material = LoadDraftMaterial(ProxyActor, bUseDither);
+    }
+    if (Material)
+    {
+        HISM->SetMaterial(0, Material);
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* InstancesArray = nullptr;
+    int32 InstanceCount = 0;
+    if (Params->TryGetArrayField(TEXT("instances"), InstancesArray) && InstancesArray)
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *InstancesArray)
+        {
+            if (!Value.IsValid() || Value->Type != EJson::Object) continue;
+            FVector Location = FVector::ZeroVector;
+            FVector Scale = FVector::OneVector;
+            FRotator Rotation = FRotator::ZeroRotator;
+            if (ParseInstanceEntry(Value->AsObject(), Location, Scale, Rotation))
+            {
+                FTransform InstanceTransform(Rotation, Location, Scale);
+                HISM->AddInstance(InstanceTransform);
+                InstanceCount++;
+            }
+        }
+    }
+
+    HISM->MarkRenderStateDirty();
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("proxy_name"), ProxyName);
+    ResultObj->SetNumberField(TEXT("instance_count"), InstanceCount);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteDraftProxy(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ProxyName;
+    if (!Params->TryGetStringField(TEXT("proxy_name"), ProxyName) || ProxyName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'proxy_name' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* ProxyActor = FindDraftProxyActor(World, ProxyName);
+    if (!ProxyActor)
+    {
+        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetBoolField(TEXT("deleted"), false);
+        ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Draft proxy '%s' not found (already deleted)"), *ProxyName));
+        return ResultObj;
+    }
+
+    GetActorIndex().RemoveActor(ProxyActor);
+
+    FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("UnrealMCP: Delete Draft Proxy %s"), *ProxyName)));
+    ProxyActor->Modify();
+    ProxyActor->Destroy();
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetBoolField(TEXT("deleted"), true);
+    ResultObj->SetStringField(TEXT("proxy_name"), ProxyName);
     return ResultObj;
 }

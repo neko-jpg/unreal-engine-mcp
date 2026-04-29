@@ -17,6 +17,9 @@ use crate::domain::ids::validate_mcp_id;
 use crate::domain::transform::compute_desired_hash;
 use crate::domain::*;
 use crate::error::AppError;
+use crate::layout::denormalizer::{denormalize_layout, KindRegistry};
+use crate::layout::preview::preview_layout;
+use crate::layout::realization::{realize_layout, RealizationStage};
 use crate::sync::applier::apply_sync;
 use crate::sync::planner::plan_sync;
 use crate::unreal::client::UnrealClient;
@@ -1164,6 +1167,188 @@ pub async fn update_realization_status(
     Ok(Json(success_response(
         json!({ "realization": realization }),
     )))
+}
+
+// ------------------------------------------------------------------
+// Layout editing & approval
+// ------------------------------------------------------------------
+
+pub async fn update_layout_node_transform(
+    State(state): State<AppState>,
+    axum::extract::Path((scene_id, entity_id)): axum::extract::Path<(String, String)>,
+    Json(req): Json<serde_json::Value>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    // Merge existing properties with new transform data
+    let entities = repo.list_entities(&scene_id, None).await?;
+    let entity = entities
+        .into_iter()
+        .find(|e| e.entity_id == entity_id)
+        .ok_or_else(|| AppError::NotFound(format!("entity {entity_id} not found")))?;
+
+    let mut properties = entity.properties.clone();
+    if let Some(loc) = req.get("location") {
+        properties["location"] = loc.clone();
+    }
+    if let Some(rot) = req.get("rotation") {
+        properties["rotation"] = rot.clone();
+    }
+    if let Some(scl) = req.get("scale") {
+        properties["scale"] = scl.clone();
+    }
+    if let Some(props) = req.get("properties") {
+        if let Some(obj) = props.as_object() {
+            for (k, v) in obj {
+                properties[k] = v.clone();
+            }
+        }
+    }
+
+    let updated = repo
+        .update_entity_transform(&scene_id, &entity_id, properties)
+        .await?;
+    Ok(Json(success_response(
+        serde_json::to_value(updated)
+            .map_err(|e| AppError::Internal(format!("serialize error: {e}")))?,
+    )))
+}
+
+pub async fn approve_layout(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    // Update scene status to approved_layout
+    let _scene = repo
+        .update_scene_status(&scene_id, "approved_layout")
+        .await?;
+
+    // Create a snapshot for rollback
+    let snapshot = repo
+        .create_snapshot(
+            &scene_id,
+            &format!(
+                "auto_approved_{}",
+                chrono::Utc::now().format("%Y%m%d%H%M%S")
+            ),
+            Some("Auto-snapshot on layout approval".to_string()),
+        )
+        .await?;
+
+    Ok(Json(success_response(json!({
+        "scene_id": scene_id,
+        "status": "approved_layout",
+        "snapshot_id": snapshot.id,
+    }))))
+}
+
+pub async fn preview_layout_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let objects = preview_layout(&repo, &scene_id).await?;
+
+    let object_values: Vec<serde_json::Value> = objects
+        .into_iter()
+        .map(|o| serde_json::to_value(o).unwrap_or_default())
+        .collect();
+
+    Ok(Json(success_response(json!({
+        "scene_id": scene_id,
+        "object_count": object_values.len(),
+        "objects": object_values,
+    }))))
+}
+
+// ------------------------------------------------------------------
+// Realization pipeline
+// ------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct RealizeLayoutRequest {
+    pub stage: String,
+    #[serde(default)]
+    pub persist: bool,
+}
+
+pub async fn realize_layout_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+    Json(req): Json<RealizeLayoutRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let stage = RealizationStage::parse(&req.stage)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let objects = realize_layout(&repo, &scene_id, stage, req.persist).await?;
+
+    let object_values: Vec<serde_json::Value> = objects
+        .into_iter()
+        .map(|o| serde_json::to_value(o).unwrap_or_default())
+        .collect();
+
+    Ok(Json(success_response(json!({
+        "scene_id": scene_id,
+        "stage": req.stage,
+        "persisted": req.persist,
+        "object_count": object_values.len(),
+        "objects": object_values,
+    }))))
+}
+
+// ------------------------------------------------------------------
+// Layout denormalization
+// ------------------------------------------------------------------
+
+pub async fn denormalize_layout_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let entities = repo.list_entities(&scene_id, None).await?;
+    let relations = repo.list_relations(&scene_id, None).await?;
+
+    let registry = KindRegistry::default();
+    let mut objects = denormalize_layout(&scene_id, &entities, &relations, &registry)?;
+
+    // Compute desired_hash for each object and upsert
+    let mut created = Vec::new();
+    let mut errors = Vec::new();
+    for obj in &mut objects {
+        match compute_desired_hash(obj) {
+            Ok(hash) => obj.desired_hash = hash,
+            Err(e) => {
+                errors.push(json!({
+                    "mcp_id": obj.mcp_id,
+                    "error": e
+                }));
+                continue;
+            }
+        }
+        match repo.upsert_object(obj).await {
+            Ok(saved) => created.push(serde_json::to_value(saved).unwrap_or_default()),
+            Err(e) => errors.push(json!({
+                "mcp_id": obj.mcp_id.clone(),
+                "error": e.to_string()
+            })),
+        }
+    }
+
+    Ok(Json(success_response(json!({
+        "upserted_count": created.len(),
+        "error_count": errors.len(),
+        "objects": created,
+        "errors": errors,
+    }))))
 }
 
 #[cfg(test)]

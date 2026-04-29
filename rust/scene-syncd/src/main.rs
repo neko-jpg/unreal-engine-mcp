@@ -1,4 +1,3 @@
-use scene_syncd::unreal::client::UnrealClient;
 use axum::http::header;
 use axum::http::Method;
 use axum::routing::{get, post};
@@ -6,6 +5,7 @@ use axum::Router;
 use scene_syncd::api::routes::AppState;
 use scene_syncd::db::connect::connect_surreal;
 use scene_syncd::db::SurrealSceneRepository;
+use scene_syncd::unreal::client::UnrealClient;
 use scene_syncd::Config;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -160,6 +160,26 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/realizations/update-status",
             post(scene_syncd::api::routes::update_realization_status),
+        )
+        .route(
+            "/layouts/{scene_id}/denormalize",
+            post(scene_syncd::api::routes::denormalize_layout_route),
+        )
+        .route(
+            "/layouts/{scene_id}/nodes/{entity_id}/transform",
+            post(scene_syncd::api::routes::update_layout_node_transform),
+        )
+        .route(
+            "/layouts/{scene_id}/approve",
+            post(scene_syncd::api::routes::approve_layout),
+        )
+        .route(
+            "/layouts/{scene_id}/preview",
+            post(scene_syncd::api::routes::preview_layout_route),
+        )
+        .route(
+            "/realizations/{scene_id}/realize",
+            post(scene_syncd::api::routes::realize_layout_route),
         )
         .layer(TraceLayer::new_for_http())
         .layer(

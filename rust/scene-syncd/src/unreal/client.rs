@@ -173,6 +173,51 @@ impl UnrealClient {
         .await
     }
 
+    pub async fn create_draft_proxy(
+        &self,
+        proxy_name: &str,
+        mesh_path: &str,
+        material_path: Option<&str>,
+        instances: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut params = serde_json::Map::new();
+        params.insert("proxy_name".to_string(), json!(proxy_name));
+        params.insert("mesh_path".to_string(), json!(mesh_path));
+        if let Some(mat) = material_path {
+            params.insert("material_path".to_string(), json!(mat));
+        }
+        params.insert("instances".to_string(), json!(instances));
+        self.send_command("create_draft_proxy", serde_json::Value::Object(params))
+            .await
+    }
+
+    pub async fn update_draft_proxy(
+        &self,
+        proxy_name: &str,
+        material_path: Option<&str>,
+        instances: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut params = serde_json::Map::new();
+        params.insert("proxy_name".to_string(), json!(proxy_name));
+        if let Some(mat) = material_path {
+            params.insert("material_path".to_string(), json!(mat));
+        }
+        params.insert("instances".to_string(), json!(instances));
+        self.send_command("update_draft_proxy", serde_json::Value::Object(params))
+            .await
+    }
+
+    pub async fn delete_draft_proxy(
+        &self,
+        proxy_name: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "delete_draft_proxy",
+            json!({ "proxy_name": proxy_name }),
+        )
+        .await
+    }
+
     async fn send_command(
         &self,
         command: &str,

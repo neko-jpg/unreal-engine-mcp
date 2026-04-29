@@ -114,6 +114,109 @@ Input:
 }
 ```
 
+### `scene_create_layout`
+
+Creates or updates a Semantic Layout Graph. `nodes` are written as
+`scene_entity` records and `edges` are written as `scene_relation` records.
+This does not touch Unreal.
+
+Input:
+
+```json
+{
+  "scene_id": "castle_001",
+  "theme": "medieval_european_castle",
+  "nodes": [
+    {
+      "entity_id": "tower_west",
+      "kind": "tower",
+      "name": "West Tower",
+      "properties": {
+        "location": { "x": -500, "y": 0, "z": 0 },
+        "height": 900,
+        "width": 300,
+        "depth": 300
+      }
+    },
+    {
+      "entity_id": "wall_north",
+      "kind": "curtain_wall",
+      "name": "North Wall",
+      "properties": {
+        "height": 500,
+        "thickness": 80,
+        "segments": 8,
+        "crenellations": { "enabled": true, "count": 16 }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "relation_id": "wall_north_to_west",
+      "source_entity_id": "wall_north",
+      "target_entity_id": "tower_west",
+      "relation_type": "connected_by",
+      "properties": { "order": 0 }
+    }
+  ]
+}
+```
+
+Layout denormalization currently supports:
+
+- `from` / `to` spans on `curtain_wall` and `bridge`
+- `connected_by`, `connects`, `spans`, `spans_between`, and `attached_to`
+  relations from a span entity to endpoint entities
+- `segments` or `segment_length` expansion for walls and bridges
+- optional wall `crenellations` expansion into generated detail objects
+
+Generated `scene_object` records keep semantic tags such as
+`layout_kind:curtain_wall` and `layout_entity:wall_north`.
+
+### `scene_preview_layout`
+
+Returns denormalized objects without persisting them. Use this before approval
+or to drive draft visualization.
+
+Input:
+
+```json
+{ "scene_id": "castle_001" }
+```
+
+### `scene_show_draft_proxy`
+
+Previews the layout in Unreal as HISM draft proxies. By default it creates one
+proxy per semantic kind so reviewers can distinguish and manage walls, towers,
+keeps, bridges, and generated detail independently.
+
+Input:
+
+```json
+{
+  "scene_id": "castle_001",
+  "proxy_name": "draft_layout",
+  "mesh_path": "/Engine/BasicShapes/Cube.Cube",
+  "group_by_kind": true,
+  "use_dither": true
+}
+```
+
+The tool uses `/layouts/{scene_id}/preview`, then sends `create_draft_proxy`
+or `update_draft_proxy` to Unreal. It does not persist `scene_object` records.
+
+### `scene_generate_layout_objects`
+
+Persists denormalized layout objects into `scene_object` records. After this
+tool succeeds, `scene_plan_sync` and `scene_sync` can materialize the blockout
+through the existing sync pipeline.
+
+Input:
+
+```json
+{ "scene_id": "castle_001" }
+```
+
 ### `scene_delete_actor`
 
 Tombstone an actor.

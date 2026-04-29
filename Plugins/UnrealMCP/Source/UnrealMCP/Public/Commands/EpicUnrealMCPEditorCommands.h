@@ -85,4 +85,9 @@ private:
 
     // Batch scene delta (P4)
     TSharedPtr<FJsonObject> HandleApplySceneDelta(const TSharedPtr<FJsonObject>& Params);
+
+    // Draft proxy commands (HISM visualization)
+    TSharedPtr<FJsonObject> HandleCreateDraftProxy(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleUpdateDraftProxy(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleDeleteDraftProxy(const TSharedPtr<FJsonObject>& Params);
 }; 
