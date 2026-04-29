@@ -248,3 +248,102 @@ class TestCastleFortressGenerator:
             loc = light.transform.get("location", {})
             # At least one coordinate should be non-zero if entity actors are positioned
             # (the outer bailey walls are placed at the castle location)
+
+    # --- Semantic Layout Graph tests ----------------------------------------
+
+    def test_generate_semantic_produces_entities(self):
+        gen = CastleFortressGenerator(
+            castle_size="small",
+            name_prefix="SemanticTest",
+        )
+        graph = gen.generate_semantic()
+        assert len(graph.entities) > 0
+        assert len(graph.relations) > 0
+        assert len(graph.actors) == 0  # semantic path produces no pre-baked actors
+
+    def test_semantic_entities_have_valid_kinds(self):
+        valid_kinds = {
+            "keep", "curtain_wall", "tower", "gatehouse",
+            "ground", "bridge", "moat",
+        }
+        gen = CastleFortressGenerator(
+            castle_size="small",
+            name_prefix="KindTest",
+        )
+        graph = gen.generate_semantic()
+        for entity in graph.entities:
+            assert entity.kind in valid_kinds, f"unexpected kind: {entity.kind}"
+
+    def test_semantic_walls_have_connected_towers(self):
+        gen = CastleFortressGenerator(
+            castle_size="small",
+            name_prefix="WallConnTest",
+        )
+        graph = gen.generate_semantic()
+        walls = [e for e in graph.entities if e.kind == "curtain_wall"]
+        assert len(walls) >= 4  # outer + inner
+        for wall in walls:
+            connected = [
+                r for r in graph.relations
+                if r.source_entity_id == wall.entity_id and r.relation_type == "connected_by"
+            ]
+            assert len(connected) == 2, f"{wall.name} should connect 2 towers"
+
+    def test_to_layout_node_format(self):
+        from server.specs.entity_spec import EntitySpec
+        entity = EntitySpec(
+            entity_id="test_wall",
+            kind="curtain_wall",
+            name="Test Wall",
+            properties={"height": 400},
+            tags=["castle"],
+            mcp_ids=["m1"],
+            metadata={"foo": "bar"},
+        )
+        node = entity.to_layout_node()
+        assert node["entity_id"] == "test_wall"
+        assert node["kind"] == "curtain_wall"
+        assert node["name"] == "Test Wall"
+        assert node["properties"]["height"] == 400
+        assert "castle" in node["tags"]
+        assert node["mcp_ids"] == ["m1"]
+        assert node["metadata"] == {"foo": "bar"}
+
+    def test_to_layout_edge_format(self):
+        from server.specs.relation_spec import RelationSpec
+        rel = RelationSpec(
+            relation_id="r1",
+            source_entity_id="wall_1",
+            target_entity_id="tower_1",
+            relation_type="connected_by",
+            properties={"order": 0},
+            metadata={"foo": "bar"},
+        )
+        edge = rel.to_layout_edge()
+        assert edge["relation_id"] == "r1"
+        assert edge["source_entity_id"] == "wall_1"
+        assert edge["target_entity_id"] == "tower_1"
+        assert edge["relation_type"] == "connected_by"
+        assert edge["properties"]["order"] == 0
+        assert edge["metadata"] == {"foo": "bar"}
+
+    def test_generate_semantic_includes_ground_and_moat(self):
+        gen = CastleFortressGenerator(
+            castle_size="small",
+            name_prefix="GroundMoatTest",
+        )
+        graph = gen.generate_semantic()
+        kinds = {e.kind for e in graph.entities}
+        assert "ground" in kinds
+        assert "moat" in kinds
+
+    def test_generate_semantic_has_keep_and_gate(self):
+        gen = CastleFortressGenerator(
+            castle_size="medium",
+            name_prefix="KeepGateTest",
+        )
+        graph = gen.generate_semantic()
+        kinds = {e.kind for e in graph.entities}
+        assert "keep" in kinds
+        assert "gatehouse" in kinds
+        assert "bridge" in kinds

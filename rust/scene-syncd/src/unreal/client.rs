@@ -9,7 +9,6 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 
-
 const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -118,7 +117,7 @@ impl UnrealClient {
         rotation: [f64; 3],
         scale: [f64; 3],
         mcp_id: &str,
-        tags: &[ String],
+        tags: &[String],
     ) -> Result<serde_json::Value, AppError> {
         self.send_command(
             "clone_actor",
@@ -211,11 +210,8 @@ impl UnrealClient {
         &self,
         proxy_name: &str,
     ) -> Result<serde_json::Value, AppError> {
-        self.send_command(
-            "delete_draft_proxy",
-            json!({ "proxy_name": proxy_name }),
-        )
-        .await
+        self.send_command("delete_draft_proxy", json!({ "proxy_name": proxy_name }))
+            .await
     }
 
     async fn send_command(

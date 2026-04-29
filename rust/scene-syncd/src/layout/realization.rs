@@ -1,7 +1,8 @@
 use crate::db::SurrealSceneRepository;
-use crate::domain::{SceneObject, SceneAsset};
+use crate::domain::{SceneAsset, SceneObject};
 use crate::error::AppError;
-use crate::layout::denormalizer::{denormalize_layout, KindRegistry};
+use crate::layout::denormalizer::denormalize_layout;
+use crate::layout::kind_registry::KindRegistry;
 use serde_json::json;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,12 +28,10 @@ impl RealizationStage {
 }
 
 /// Apply asset bindings from the scene_asset table to denormalized objects.
-fn apply_asset_bindings(
-    objects: &mut [SceneObject],
-    assets: &[SceneAsset],
-) {
+fn apply_asset_bindings(objects: &mut [SceneObject], assets: &[SceneAsset]) {
     // Build a lookup: kind -> asset path
-    let mut kind_to_asset: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut kind_to_asset: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     for asset in assets {
         if asset.status == "present" {
             if let Some(path) = asset.variants.get("path").and_then(|v| v.as_str()) {
@@ -45,16 +44,14 @@ fn apply_asset_bindings(
 
     for obj in objects.iter_mut() {
         // Extract kind from tags (e.g. "castle", "keep")
-        let entity_kind = obj.tags.iter().find_map(|t| {
-            match t.as_str() {
-                "keep" => Some("keep"),
-                "tower" => Some("tower"),
-                "wall" => Some("curtain_wall"),
-                "gate" => Some("gatehouse"),
-                "ground" => Some("ground"),
-                "bridge" => Some("bridge"),
-                _ => None,
-            }
+        let entity_kind = obj.tags.iter().find_map(|t| match t.as_str() {
+            "keep" => Some("keep"),
+            "tower" => Some("tower"),
+            "wall" => Some("curtain_wall"),
+            "gate" => Some("gatehouse"),
+            "ground" => Some("ground"),
+            "bridge" => Some("bridge"),
+            _ => None,
         });
 
         if let Some(kind) = entity_kind {
@@ -99,8 +96,8 @@ pub async fn realize_layout(
 
     if persist {
         for obj in &mut objects {
-            let hash = crate::domain::transform::compute_desired_hash(obj)
-                .map_err(AppError::Internal)?;
+            let hash =
+                crate::domain::transform::compute_desired_hash(obj).map_err(AppError::Internal)?;
             obj.desired_hash = hash;
             repo.upsert_object(obj).await?;
         }
@@ -135,9 +132,14 @@ mod tests {
 
         let _ = repo
             .upsert_entity(
-                &scene_id, "keep_main", "keep", "Main Keep",
+                &scene_id,
+                "keep_main",
+                "keep",
+                "Main Keep",
                 json!({"location": {"x": 0.0, "y": 0.0, "z": 100.0}}),
-                vec![], vec![], json!({}),
+                vec![],
+                vec![],
+                json!({}),
             )
             .await
             .unwrap();
@@ -163,9 +165,14 @@ mod tests {
 
         let _ = repo
             .upsert_entity(
-                &scene_id, "keep_main", "keep", "Main Keep",
+                &scene_id,
+                "keep_main",
+                "keep",
+                "Main Keep",
                 json!({"location": {"x": 0.0, "y": 0.0, "z": 100.0}}),
-                vec![], vec![], json!({}),
+                vec![],
+                vec![],
+                json!({}),
             )
             .await
             .unwrap();
@@ -173,9 +180,14 @@ mod tests {
         // Register a custom asset for "keep"
         let _ = repo
             .upsert_asset(
-                &scene_id, "keep_stone_01", "keep", "present",
+                &scene_id,
+                "keep_stone_01",
+                "keep",
+                "present",
                 "/Game/Architecture/Keep_Stone_01.Keep_Stone_01",
-                vec!["stone".to_string()], "high", json!({}),
+                vec!["stone".to_string()],
+                "high",
+                json!({}),
                 json!({}),
             )
             .await

@@ -1,7 +1,8 @@
 use crate::db::SurrealSceneRepository;
 use crate::domain::SceneObject;
 use crate::error::AppError;
-use crate::layout::denormalizer::{denormalize_layout, KindRegistry};
+use crate::layout::denormalizer::denormalize_layout;
+use crate::layout::kind_registry::KindRegistry;
 
 /// Preview a layout by denormalizing entities into scene_objects without persisting them.
 pub async fn preview_layout(
@@ -53,9 +54,7 @@ mod tests {
             .await
             .expect("upsert entity");
 
-        let preview = preview_layout(&repo, &scene_id)
-            .await
-            .expect("preview");
+        let preview = preview_layout(&repo, &scene_id).await.expect("preview");
         assert_eq!(preview.len(), 1);
         assert_eq!(preview[0].mcp_id, format!("{}_keep_main", scene_id));
         assert_eq!(preview[0].actor_type, "StaticMeshActor");

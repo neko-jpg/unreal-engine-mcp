@@ -830,6 +830,7 @@ def create_castle_fortress(
     include_siege_weapons: bool = True,
     include_village: bool = True,
     architectural_style: str = "medieval",
+    use_semantic_layout: bool = False,
     dry_run: bool = False,
     target: str = "scene_db",
     scene_id: str = "main",
@@ -844,7 +845,96 @@ def create_castle_fortress(
 
         logger.info(f"Creating {castle_size} {architectural_style} castle fortress")
 
-        # --- P2: Semantic generation via SpecGraph -------------------------
+        # --- Semantic Layout Graph pipeline -------------------------------
+        if use_semantic_layout:
+            generator = CastleFortressGenerator(
+                castle_size=castle_size,
+                architectural_style=architectural_style,
+                location=location,
+                name_prefix=name_prefix,
+                include_siege_weapons=include_siege_weapons,
+                include_village=include_village,
+            )
+            graph = generator.generate_semantic()
+            nodes = [e.to_layout_node() for e in graph.entities]
+            edges = [r.to_layout_edge() for r in graph.relations]
+
+            if dry_run:
+                return {
+                    "success": True,
+                    "dry_run": True,
+                    "message": f"Would create semantic layout for {castle_size} castle with {len(nodes)} entities and {len(edges)} relations.",
+                    "scene_id": scene_id,
+                    "nodes": nodes,
+                    "edges": edges,
+                    "spec_graph": graph.summary(),
+                }
+
+            # Create/update scene
+            scene_result = call_scene_syncd("/scenes/create", {
+                "scene_id": scene_id,
+                "name": group_id or name_prefix,
+                "description": f"Semantic layout: {name_prefix} {castle_size} castle",
+            })
+            if not scene_result.get("success", False):
+                return make_error_response(f"scene_create failed: {scene_result.get('error', 'unknown')}")
+
+            # Upsert entities
+            entity_result = call_scene_syncd("/entities/bulk-upsert", {
+                "scene_id": scene_id,
+                "entities": nodes,
+            })
+            if not entity_result.get("success", False):
+                return make_error_response(f"entities/bulk-upsert failed: {entity_result.get('error', 'unknown')}")
+
+            # Upsert relations
+            relation_result = call_scene_syncd("/relations/bulk-upsert", {
+                "scene_id": scene_id,
+                "relations": edges,
+            })
+            if not relation_result.get("success", False):
+                return make_error_response(f"relations/bulk-upsert failed: {relation_result.get('error', 'unknown')}")
+
+            # Denormalize to scene_objects
+            denorm_result = call_scene_syncd(f"/layouts/{scene_id}/denormalize", {})
+            if not denorm_result.get("success", False):
+                return make_error_response(f"layout denormalize failed: {denorm_result.get('error', 'unknown')}")
+
+            object_count = denorm_result.get("data", {}).get("object_count", 0)
+
+            result = {
+                "success": True,
+                "scene_id": scene_id,
+                "message": f"Semantic layout castle created with {len(nodes)} entities, {object_count} objects.",
+                "stats": {
+                    "size": castle_size,
+                    "style": architectural_style,
+                    "entity_count": len(nodes),
+                    "relation_count": len(edges),
+                    "total_actors": object_count,
+                    "has_village": include_village,
+                    "has_siege_weapons": include_siege_weapons,
+                },
+                "spec_graph": graph.summary(),
+            }
+
+            # Optionally apply sync to Unreal
+            if apply:
+                try:
+                    plan = call_scene_syncd("/sync/plan", {"scene_id": scene_id, "mode": "plan_only"})
+                    if plan.get("success"):
+                        sync_result = call_scene_syncd("/sync/apply", {"scene_id": scene_id, "mode": "apply_safe", "allow_delete": False})
+                        result["sync"] = sync_result
+                    else:
+                        result["sync_plan_error"] = plan.get("error", "unknown")
+                except Exception as e:
+                    logger.warning(f"Failed to apply sync: {e}")
+                    result["sync_error"] = str(e)
+
+            return result
+        # -----------------------------------------------------------------
+
+        # --- P2: Legacy generation via SpecGraph ---------------------------
         generator = CastleFortressGenerator(
             castle_size=castle_size,
             architectural_style=architectural_style,

@@ -24,6 +24,7 @@ from helpers.castle_creation import (
     build_village_settlement,
     calculate_scaled_dimensions,
     get_castle_size_params,
+    get_corner_positions,
 )
 from server.actor_sink import DryRunActorSink
 from server.specs.actor_spec import ActorSpec
@@ -416,6 +417,252 @@ class CastleFortressGenerator:
         return SpecGraph(
             entities=entities,
             actors=all_actors,
+            relations=relations,
+            warnings=warnings,
+        )
+
+    def generate_semantic(self) -> SpecGraph:
+        """Generate a semantic layout graph without spawning individual actors.
+
+        Returns a SpecGraph whose entities and relations can be fed directly
+        into the Rust denormalizer via scene_create_layout.
+        """
+        from server.specs.entity_spec import EntitySpec
+        from server.specs.relation_spec import RelationSpec
+
+        entities: List[EntitySpec] = []
+        relations: List[RelationSpec] = []
+        warnings: List[str] = []
+
+        loc = self.location
+        dim = self.dimensions
+        prefix = self.name_prefix
+
+        # --- Ground -------------------------------------------------------
+        ground = EntitySpec(
+            entity_id=f"{prefix}_Ground",
+            kind="ground",
+            name="Castle Ground",
+            properties={
+                "width": dim["outer_width"] * 2.5,
+                "depth": dim["outer_depth"] * 2.5,
+            },
+            tags=["castle", "ground"],
+        )
+        entities.append(ground)
+
+        # --- Moat ---------------------------------------------------------
+        moat = EntitySpec(
+            entity_id=f"{prefix}_Moat",
+            kind="moat",
+            name="Castle Moat",
+            properties={
+                "width": dim["outer_width"] + 2400,
+                "depth": dim["outer_depth"] + 2400,
+            },
+            tags=["castle", "moat", "water"],
+        )
+        entities.append(moat)
+
+        # --- Outer corner towers ------------------------------------------
+        outer_corners = get_corner_positions(loc, dim["outer_width"], dim["outer_depth"])
+        tower_ids = ["NW", "NE", "SE", "SW"]
+        outer_tower_entities: List[EntitySpec] = []
+        for i, corner in enumerate(outer_corners):
+            tid = tower_ids[i]
+            t = EntitySpec(
+                entity_id=f"{prefix}_OuterTower{tid}",
+                kind="tower",
+                name=f"Outer {tid} Tower",
+                properties={
+                    "location": {"x": corner[0], "y": corner[1], "z": loc[2]},
+                    "size": {"x": 5.0, "y": 5.0, "z": dim["tower_height"] / 100.0},
+                },
+                tags=["castle", "tower", "outer", tid.lower()],
+            )
+            entities.append(t)
+            outer_tower_entities.append(t)
+
+        # --- Outer bailey walls -------------------------------------------
+        wall_pairs = [
+            ("North", outer_tower_entities[0], outer_tower_entities[1]),
+            ("East", outer_tower_entities[1], outer_tower_entities[2]),
+            ("South", outer_tower_entities[2], outer_tower_entities[3]),
+            ("West", outer_tower_entities[3], outer_tower_entities[0]),
+        ]
+        for wall_name, t1, t2 in wall_pairs:
+            wall = EntitySpec(
+                entity_id=f"{prefix}_OuterWall{wall_name}",
+                kind="curtain_wall",
+                name=f"Outer Bailey {wall_name} Wall",
+                properties={
+                    "height": dim["wall_height"],
+                    "thickness": dim.get("wall_thickness", 300),
+                    "crenellations": {"enabled": True},
+                },
+                tags=["castle", "wall", "outer", wall_name.lower()],
+            )
+            entities.append(wall)
+            relations.append(
+                RelationSpec(
+                    relation_id=f"{prefix}_rel_{wall_name.lower()}_w1",
+                    source_entity_id=wall.entity_id,
+                    target_entity_id=t1.entity_id,
+                    relation_type="connected_by",
+                    properties={"order": 0},
+                )
+            )
+            relations.append(
+                RelationSpec(
+                    relation_id=f"{prefix}_rel_{wall_name.lower()}_w2",
+                    source_entity_id=wall.entity_id,
+                    target_entity_id=t2.entity_id,
+                    relation_type="connected_by",
+                    properties={"order": 1},
+                )
+            )
+
+        # --- Inner corner towers ------------------------------------------
+        inner_corners = get_corner_positions(loc, dim["inner_width"], dim["inner_depth"])
+        inner_tower_entities: List[EntitySpec] = []
+        for i, corner in enumerate(inner_corners):
+            tid = tower_ids[i]
+            t = EntitySpec(
+                entity_id=f"{prefix}_InnerTower{tid}",
+                kind="tower",
+                name=f"Inner {tid} Tower",
+                properties={
+                    "location": {"x": corner[0], "y": corner[1], "z": loc[2]},
+                    "size": {"x": 6.0, "y": 6.0, "z": dim["tower_height"] * 1.4 / 100.0},
+                },
+                tags=["castle", "tower", "inner", tid.lower()],
+            )
+            entities.append(t)
+            inner_tower_entities.append(t)
+
+        # --- Inner bailey walls -------------------------------------------
+        inner_wall_pairs = [
+            ("InnerNorth", inner_tower_entities[0], inner_tower_entities[1]),
+            ("InnerEast", inner_tower_entities[1], inner_tower_entities[2]),
+            ("InnerSouth", inner_tower_entities[2], inner_tower_entities[3]),
+            ("InnerWest", inner_tower_entities[3], inner_tower_entities[0]),
+        ]
+        for wall_name, t1, t2 in inner_wall_pairs:
+            wall = EntitySpec(
+                entity_id=f"{prefix}_{wall_name}Wall",
+                kind="curtain_wall",
+                name=f"Inner Bailey {wall_name} Wall",
+                properties={
+                    "height": dim["wall_height"] * 1.3,
+                    "thickness": dim.get("wall_thickness", 300),
+                    "crenellations": {"enabled": True},
+                },
+                tags=["castle", "wall", "inner"],
+            )
+            entities.append(wall)
+            relations.append(
+                RelationSpec(
+                    relation_id=f"{prefix}_rel_{wall_name.lower()}_w1",
+                    source_entity_id=wall.entity_id,
+                    target_entity_id=t1.entity_id,
+                    relation_type="connected_by",
+                    properties={"order": 0},
+                )
+            )
+            relations.append(
+                RelationSpec(
+                    relation_id=f"{prefix}_rel_{wall_name.lower()}_w2",
+                    source_entity_id=wall.entity_id,
+                    target_entity_id=t2.entity_id,
+                    relation_type="connected_by",
+                    properties={"order": 1},
+                )
+            )
+
+        # --- Central Keep -------------------------------------------------
+        keep = EntitySpec(
+            entity_id=f"{prefix}_CentralKeep",
+            kind="keep",
+            name="Central Keep",
+            properties={
+                "location": {"x": loc[0], "y": loc[1], "z": loc[2]},
+                "size": {
+                    "x": dim["inner_width"] * 0.6 / 100.0,
+                    "y": dim["inner_depth"] * 0.6 / 100.0,
+                    "z": dim["tower_height"] * 2.0 / 100.0,
+                },
+            },
+            tags=["castle", "keep", "central"],
+        )
+        entities.append(keep)
+
+        # --- Gatehouse (West wall, midpoint) ------------------------------
+        gate = EntitySpec(
+            entity_id=f"{prefix}_Gatehouse",
+            kind="gatehouse",
+            name="Main Gatehouse",
+            properties={
+                "location": {
+                    "x": loc[0] - dim["outer_width"] / 2,
+                    "y": loc[1],
+                    "z": loc[2],
+                },
+                "size": {"x": 8.0, "y": 8.0, "z": dim["tower_height"] / 100.0},
+            },
+            tags=["castle", "gate", "main"],
+        )
+        entities.append(gate)
+
+        # --- Bridge -------------------------------------------------------
+        bridge = EntitySpec(
+            entity_id=f"{prefix}_Drawbridge",
+            kind="bridge",
+            name="Drawbridge",
+            properties={
+                "width": 600.0,
+                "height": 20.0,
+            },
+            tags=["castle", "bridge", "drawbridge"],
+        )
+        entities.append(bridge)
+        # Bridge spans from gatehouse outward
+        relations.append(
+            RelationSpec(
+                relation_id=f"{prefix}_rel_bridge_gate",
+                source_entity_id=bridge.entity_id,
+                target_entity_id=gate.entity_id,
+                relation_type="connected_by",
+                properties={"order": 0},
+            )
+        )
+        # Fake outward endpoint for span resolution
+        bridge_end = EntitySpec(
+            entity_id=f"{prefix}_BridgeEnd",
+            kind="tower",
+            name="Bridge Far End",
+            properties={
+                "location": {
+                    "x": loc[0] - dim["outer_width"] / 2 - dim.get("drawbridge_offset", 1200),
+                    "y": loc[1],
+                    "z": loc[2],
+                },
+            },
+            tags=["castle", "bridge_end"],
+        )
+        entities.append(bridge_end)
+        relations.append(
+            RelationSpec(
+                relation_id=f"{prefix}_rel_bridge_end",
+                source_entity_id=bridge.entity_id,
+                target_entity_id=bridge_end.entity_id,
+                relation_type="connected_by",
+                properties={"order": 1},
+            )
+        )
+
+        return SpecGraph(
+            entities=entities,
+            actors=[],
             relations=relations,
             warnings=warnings,
         )

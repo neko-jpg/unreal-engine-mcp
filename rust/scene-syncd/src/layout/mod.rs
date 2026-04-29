@@ -1,3 +1,9 @@
+pub mod crenellations;
 pub mod denormalizer;
+pub mod entity_resolver;
+pub mod kind_registry;
 pub mod preview;
 pub mod realization;
+pub mod scene_object_builder;
+pub mod span;
+pub mod transform;

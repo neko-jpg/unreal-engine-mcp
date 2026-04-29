@@ -14,6 +14,21 @@ fn create_chunk_size() -> usize {
         .unwrap_or(50)
 }
 
+fn build_create_chunks(
+    reduced_creates: &[serde_json::Value],
+    chunk_size: usize,
+    has_non_create_delta: bool,
+) -> Vec<Vec<serde_json::Value>> {
+    let mut chunks: Vec<Vec<serde_json::Value>> = reduced_creates
+        .chunks(chunk_size)
+        .map(|c| c.to_vec())
+        .collect();
+    if chunks.is_empty() && has_non_create_delta {
+        chunks.push(Vec::new());
+    }
+    chunks
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncApplyResult {
     pub run_id: String,
@@ -644,10 +659,11 @@ async fn apply_scene_delta_batch(
 
     // Re-chunk the reduced creates
     let chunk_sz = create_chunk_size();
-    let create_chunks: Vec<Vec<serde_json::Value>> = reduced_creates
-        .chunks(chunk_sz)
-        .map(|c| c.to_vec())
-        .collect();
+    let create_chunks = build_create_chunks(
+        &reduced_creates,
+        chunk_sz,
+        !updates.is_empty() || !deletes.is_empty(),
+    );
 
     for (chunk_idx, create_chunk) in create_chunks.iter().enumerate() {
         let updates_chunk = if chunk_idx == 0 {
@@ -801,10 +817,7 @@ async fn apply_scene_delta_batch(
                         std::collections::HashMap::new();
                     if let Some(created_arr) = response.get("created").and_then(|v| v.as_array()) {
                         for (i, created) in created_arr.iter().enumerate() {
-                            let name = created
-                                .get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let name = created.get("name").and_then(|v| v.as_str()).unwrap_or("");
                             let reduced_idx = chunk_idx * chunk_sz + i;
                             if !name.is_empty() && reduced_idx < reduced_creates.len() {
                                 source_names.insert(reduced_idx, name.to_string());
@@ -867,7 +880,12 @@ async fn apply_scene_delta_batch(
                                 .unwrap_or_default();
                             match unreal
                                 .clone_actor(
-                                    source_name, clone_name, loc, rot, scl, clone_mcp_id,
+                                    source_name,
+                                    clone_name,
+                                    loc,
+                                    rot,
+                                    scl,
+                                    clone_mcp_id,
                                     &clone_tags,
                                 )
                                 .await
@@ -973,9 +991,8 @@ async fn apply_scene_delta_batch(
                                 });
                                 continue;
                             }
-                            let desired = plan_lookup
-                                .get(mcp_id)
-                                .and_then(|op| op.desired.as_ref());
+                            let desired =
+                                plan_lookup.get(mcp_id).and_then(|op| op.desired.as_ref());
                             let desired_hash = desired
                                 .and_then(|d| d.get("desired_hash"))
                                 .and_then(|v| v.as_str())
@@ -1029,9 +1046,8 @@ async fn apply_scene_delta_batch(
                                     });
                                     continue;
                                 }
-                                let desired = plan_lookup
-                                    .get(mcp_id)
-                                    .and_then(|op| op.desired.as_ref());
+                                let desired =
+                                    plan_lookup.get(mcp_id).and_then(|op| op.desired.as_ref());
                                 let desired_hash = desired
                                     .and_then(|d| d.get("desired_hash"))
                                     .and_then(|v| v.as_str())
@@ -1135,7 +1151,8 @@ async fn apply_scene_delta_batch(
 
     // Batch insert all accumulated operation records
     if !op_records.is_empty() {
-        db.record_operations_batch(run_id, scene_id, &op_records).await?;
+        db.record_operations_batch(run_id, scene_id, &op_records)
+            .await?;
     }
 
     Ok(pre_results)
@@ -1311,6 +1328,32 @@ async fn apply_visual_update(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn build_create_chunks_keeps_delete_only_delta_executable() {
+        let chunks = build_create_chunks(&[], 50, true);
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].is_empty());
+    }
+
+    #[test]
+    fn build_create_chunks_empty_when_no_delta() {
+        let chunks = build_create_chunks(&[], 50, false);
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn build_create_chunks_splits_creates() {
+        let creates = vec![
+            json!({"mcp_id": "a"}),
+            json!({"mcp_id": "b"}),
+            json!({"mcp_id": "c"}),
+        ];
+        let chunks = build_create_chunks(&creates, 2, false);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[1].len(), 1);
+    }
 
     #[test]
     fn test_extract_verified_actor_name_success() {

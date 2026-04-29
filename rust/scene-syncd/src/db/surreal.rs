@@ -51,7 +51,7 @@ impl SurrealSceneRepository {
             "DEFINE FIELD desired_name ON TABLE scene_object TYPE string;",
             "DEFINE FIELD unreal_actor_name ON TABLE scene_object TYPE option<string>;",
             "DEFINE FIELD actor_type ON TABLE scene_object TYPE string;",
-            "DEFINE FIELD asset_ref ON TABLE scene_object TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE asset_ref ON TABLE scene_object FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD asset_ref.path ON TABLE scene_object TYPE option<string>;",
             "DEFINE FIELD transform ON TABLE scene_object TYPE object;",
             "DEFINE FIELD transform.location ON TABLE scene_object TYPE object;",
@@ -66,11 +66,11 @@ impl SurrealSceneRepository {
             "DEFINE FIELD transform.scale.x ON TABLE scene_object TYPE number;",
             "DEFINE FIELD transform.scale.y ON TABLE scene_object TYPE number;",
             "DEFINE FIELD transform.scale.z ON TABLE scene_object TYPE number;",
-            "DEFINE FIELD visual ON TABLE scene_object TYPE object DEFAULT {};",
-            "DEFINE FIELD physics ON TABLE scene_object TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE visual ON TABLE scene_object FLEXIBLE TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE physics ON TABLE scene_object FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD tags ON TABLE scene_object TYPE array DEFAULT [];",
             "DEFINE FIELD tags.* ON TABLE scene_object TYPE string;",
-            "DEFINE FIELD metadata ON TABLE scene_object TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_object FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD desired_hash ON TABLE scene_object TYPE string;",
             "DEFINE FIELD last_applied_hash ON TABLE scene_object TYPE option<string>;",
             "DEFINE FIELD sync_status ON TABLE scene_object TYPE string DEFAULT \"pending\";",
@@ -146,12 +146,12 @@ impl SurrealSceneRepository {
             "DEFINE FIELD entity_id ON TABLE scene_entity TYPE string;",
             "DEFINE FIELD kind ON TABLE scene_entity TYPE string;",
             "DEFINE FIELD name ON TABLE scene_entity TYPE string;",
-            "DEFINE FIELD properties ON TABLE scene_entity TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE properties ON TABLE scene_entity FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD tags ON TABLE scene_entity TYPE array DEFAULT [];",
             "DEFINE FIELD tags.* ON TABLE scene_entity TYPE string;",
             "DEFINE FIELD mcp_ids ON TABLE scene_entity TYPE array DEFAULT [];",
             "DEFINE FIELD mcp_ids.* ON TABLE scene_entity TYPE string;",
-            "DEFINE FIELD metadata ON TABLE scene_entity TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_entity FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD deleted ON TABLE scene_entity TYPE bool DEFAULT false;",
             "DEFINE FIELD revision ON TABLE scene_entity TYPE int DEFAULT 1;",
             "DEFINE FIELD created_at ON TABLE scene_entity TYPE datetime DEFAULT time::now();",
@@ -164,8 +164,8 @@ impl SurrealSceneRepository {
             "DEFINE FIELD source_entity_id ON TABLE scene_relation TYPE string;",
             "DEFINE FIELD target_entity_id ON TABLE scene_relation TYPE string;",
             "DEFINE FIELD relation_type ON TABLE scene_relation TYPE string;",
-            "DEFINE FIELD properties ON TABLE scene_relation TYPE object DEFAULT {};",
-            "DEFINE FIELD metadata ON TABLE scene_relation TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE properties ON TABLE scene_relation FLEXIBLE TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_relation FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD created_at ON TABLE scene_relation TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_relation TYPE datetime DEFAULT time::now();",
             "DEFINE INDEX scene_relation_scene_id ON TABLE scene_relation COLUMNS scene, relation_id UNIQUE;",
@@ -176,8 +176,8 @@ impl SurrealSceneRepository {
             "DEFINE FIELD entity_id ON TABLE scene_component TYPE string;",
             "DEFINE FIELD component_type ON TABLE scene_component TYPE string;",
             "DEFINE FIELD name ON TABLE scene_component TYPE string;",
-            "DEFINE FIELD properties ON TABLE scene_component TYPE object DEFAULT {};",
-            "DEFINE FIELD metadata ON TABLE scene_component TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE properties ON TABLE scene_component FLEXIBLE TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_component FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD created_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_component TYPE datetime DEFAULT time::now();",
             "DEFINE INDEX scene_component_entity ON TABLE scene_component COLUMNS scene, entity_id, component_type, name UNIQUE;",
@@ -191,8 +191,8 @@ impl SurrealSceneRepository {
             "DEFINE FIELD semantic_tags ON TABLE scene_asset TYPE array DEFAULT [];",
             "DEFINE FIELD semantic_tags.* ON TABLE scene_asset TYPE string;",
             "DEFINE FIELD quality ON TABLE scene_asset TYPE string DEFAULT 'prototype';",
-            "DEFINE FIELD variants ON TABLE scene_asset TYPE object DEFAULT {};",
-            "DEFINE FIELD metadata ON TABLE scene_asset TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE variants ON TABLE scene_asset FLEXIBLE TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_asset FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD created_at ON TABLE scene_asset TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_asset TYPE datetime DEFAULT time::now();",
             "DEFINE INDEX scene_asset_scene_id ON TABLE scene_asset COLUMNS scene, asset_id UNIQUE;",
@@ -207,7 +207,7 @@ impl SurrealSceneRepository {
             "DEFINE FIELD components.* ON TABLE scene_blueprint TYPE object;",
             "DEFINE FIELD variables ON TABLE scene_blueprint TYPE array DEFAULT [];",
             "DEFINE FIELD variables.* ON TABLE scene_blueprint TYPE object;",
-            "DEFINE FIELD metadata ON TABLE scene_blueprint TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_blueprint FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE FIELD created_at ON TABLE scene_blueprint TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_blueprint TYPE datetime DEFAULT time::now();",
             "DEFINE INDEX scene_blueprint_scene_id ON TABLE scene_blueprint COLUMNS scene, blueprint_id UNIQUE;",
@@ -219,7 +219,7 @@ impl SurrealSceneRepository {
             "DEFINE FIELD policy ON TABLE scene_realization TYPE string;",
             "DEFINE FIELD status ON TABLE scene_realization TYPE string DEFAULT 'pending';",
             "DEFINE FIELD unreal_actor_name ON TABLE scene_realization TYPE option<string>;",
-            "DEFINE FIELD metadata ON TABLE scene_realization TYPE object DEFAULT {};",
+            "DEFINE FIELD OVERWRITE metadata ON TABLE scene_realization FLEXIBLE TYPE object DEFAULT {};",
             "DEFINE INDEX scene_realization_entity_policy ON TABLE scene_realization COLUMNS scene, entity_id, policy UNIQUE;",
             "DEFINE FIELD created_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
             "DEFINE FIELD updated_at ON TABLE scene_realization TYPE datetime DEFAULT time::now();",
@@ -342,7 +342,8 @@ impl SurrealSceneRepository {
             .select(("scene", scene_id))
             .await
             .map_err(|e| AppError::Database(format!("select scene error: {e}")))?;
-        let mut scene = existing.ok_or_else(|| AppError::NotFound(format!("scene {scene_id} not found")))?;
+        let mut scene =
+            existing.ok_or_else(|| AppError::NotFound(format!("scene {scene_id} not found")))?;
         scene.status = status.to_string();
         scene.updated_at = Datetime::from(chrono::Utc::now());
         let updated: Option<Scene> = self
@@ -989,7 +990,9 @@ impl SurrealSceneRepository {
             .take(0)
             .map_err(|e| AppError::Database(format!("update entity transform parse error: {e}")))?;
 
-        updated.ok_or_else(|| AppError::NotFound(format!("entity {entity_id} not found in scene {scene_id}")))
+        updated.ok_or_else(|| {
+            AppError::NotFound(format!("entity {entity_id} not found in scene {scene_id}"))
+        })
     }
 
     pub async fn upsert_relation(
@@ -1403,13 +1406,17 @@ impl SurrealSceneRepository {
         let ids: Vec<String> = entity_ids.iter().map(|s| s.to_string()).collect();
         let realizations: Vec<SceneRealization> = self
             .db
-            .query("SELECT * FROM scene_realization WHERE scene = $scene AND entity_id IN $entity_ids")
+            .query(
+                "SELECT * FROM scene_realization WHERE scene = $scene AND entity_id IN $entity_ids",
+            )
             .bind(("scene", format!("scene:{scene_id}")))
             .bind(("entity_ids", ids))
             .await
             .map_err(|e| AppError::Database(format!("find realizations for entities error: {e}")))?
             .take(0)
-            .map_err(|e| AppError::Database(format!("find realizations for entities parse error: {e}")))?;
+            .map_err(|e| {
+                AppError::Database(format!("find realizations for entities parse error: {e}"))
+            })?;
         let mut map = std::collections::HashMap::new();
         for rz in realizations {
             map.insert(rz.entity_id.clone(), rz);
