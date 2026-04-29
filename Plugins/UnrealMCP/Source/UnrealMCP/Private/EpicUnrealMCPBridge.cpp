@@ -289,6 +289,7 @@ namespace
             {TEXT("set_actor_transform_by_mcp_id"), 1},
             {TEXT("delete_actor_by_mcp_id"), 1},
             {TEXT("apply_scene_delta"), 1},
+            {TEXT("clone_actor"), 1},
             {TEXT("create_nav_mesh_volume"), 1},
             {TEXT("create_patrol_route"), 1},
             {TEXT("set_ai_behavior"), 1},

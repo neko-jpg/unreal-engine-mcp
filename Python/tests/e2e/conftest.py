@@ -68,36 +68,50 @@ def api_get(path: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+# --- Persistent TCP connection for unreal_command ---
+_unreal_socket: socket.socket | None = None
+
+
 def unreal_command(command: str, params: dict = None) -> dict:
+    """Send command to Unreal via persistent TCP connection.
+
+    Reuses a module-level socket across calls. Falls back to new connection
+    on any failure, avoiding the 6-retry chain overhead.
+    """
+    global _unreal_socket
     payload = json.dumps({"command": command, "params": params or {}}).encode("utf-8") + b"\n"
     last_error = None
-    for attempt in range(6):
+
+    for attempt in range(3):
         try:
-            client = socket.create_connection((UNREAL_HOST, UNREAL_PORT), timeout=10)
-            try:
-                client.sendall(payload)
-                client.shutdown(socket.SHUT_WR)
-                client.settimeout(30)
-                data = bytearray()
-                while b"\n" not in data:
-                    chunk = client.recv(262144)
-                    if not chunk:
-                        break
-                    data.extend(chunk)
-            finally:
-                try:
-                    client.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
-                client.close()
-            if not data:
-                raise RuntimeError(f"Unreal returned no response for {command}")
+            if _unreal_socket is None:
+                _unreal_socket = socket.create_connection((UNREAL_HOST, UNREAL_PORT), timeout=10)
+                _unreal_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                _unreal_socket.settimeout(30)
+
+            _unreal_socket.sendall(payload)
+            data = bytearray()
+            while b"\n" not in data:
+                chunk = _unreal_socket.recv(262144)
+                if not chunk:
+                    raise ConnectionError("Unreal connection closed by peer")
+                data.extend(chunk)
             return json.loads(bytes(data).split(b"\n", 1)[0].decode("utf-8"))
-        except (ConnectionAbortedError, ConnectionResetError, OSError, socket.timeout) as exc:
+        except (ConnectionAbortedError, ConnectionResetError, ConnectionError, OSError, socket.timeout) as exc:
             last_error = exc
-            if attempt == 5:
+            try:
+                _unreal_socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                _unreal_socket.close()
+            except OSError:
+                pass
+            _unreal_socket = None
+            if attempt == 2:
                 break
-            time.sleep(0.5 * (attempt + 1))
+            time.sleep(0.3 * (attempt + 1))
+
     raise last_error
 
 

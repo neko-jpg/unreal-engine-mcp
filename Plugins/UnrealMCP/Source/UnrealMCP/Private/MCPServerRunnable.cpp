@@ -1,8 +1,6 @@
 #include "MCPServerRunnable.h"
 #include "EpicUnrealMCPBridge.h"
 #include "UnrealMCPSettings.h"
-#include "Sockets.h"
-#include "SocketSubsystem.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -12,7 +10,6 @@
 FMCPServerRunnable::FMCPServerRunnable(UEpicUnrealMCPBridge* InBridge, FSocket* InListenerSocket)
     : Bridge(InBridge)
     , ListenerSocket(InListenerSocket)
-    , ClientSocket(nullptr)
     , bRunning(true)
 {
     UE_LOG(LogTemp, Log, TEXT("MCPServerRunnable: Created server runnable"));
@@ -37,87 +34,51 @@ uint32 FMCPServerRunnable::Run()
         if (ListenerSocket && ListenerSocket->HasPendingConnection(bPending) && bPending)
         {
             FSocket* NewClientSocket = ListenerSocket->Accept(TEXT("MCPClient"));
-            ClientSocket.store(NewClientSocket);
             if (NewClientSocket)
             {
-                NewClientSocket->SetNonBlocking(false);
-                NewClientSocket->SetNoDelay(true);
-                int32 SocketBufferSize = 65536;
-                NewClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
-                NewClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
-
-                // Receive loop with newline-delimited framing
-                const int32 ChunkSize = 65536;
-                uint8 Buffer[ChunkSize];
-                FString Accumulator;
-
-                while (bRunning)
+                FScopeLock Lock(&HandlersLock);
+                if (ClientHandlers.Num() >= MAX_CLIENT_CONNECTIONS)
                 {
-                    int32 BytesRead = 0;
-                    if (!NewClientSocket->Recv(Buffer, ChunkSize - 1, BytesRead))
+                    UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Max client connections (%d) reached; rejecting new client"), MAX_CLIENT_CONNECTIONS);
+                    NewClientSocket->Close();
+                    if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
                     {
-                        int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
-                        if (LastError == SE_EWOULDBLOCK)
-                        {
-                            NewClientSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(50));
-                            continue;
-                        }
-                        else if (LastError == SE_EINTR)
-                        {
-                            UE_LOG(LogTemp, Verbose, TEXT("MCPServerRunnable: Recv interrupted, continuing..."));
-                            continue;
-                        }
-                        else
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Client disconnected or error. Code: %d"), LastError);
-                            break;
-                        }
-                    }
-
-                    if (BytesRead == 0)
-                    {
-                        UE_LOG(LogTemp, Log, TEXT("MCPServerRunnable: Client disconnected (zero bytes)"));
-                        break;
-                    }
-
-                    Buffer[BytesRead] = '\0';
-                    Accumulator.Append(UTF8_TO_TCHAR(Buffer));
-
-                    int32 NewlineIndex;
-                    while (Accumulator.FindChar('\n', NewlineIndex))
-                    {
-                        FString Line = Accumulator.Left(NewlineIndex);
-                        Accumulator.RemoveAt(0, NewlineIndex + 1);
-
-                        Line.TrimStartAndEndInline();
-                        if (!Line.IsEmpty())
-                        {
-                            ProcessMessage(NewClientSocket, Line);
-                        }
-                    }
-
-                    // Prevent unbounded growth of accumulator from malformed input
-                    constexpr int32 MAX_REQUEST_SIZE = 1048576; // 1MB
-                    if (Accumulator.Len() > MAX_REQUEST_SIZE)
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Accumulator exceeded 1MB without newline; closing connection."));
-                        Accumulator.Empty();
-                        break;
+                        SocketSubsystem->DestroySocket(NewClientSocket);
                     }
                 }
-
-                NewClientSocket->Close();
-                if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+                else
                 {
-                    SocketSubsystem->DestroySocket(NewClientSocket);
+                    auto Handler = MakeUnique<FMCPClientHandler>(Bridge, NewClientSocket);
+                    FRunnableThread* Thread = FRunnableThread::Create(
+                        Handler.Get(),
+                        TEXT("MCPClientHandler"),
+                        0, TPri_Normal);
+
+                    if (Thread)
+                    {
+                        ClientHandlers.Add(MoveTemp(Handler));
+                        ClientThreads.Add(Thread);
+                        UE_LOG(LogTemp, Log, TEXT("MCPServerRunnable: Spawned client handler (total: %d)"), ClientHandlers.Num());
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to create client thread"));
+                        NewClientSocket->Close();
+                        if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+                        {
+                            SocketSubsystem->DestroySocket(NewClientSocket);
+                        }
+                    }
                 }
-                ClientSocket.store(nullptr);
             }
             else
             {
                 UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to accept client connection"));
             }
         }
+
+        // Periodic cleanup of finished handlers to prevent unbounded growth
+        CleanupFinishedHandlers();
 
         if (ListenerSocket)
         {
@@ -132,101 +93,46 @@ uint32 FMCPServerRunnable::Run()
 void FMCPServerRunnable::Stop()
 {
     bRunning = false;
+    FScopeLock Lock(&HandlersLock);
+    for (auto& Handler : ClientHandlers)
+    {
+        if (Handler.IsValid())
+        {
+            Handler->Stop();
+        }
+    }
 }
 
 void FMCPServerRunnable::Exit()
 {
+    FScopeLock Lock(&HandlersLock);
+    for (FRunnableThread* Thread : ClientThreads)
+    {
+        if (Thread)
+        {
+            Thread->WaitForCompletion();
+            delete Thread;
+        }
+    }
+    ClientThreads.Empty();
+    ClientHandlers.Empty();
 }
 
-void FMCPServerRunnable::ProcessMessage(FSocket* Client, const FString& Message)
+void FMCPServerRunnable::CleanupFinishedHandlers()
 {
-    auto SendJsonError = [Client](const FString& ErrorCode, const FString& ErrorMessage) mutable {
-        if (!Client)
+    FScopeLock Lock(&HandlersLock);
+    for (int32 i = ClientHandlers.Num() - 1; i >= 0; --i)
+    {
+        if (ClientHandlers[i].IsValid() && ClientHandlers[i]->IsFinished())
         {
-            return;
-        }
-
-        TSharedPtr<FJsonObject> ErrorObj = MakeShared<FJsonObject>();
-        ErrorObj->SetBoolField(TEXT("success"), false);
-        ErrorObj->SetStringField(TEXT("error_code"), ErrorCode);
-        ErrorObj->SetStringField(TEXT("error"), ErrorMessage);
-        FString ErrorStr;
-        TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ErrorStr);
-        FJsonSerializer::Serialize(ErrorObj.ToSharedRef(), Writer);
-        ErrorStr.AppendChar('\n');
-        FTCHARToUTF8 UTF8Error(*ErrorStr);
-        const uint8* Data = (const uint8*)UTF8Error.Get();
-        int32 TotalSize = UTF8Error.Length();
-        int32 Sent = 0;
-        while (Sent < TotalSize)
-        {
-            int32 ChunkSent = 0;
-            if (!Client->Send(Data + Sent, TotalSize - Sent, ChunkSent))
+            if (ClientThreads.IsValidIndex(i) && ClientThreads[i])
             {
-                return;
+                // Wait for the thread to finish (should be quick since IsFinished is true)
+                ClientThreads[i]->WaitForCompletion();
+                delete ClientThreads[i];
             }
-            Sent += ChunkSent;
+            ClientThreads.RemoveAt(i);
+            ClientHandlers.RemoveAt(i);
         }
-    };
-
-    TSharedPtr<FJsonObject> JsonMessage;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Message);
-
-    if (!FJsonSerializer::Deserialize(Reader, JsonMessage) || !JsonMessage.IsValid())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to parse JSON message"));
-        SendJsonError(TEXT("INVALID_JSON"), TEXT("Failed to parse request as valid JSON"));
-        return;
-    }
-
-    FString CommandType;
-    if (!JsonMessage->TryGetStringField(TEXT("command"), CommandType))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Missing 'command' field"));
-        SendJsonError(TEXT("MISSING_COMMAND"), TEXT("Request must include a 'command' field"));
-        return;
-    }
-
-    const UUnrealMCPSettings* Settings = GetDefault<UUnrealMCPSettings>();
-    if (Settings && !Settings->AuthToken.IsEmpty())
-    {
-        FString ProvidedToken;
-        if (!JsonMessage->TryGetStringField(TEXT("auth_token"), ProvidedToken) || ProvidedToken != Settings->AuthToken)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Authentication failed for command '%s'"), *CommandType);
-            SendJsonError(TEXT("AUTH_FAILED"), TEXT("Invalid or missing auth_token"));
-            return;
-        }
-    }
-
-    TSharedPtr<FJsonObject> Params;
-    const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
-    if (JsonMessage->TryGetObjectField(TEXT("params"), ParamsPtr))
-    {
-        Params = *ParamsPtr;
-    }
-    else
-    {
-        Params = MakeShareable(new FJsonObject());
-    }
-
-    FString Response = Bridge->ExecuteCommand(CommandType, Params);
-    Response.AppendChar('\n');
-
-    FTCHARToUTF8 UTF8Response(*Response);
-    const uint8* DataToSend = (const uint8*)UTF8Response.Get();
-    int32 TotalDataSize = UTF8Response.Length();
-    int32 TotalBytesSent = 0;
-
-    while (TotalBytesSent < TotalDataSize)
-    {
-        int32 BytesSent = 0;
-        if (!Client->Send(DataToSend + TotalBytesSent, TotalDataSize - TotalBytesSent, BytesSent))
-        {
-            UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Failed to send response after %d/%d bytes"), TotalBytesSent, TotalDataSize);
-            return;
-        }
-        TotalBytesSent += BytesSent;
     }
 }

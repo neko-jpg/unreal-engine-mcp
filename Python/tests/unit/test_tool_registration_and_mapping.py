@@ -318,7 +318,7 @@ class TestPythonToCppCommandMapping:
         py_cmds = self._collect_python_commands()
         cpp_cmds = self._collect_cpp_commands()
         missing = cpp_cmds - py_cmds
-        whitelist = {"ping", "apply_scene_delta"}
+        whitelist = {"ping", "apply_scene_delta", "clone_actor"}
         actual_missing = missing - whitelist
         assert not actual_missing, (
             f"C++ supports these commands but Python tools never send them: {actual_missing}"
@@ -385,7 +385,7 @@ class TestPythonToCppCommandMapping:
         """All C++ commands should be reachable through at least one MCP tool."""
         py_cmds = self._collect_python_commands()
         cpp_cmds = self._collect_cpp_commands()
-        unreachable = cpp_cmds - py_cmds - {"ping", "apply_scene_delta"}
+        unreachable = cpp_cmds - py_cmds - {"ping", "apply_scene_delta", "clone_actor"}
         assert not unreachable, (
             f"C++ commands not reachable through any Python tool: {unreachable}"
         )

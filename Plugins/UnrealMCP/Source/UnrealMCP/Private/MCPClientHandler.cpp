@@ -1,0 +1,239 @@
+#include "MCPClientHandler.h"
+#include "EpicUnrealMCPBridge.h"
+#include "UnrealMCPSettings.h"
+
+FMCPClientHandler::FMCPClientHandler(UEpicUnrealMCPBridge* InBridge, FSocket* InClientSocket)
+    : Bridge(InBridge)
+    , ClientSocket(InClientSocket)
+    , bRunning(true)
+    , bFinished(false)
+{
+}
+
+FMCPClientHandler::~FMCPClientHandler()
+{
+    if (ClientSocket)
+    {
+        ClientSocket->Close();
+        if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+        {
+            SocketSubsystem->DestroySocket(ClientSocket);
+        }
+        ClientSocket = nullptr;
+    }
+}
+
+bool FMCPClientHandler::Init()
+{
+    return true;
+}
+
+uint32 FMCPClientHandler::Run()
+{
+    UE_LOG(LogTemp, Log, TEXT("MCPClientHandler: Client thread starting"));
+
+    if (!ClientSocket)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: No client socket; exiting"));
+        bFinished = true;
+        return 0;
+    }
+
+    ClientSocket->SetNonBlocking(false);
+    ClientSocket->SetNoDelay(true);
+    int32 SocketBufferSize = 65536;
+    ClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
+    ClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
+
+    // Receive loop with newline-delimited framing
+    const int32 ChunkSize = 65536;
+    uint8 Buffer[ChunkSize];
+    FString Accumulator;
+
+    while (bRunning)
+    {
+        int32 BytesRead = 0;
+        if (!ClientSocket->Recv(Buffer, ChunkSize - 1, BytesRead))
+        {
+            int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
+            if (LastError == SE_EWOULDBLOCK)
+            {
+                ClientSocket->Wait(ESocketWaitConditions::WaitForRead, FTimespan::FromMilliseconds(50));
+                continue;
+            }
+            else if (LastError == SE_EINTR)
+            {
+                UE_LOG(LogTemp, Verbose, TEXT("MCPClientHandler: Recv interrupted, continuing..."));
+                continue;
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: Client disconnected or error. Code: %d"), LastError);
+                break;
+            }
+        }
+
+        if (BytesRead == 0)
+        {
+            UE_LOG(LogTemp, Log, TEXT("MCPClientHandler: Client disconnected (zero bytes)"));
+            break;
+        }
+
+        Buffer[BytesRead] = '\0';
+        Accumulator.Append(UTF8_TO_TCHAR(Buffer));
+
+        int32 NewlineIndex;
+        while (Accumulator.FindChar('\n', NewlineIndex))
+        {
+            FString Line = Accumulator.Left(NewlineIndex);
+            Accumulator.RemoveAt(0, NewlineIndex + 1);
+
+            Line.TrimStartAndEndInline();
+            if (!Line.IsEmpty())
+            {
+                ProcessMessage(Line);
+            }
+        }
+
+        // Prevent unbounded growth of accumulator from malformed input
+        constexpr int32 MAX_REQUEST_SIZE = 1048576; // 1MB
+        if (Accumulator.Len() > MAX_REQUEST_SIZE)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: Accumulator exceeded 1MB without newline; closing connection."));
+            Accumulator.Empty();
+            break;
+        }
+    }
+
+    if (ClientSocket)
+    {
+        ClientSocket->Close();
+        if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+        {
+            SocketSubsystem->DestroySocket(ClientSocket);
+        }
+        ClientSocket = nullptr;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("MCPClientHandler: Client thread stopping"));
+    bFinished = true;
+    return 0;
+}
+
+void FMCPClientHandler::Stop()
+{
+    bRunning = false;
+    if (ClientSocket)
+    {
+        ClientSocket->Close();
+    }
+}
+
+void FMCPClientHandler::Exit()
+{
+    // Socket cleanup is handled in destructor and Run() exit path
+}
+
+bool FMCPClientHandler::IsFinished() const
+{
+    return bFinished;
+}
+
+FSocket* FMCPClientHandler::GetClientSocket() const
+{
+    return ClientSocket;
+}
+
+void FMCPClientHandler::ProcessMessage(const FString& Message)
+{
+    auto SendJsonError = [this](const FString& ErrorCode, const FString& ErrorMessage)
+    {
+        if (!ClientSocket)
+        {
+            return;
+        }
+
+        TSharedPtr<FJsonObject> ErrorObj = MakeShared<FJsonObject>();
+        ErrorObj->SetBoolField(TEXT("success"), false);
+        ErrorObj->SetStringField(TEXT("error_code"), ErrorCode);
+        ErrorObj->SetStringField(TEXT("error"), ErrorMessage);
+        FString ErrorStr;
+        TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ErrorStr);
+        FJsonSerializer::Serialize(ErrorObj.ToSharedRef(), Writer);
+        ErrorStr.AppendChar('\n');
+        FTCHARToUTF8 UTF8Error(*ErrorStr);
+        const uint8* Data = (const uint8*)UTF8Error.Get();
+        int32 TotalSize = UTF8Error.Length();
+        int32 Sent = 0;
+        while (Sent < TotalSize)
+        {
+            int32 ChunkSent = 0;
+            if (!ClientSocket->Send(Data + Sent, TotalSize - Sent, ChunkSent))
+            {
+                return;
+            }
+            Sent += ChunkSent;
+        }
+    };
+
+    TSharedPtr<FJsonObject> JsonMessage;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Message);
+
+    if (!FJsonSerializer::Deserialize(Reader, JsonMessage) || !JsonMessage.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: Failed to parse JSON message"));
+        SendJsonError(TEXT("INVALID_JSON"), TEXT("Failed to parse request as valid JSON"));
+        return;
+    }
+
+    FString CommandType;
+    if (!JsonMessage->TryGetStringField(TEXT("command"), CommandType))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: Missing 'command' field"));
+        SendJsonError(TEXT("MISSING_COMMAND"), TEXT("Request must include a 'command' field"));
+        return;
+    }
+
+    const UUnrealMCPSettings* Settings = GetDefault<UUnrealMCPSettings>();
+    if (Settings && !Settings->AuthToken.IsEmpty())
+    {
+        FString ProvidedToken;
+        if (!JsonMessage->TryGetStringField(TEXT("auth_token"), ProvidedToken) || ProvidedToken != Settings->AuthToken)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCPClientHandler: Authentication failed for command '%s'"), *CommandType);
+            SendJsonError(TEXT("AUTH_FAILED"), TEXT("Invalid or missing auth_token"));
+            return;
+        }
+    }
+
+    TSharedPtr<FJsonObject> Params;
+    const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
+    if (JsonMessage->TryGetObjectField(TEXT("params"), ParamsPtr))
+    {
+        Params = *ParamsPtr;
+    }
+    else
+    {
+        Params = MakeShareable(new FJsonObject());
+    }
+
+    FString Response = Bridge->ExecuteCommand(CommandType, Params);
+    Response.AppendChar('\n');
+
+    FTCHARToUTF8 UTF8Response(*Response);
+    const uint8* DataToSend = (const uint8*)UTF8Response.Get();
+    int32 TotalDataSize = UTF8Response.Length();
+    int32 TotalBytesSent = 0;
+
+    while (TotalBytesSent < TotalDataSize)
+    {
+        int32 BytesSent = 0;
+        if (!ClientSocket->Send(DataToSend + TotalBytesSent, TotalDataSize - TotalBytesSent, BytesSent))
+        {
+            UE_LOG(LogTemp, Error, TEXT("MCPClientHandler: Failed to send response after %d/%d bytes"), TotalBytesSent, TotalDataSize);
+            return;
+        }
+        TotalBytesSent += BytesSent;
+    }
+}

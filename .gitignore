@@ -85,6 +85,7 @@ venv.bak/
 MCPGameProject/Config/DefaultEditorPerProjectUserSettings.ini
 tmp/
 scratch/
+tests/benchmarks/
 .surreal/
 surreal.exe
 tools/surrealdb/
@@ -132,3 +133,6 @@ screenshots/
 
 # Downloaded installers
 dotnet-install.ps1
+
+# benchmarks results
+tests/benchmarks/

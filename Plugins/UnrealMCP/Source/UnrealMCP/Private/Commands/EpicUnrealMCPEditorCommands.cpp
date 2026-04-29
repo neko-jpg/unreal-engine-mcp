@@ -61,6 +61,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
         {TEXT("set_actor_transform_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleSetActorTransformByMcpId},
         {TEXT("delete_actor_by_mcp_id"), &FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId},
         {TEXT("apply_scene_delta"), &FEpicUnrealMCPEditorCommands::HandleApplySceneDelta},
+        {TEXT("clone_actor"), &FEpicUnrealMCPEditorCommands::HandleCloneActor},
         {TEXT("create_nav_mesh_volume"), &FEpicUnrealMCPEditorCommands::HandleCreateNavMeshVolume},
         {TEXT("create_patrol_route"), &FEpicUnrealMCPEditorCommands::HandleCreatePatrolRoute},
         {TEXT("set_ai_behavior"), &FEpicUnrealMCPEditorCommands::HandleSetAIBehavior},
@@ -415,7 +416,7 @@ FParsedUpdateParams FEpicUnrealMCPEditorCommands::ParseUpdateParams(const TShare
     return Parsed;
 }
 
-TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteCreateActor(const FParsedCreateParams& Parsed)
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteCreateActor(const FParsedCreateParams& Parsed, bool bSuppressTransaction)
 {
     UWorld* World = GEditor->GetEditorWorldContext().World();
     if (!World)
@@ -430,50 +431,72 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ExecuteCreateActor(const F
             FString::Printf(TEXT("Actor with name '%s' already exists"), *Parsed.Name));
     }
 
-    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Spawn Actor")));
+    // Wrap in a transaction unless the caller already provides one (batch mode).
+    TUniquePtr<FScopedTransaction> Transaction;
+    if (!bSuppressTransaction)
+    {
+        Transaction = MakeUnique<FScopedTransaction>(FText::FromString(TEXT("UnrealMCP: Spawn Actor")));
+    }
+
+    // Use deferred spawning so scale is injected before component registration,
+    // avoiding a redundant SetActorTransform + re-registration cycle.
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = *Parsed.Name;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
     AActor* NewActor = nullptr;
+    FTransform SpawnTransform(Parsed.Rotation, Parsed.Location, Parsed.Scale);
 
     if (Parsed.Type == TEXT("StaticMeshActor"))
     {
-        AStaticMeshActor* NewMeshActor = World->SpawnActor<AStaticMeshActor>(
-            AStaticMeshActor::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
-        if (NewMeshActor && !Parsed.StaticMeshPath.IsEmpty())
+        AStaticMeshActor* NewMeshActor = World->SpawnActorDeferred<AStaticMeshActor>(
+            AStaticMeshActor::StaticClass(), SpawnTransform, nullptr, nullptr,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (NewMeshActor)
         {
-            UStaticMesh* Mesh = Cast<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Parsed.StaticMeshPath));
-            if (Mesh)
+            if (!Parsed.StaticMeshPath.IsEmpty())
             {
-                NewMeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+                UStaticMesh* Mesh = Cast<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Parsed.StaticMeshPath));
+                if (Mesh)
+                {
+                    NewMeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+                }
             }
+            NewMeshActor->FinishSpawning(SpawnTransform);
         }
         NewActor = NewMeshActor;
     }
     else if (Parsed.Type == TEXT("PointLight"))
     {
-        NewActor = World->SpawnActor<APointLight>(APointLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+        NewActor = World->SpawnActorDeferred<APointLight>(
+            APointLight::StaticClass(), SpawnTransform, nullptr, nullptr,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (NewActor) { NewActor->FinishSpawning(SpawnTransform); }
     }
     else if (Parsed.Type == TEXT("SpotLight"))
     {
-        NewActor = World->SpawnActor<ASpotLight>(ASpotLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+        NewActor = World->SpawnActorDeferred<ASpotLight>(
+            ASpotLight::StaticClass(), SpawnTransform, nullptr, nullptr,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (NewActor) { NewActor->FinishSpawning(SpawnTransform); }
     }
     else if (Parsed.Type == TEXT("DirectionalLight"))
     {
-        NewActor = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+        NewActor = World->SpawnActorDeferred<ADirectionalLight>(
+            ADirectionalLight::StaticClass(), SpawnTransform, nullptr, nullptr,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (NewActor) { NewActor->FinishSpawning(SpawnTransform); }
     }
     else if (Parsed.Type == TEXT("CameraActor"))
     {
-        NewActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Parsed.Location, Parsed.Rotation, SpawnParams);
+        NewActor = World->SpawnActorDeferred<ACameraActor>(
+            ACameraActor::StaticClass(), SpawnTransform, nullptr, nullptr,
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (NewActor) { NewActor->FinishSpawning(SpawnTransform); }
     }
 
     if (NewActor)
     {
-        // Set scale
-        FTransform Transform = NewActor->GetTransform();
-        Transform.SetScale3D(Parsed.Scale);
-        NewActor->SetActorTransform(Transform);
-
         // Apply mcp_id tag
         NewActor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
         if (!Parsed.McpId.IsEmpty())
@@ -791,6 +814,136 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActorByMcpId(c
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetObjectField(TEXT("deleted_actor"), ActorInfo);
     ResultObj->SetBoolField(TEXT("deleted"), true);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCloneActor(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SourceActorName;
+    if (!Params->TryGetStringField(TEXT("source_actor_name"), SourceActorName) || SourceActorName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'source_actor_name' parameter"));
+    }
+
+    FString NewActorName;
+    if (!Params->TryGetStringField(TEXT("new_actor_name"), NewActorName) || NewActorName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'new_actor_name' parameter"));
+    }
+
+    FString McpId;
+    Params->TryGetStringField(TEXT("mcp_id"), McpId);
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    // Find source actor
+    AActor* SourceActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName() == SourceActorName)
+        {
+            SourceActor = *It;
+            break;
+        }
+    }
+
+    if (!SourceActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Source actor '%s' not found in level"), *SourceActorName));
+    }
+
+    // Parse new transform (default to source actor's current values)
+    FVector NewLocation = SourceActor->GetActorLocation();
+    FRotator NewRotation = SourceActor->GetActorRotation();
+    FVector NewScale = SourceActor->GetActorScale3D();
+
+    auto TryGetVec = [](const TSharedPtr<FJsonObject>& Obj, FVector& Out) -> bool
+    {
+        if (!Obj.IsValid()) return false;
+        double X = 0, Y = 0, Z = 0;
+        if (!Obj->TryGetNumberField(TEXT("x"), X)) return false;
+        if (!Obj->TryGetNumberField(TEXT("y"), Y)) return false;
+        if (!Obj->TryGetNumberField(TEXT("z"), Z)) return false;
+        Out = FVector(X, Y, Z);
+        return true;
+    };
+
+    const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
+    if (Params->TryGetObjectField(TEXT("location"), ObjPtr))
+    {
+        TryGetVec(*ObjPtr, NewLocation);
+    }
+    if (Params->TryGetObjectField(TEXT("rotation"), ObjPtr))
+    {
+        FVector RotVec;
+        if (TryGetVec(*ObjPtr, RotVec))
+        {
+            NewRotation = FRotator(RotVec.Y, RotVec.Z, RotVec.X); // pitch,yaw,roll
+        }
+    }
+    if (Params->TryGetObjectField(TEXT("scale"), ObjPtr))
+    {
+        TryGetVec(*ObjPtr, NewScale);
+    }
+
+    // Clone via deferred spawn with template — much faster than full SpawnActor
+    // because property values are copied from the template instead of CDO init.
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *NewActorName;
+    SpawnParams.Template = SourceActor;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    FTransform NewTransform(NewRotation, NewLocation, NewScale);
+    AActor* Clone = World->SpawnActorDeferred<AActor>(
+        SourceActor->GetClass(), NewTransform, nullptr, nullptr,
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+    if (!Clone)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to clone actor"));
+    }
+    Clone->FinishSpawning(NewTransform);
+
+    // Update tags: copy non-system tags, add new mcp_identity
+    Clone->Tags.Empty();
+    for (const FName& Tag : SourceActor->Tags)
+    {
+        FString TagStr = Tag.ToString();
+        if (!TagStr.StartsWith(TEXT("mcp_id:")))
+        {
+            Clone->Tags.AddUnique(Tag);
+        }
+    }
+    Clone->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
+    if (!McpId.IsEmpty())
+    {
+        Clone->Tags.AddUnique(FName(*FString::Printf(TEXT("mcp_id:%s"), *McpId)));
+    }
+
+    // Apply custom tags from params
+    const TArray<TSharedPtr<FJsonValue>>* TagsArray = nullptr;
+    if (Params->TryGetArrayField(TEXT("tags"), TagsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& TagValue : *TagsArray)
+        {
+            FString TagStr;
+            if (TagValue->TryGetString(TagStr))
+            {
+                Clone->Tags.AddUnique(FName(*TagStr));
+            }
+        }
+    }
+
+    // Index the clone
+    GetActorIndex().AddActor(Clone);
+
+    TSharedPtr<FJsonObject> ResultObj = FEpicUnrealMCPCommonUtils::ActorToJsonObject(Clone, true);
+    ResultObj->SetBoolField(TEXT("cloned"), true);
+    ResultObj->SetStringField(TEXT("source_actor_name"), SourceActorName);
     return ResultObj;
 }
 
@@ -1129,7 +1282,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleApplySceneDelta(cons
                 FEpicUnrealMCPCommonUtils::CreateErrorResponse(Parsed.ErrorString)));
             continue;
         }
-        TSharedPtr<FJsonObject> Result = ExecuteCreateActor(Parsed);
+        TSharedPtr<FJsonObject> Result = ExecuteCreateActor(Parsed, true);
         if (Result.IsValid() && Result->HasField(TEXT("success")) && Result->GetBoolField(TEXT("success")))
         {
             CreatedCount++;

@@ -746,6 +746,43 @@ impl SurrealSceneRepository {
         Ok(())
     }
 
+    /// Batch version: update sync_status for multiple objects in one query.
+    pub async fn mark_objects_synced_batch(
+        &self,
+        scene_id: &str,
+        items: &[(String, String, Option<String>)], // (mcp_id, desired_hash, unreal_actor_name)
+    ) -> Result<(), AppError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        // Build a single query with multiple UPDATE statements.
+        // Use type::thing() so record keys containing colons are parsed correctly.
+        let mut query = String::new();
+        for (i, (mcp_id, _, _)) in items.iter().enumerate() {
+            let _record_key = scene_object_record_key(scene_id, mcp_id);
+            query.push_str(&format!(
+                "UPDATE type::thing('scene_object', $rk{i}) MERGE {{ sync_status: $status{i}, last_applied_hash: $hash{i} ",
+            ));
+            if items[i].2.is_some() {
+                query.push_str(&format!(", unreal_actor_name: $name{i} "));
+            }
+            query.push_str("}; ");
+        }
+        let mut q = self.db.query(&query);
+        for (i, (mcp_id, hash, actor_name)) in items.iter().enumerate() {
+            let record_key = scene_object_record_key(scene_id, mcp_id);
+            q = q.bind((format!("rk{i}"), record_key));
+            q = q.bind((format!("status{i}"), "synced"));
+            q = q.bind((format!("hash{i}"), hash.clone()));
+            if let Some(name) = actor_name {
+                q = q.bind((format!("name{i}"), name.clone()));
+            }
+        }
+        q.await
+            .map_err(|e| AppError::Database(format!("mark synced batch error: {e}")))?;
+        Ok(())
+    }
+
     pub async fn mark_object_deleted_applied(
         &self,
         scene_id: &str,
@@ -793,6 +830,39 @@ impl SurrealSceneRepository {
             .await
             .map_err(|e| AppError::Database(format!("record operation error: {e}")))?;
 
+        Ok(())
+    }
+
+    /// Batch version: insert multiple scene_operation records in one query.
+    pub async fn record_operations_batch(
+        &self,
+        run_id: &str,
+        scene_id: &str,
+        ops: &[(String, String, String, String)], // (mcp_id, action, status, reason)
+    ) -> Result<(), AppError> {
+        if ops.is_empty() {
+            return Ok(());
+        }
+        let records: Vec<serde_json::Value> = ops
+            .iter()
+            .map(|(mcp_id, action, status, reason)| {
+                serde_json::json!({
+                    "scene": format!("scene:{scene_id}"),
+                    "sync_run": format!("sync_run:{run_id}"),
+                    "mcp_id": mcp_id,
+                    "action": action,
+                    "reason": reason,
+                    "status": status,
+                    "attempts": 1,
+                    "created_at": "time::now()"
+                })
+            })
+            .collect();
+        self.db
+            .query("INSERT INTO scene_operation $records")
+            .bind(("records", records))
+            .await
+            .map_err(|e| AppError::Database(format!("record operations batch error: {e}")))?;
         Ok(())
     }
 
@@ -1273,6 +1343,32 @@ impl SurrealSceneRepository {
         Ok(realizations.into_iter().next())
     }
 
+    /// Batch version: fetch all realizations for the given entity IDs.
+    pub async fn find_realizations_for_entities(
+        &self,
+        scene_id: &str,
+        entity_ids: &[&str],
+    ) -> Result<std::collections::HashMap<String, SceneRealization>, AppError> {
+        if entity_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let ids: Vec<String> = entity_ids.iter().map(|s| s.to_string()).collect();
+        let realizations: Vec<SceneRealization> = self
+            .db
+            .query("SELECT * FROM scene_realization WHERE scene = $scene AND entity_id IN $entity_ids")
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("entity_ids", ids))
+            .await
+            .map_err(|e| AppError::Database(format!("find realizations for entities error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("find realizations for entities parse error: {e}")))?;
+        let mut map = std::collections::HashMap::new();
+        for rz in realizations {
+            map.insert(rz.entity_id.clone(), rz);
+        }
+        Ok(map)
+    }
+
     pub async fn find_entity_by_mcp_id(
         &self,
         scene_id: &str,
@@ -1288,6 +1384,34 @@ impl SurrealSceneRepository {
             .take(0)
             .map_err(|e| AppError::Database(format!("find entity by mcp_id parse error: {e}")))?;
         Ok(entities.into_iter().next())
+    }
+
+    /// Batch version: fetch all entities whose mcp_ids overlap with the given set.
+    pub async fn find_entities_by_mcp_ids(
+        &self,
+        scene_id: &str,
+        mcp_ids: &[&str],
+    ) -> Result<std::collections::HashMap<String, SceneEntity>, AppError> {
+        if mcp_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let ids: Vec<String> = mcp_ids.iter().map(|s| s.to_string()).collect();
+        let entities: Vec<SceneEntity> = self
+            .db
+            .query("SELECT * FROM scene_entity WHERE scene = $scene AND deleted = false AND mcp_ids CONTAINSANY $mcp_ids")
+            .bind(("scene", format!("scene:{scene_id}")))
+            .bind(("mcp_ids", ids))
+            .await
+            .map_err(|e| AppError::Database(format!("find entities by mcp_ids error: {e}")))?
+            .take(0)
+            .map_err(|e| AppError::Database(format!("find entities by mcp_ids parse error: {e}")))?;
+        let mut map = std::collections::HashMap::new();
+        for e in entities {
+            for mid in &e.mcp_ids {
+                map.insert(mid.clone(), e.clone());
+            }
+        }
+        Ok(map)
     }
 
     pub async fn update_realization_status(

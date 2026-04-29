@@ -70,8 +70,11 @@ private:
     // P4.3: Pre-parse helpers for batch scene delta
     FParsedCreateParams ParseCreateParams(const TSharedPtr<FJsonObject>& Params) const;
     FParsedUpdateParams ParseUpdateParams(const TSharedPtr<FJsonObject>& Params) const;
-    TSharedPtr<FJsonObject> ExecuteCreateActor(const FParsedCreateParams& Parsed);
+    TSharedPtr<FJsonObject> ExecuteCreateActor(const FParsedCreateParams& Parsed, bool bSuppressTransaction = false);
     TSharedPtr<FJsonObject> ExecuteUpdateActor(const FParsedUpdateParams& Parsed);
+
+    // Template clone (fast duplication of identical-mesh actors)
+    TSharedPtr<FJsonObject> HandleCloneActor(const TSharedPtr<FJsonObject>& Params);
 
     // NavMesh commands
     TSharedPtr<FJsonObject> HandleCreateNavMeshVolume(const TSharedPtr<FJsonObject>& Params);

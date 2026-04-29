@@ -9,6 +9,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 
+
 const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -109,6 +110,31 @@ impl UnrealClient {
             .await
     }
 
+    pub async fn clone_actor(
+        &self,
+        source_actor_name: &str,
+        new_actor_name: &str,
+        location: [f64; 3],
+        rotation: [f64; 3],
+        scale: [f64; 3],
+        mcp_id: &str,
+        tags: &[ String],
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "clone_actor",
+            json!({
+                "source_actor_name": source_actor_name,
+                "new_actor_name": new_actor_name,
+                "location": { "x": location[0], "y": location[1], "z": location[2] },
+                "rotation": { "pitch": rotation[0], "yaw": rotation[1], "roll": rotation[2] },
+                "scale": { "x": scale[0], "y": scale[1], "z": scale[2] },
+                "mcp_id": mcp_id,
+                "tags": tags,
+            }),
+        )
+        .await
+    }
+
     pub async fn apply_scene_delta(
         &self,
         transaction_id: &str,
@@ -193,7 +219,30 @@ impl UnrealClient {
         let mut guard = self.stream.lock().await;
 
         let mut stream = match guard.take() {
-            Some(s) => s,
+            Some(s) => {
+                // Health check: try a non-blocking peek to detect stale connections.
+                // If the read returns Ok(0), the peer has closed. If it returns an
+                // error (e.g. ECONNRESET), the connection is dead. Either way we
+                // reconnect proactively to avoid an expensive retry chain.
+                let mut peek = [0u8; 0];
+                match s.try_read(&mut peek) {
+                    Ok(_) => s, // connection alive
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => s,
+                    _ => {
+                        // Connection dead — reconnect below
+                        drop(s);
+                        let addr = format!("{}:{}", self.host, self.port);
+                        timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
+                            .await
+                            .map_err(|_| {
+                                AppError::UnrealBridge(format!("connect timeout to {addr}"))
+                            })?
+                            .map_err(|e| {
+                                AppError::UnrealBridge(format!("connect error to {addr}: {e}"))
+                            })?
+                    }
+                }
+            }
             None => {
                 let addr = format!("{}:{}", self.host, self.port);
                 let s = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))

@@ -4,8 +4,15 @@ use crate::sync::{SyncAction, SyncOperation, SyncPlan};
 use crate::unreal::client::UnrealClient;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tokio::time::{sleep, Duration};
+
+fn create_chunk_size() -> usize {
+    std::env::var("SCENE_SYNCD_CREATE_CHUNK_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(50)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SyncApplyResult {
@@ -209,6 +216,34 @@ async fn apply_scene_delta_batch(
     let mut updates: Vec<serde_json::Value> = Vec::new();
     let mut deletes: Vec<serde_json::Value> = Vec::new();
     let mut pre_results: Vec<AppliedOperation> = Vec::new();
+    let mut sync_marks: Vec<(String, String, Option<String>)> = Vec::new(); // (mcp_id, desired_hash, actor_name)
+    let mut op_records: Vec<(String, String, String, String)> = Vec::new(); // (mcp_id, action, status, reason)
+
+    // --- Pre-fetch all entities and realizations for Create ops in batch ----
+    let create_mcp_ids: Vec<&str> = plan
+        .operations
+        .iter()
+        .filter(|op| op.action == SyncAction::Create)
+        .filter_map(|op| op.desired.as_ref().map(|_| op.mcp_id.as_str()))
+        .collect();
+
+    let (entity_map, realization_map) = if create_mcp_ids.is_empty() {
+        (HashMap::new(), HashMap::new())
+    } else {
+        let entity_map = db
+            .find_entities_by_mcp_ids(scene_id, &create_mcp_ids)
+            .await
+            .unwrap_or_default();
+        let entity_ids: Vec<&str> = entity_map.values().map(|e| e.entity_id.as_str()).collect();
+        let realization_map = if entity_ids.is_empty() {
+            HashMap::new()
+        } else {
+            db.find_realizations_for_entities(scene_id, &entity_ids)
+                .await
+                .unwrap_or_default()
+        };
+        (entity_map, realization_map)
+    };
 
     for op in &plan.operations {
         match op.action {
@@ -266,14 +301,11 @@ async fn apply_scene_delta_batch(
                             .unwrap_or(1.0),
                     ];
 
-                    // Check for blueprint realization via SceneRealization
+                    // Check for blueprint realization via SceneRealization (O(1) lookup)
                     let mut is_blueprint_create = false;
                     let mut blueprint_path = String::new();
-                    if let Ok(Some(entity)) = db.find_entity_by_mcp_id(scene_id, mcp_id).await {
-                        if let Ok(Some(rz)) = db
-                            .find_realization_for_entity(scene_id, &entity.entity_id)
-                            .await
-                        {
+                    if let Some(entity) = entity_map.get(mcp_id) {
+                        if let Some(rz) = realization_map.get(&entity.entity_id) {
                             if rz.policy == "blueprint" {
                                 if let Some(bp) =
                                     rz.metadata.get("blueprint_path").and_then(|v| v.as_str())
@@ -306,22 +338,17 @@ async fn apply_scene_delta_batch(
                                         .get("desired_hash")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("");
-                                    db.mark_object_synced(
-                                        scene_id,
-                                        mcp_id,
-                                        desired_hash,
-                                        actor_name.as_deref(),
-                                    )
-                                    .await?;
-                                    db.record_operation(
-                                        run_id,
-                                        scene_id,
-                                        mcp_id,
-                                        "create",
-                                        "success",
-                                        "actor created via blueprint spawn",
-                                    )
-                                    .await?;
+                                    sync_marks.push((
+                                        mcp_id.to_string(),
+                                        desired_hash.to_string(),
+                                        actor_name.clone(),
+                                    ));
+                                    op_records.push((
+                                        mcp_id.to_string(),
+                                        "create".to_string(),
+                                        "success".to_string(),
+                                        "actor created via blueprint spawn".to_string(),
+                                    ));
                                     pre_results.push(AppliedOperation {
                                         mcp_id: mcp_id.to_string(),
                                         action: "create".to_string(),
@@ -334,10 +361,12 @@ async fn apply_scene_delta_batch(
                                         .get("error")
                                         .and_then(|e| e.as_str())
                                         .unwrap_or("unknown blueprint spawn error");
-                                    db.record_operation(
-                                        run_id, scene_id, mcp_id, "create", "error", err_msg,
-                                    )
-                                    .await?;
+                                    op_records.push((
+                                        mcp_id.to_string(),
+                                        "create".to_string(),
+                                        "error".to_string(),
+                                        err_msg.to_string(),
+                                    ));
                                     pre_results.push(AppliedOperation {
                                         mcp_id: mcp_id.to_string(),
                                         action: "create".to_string(),
@@ -349,10 +378,12 @@ async fn apply_scene_delta_batch(
                             }
                             Err(e) => {
                                 let err_msg = e.to_string();
-                                db.record_operation(
-                                    run_id, scene_id, mcp_id, "create", "error", &err_msg,
-                                )
-                                .await?;
+                                op_records.push((
+                                    mcp_id.to_string(),
+                                    "create".to_string(),
+                                    "error".to_string(),
+                                    err_msg.clone(),
+                                ));
                                 pre_results.push(AppliedOperation {
                                     mcp_id: mcp_id.to_string(),
                                     action: "create".to_string(),
@@ -487,15 +518,12 @@ async fn apply_scene_delta_batch(
                     continue;
                 }
                 if !allow_delete {
-                    db.record_operation(
-                        run_id,
-                        scene_id,
-                        &op.mcp_id,
-                        "delete",
-                        "skipped",
-                        "allow_delete not enabled",
-                    )
-                    .await?;
+                    op_records.push((
+                        op.mcp_id.clone(),
+                        "delete".to_string(),
+                        "skipped".to_string(),
+                        "allow_delete not enabled".to_string(),
+                    ));
                     pre_results.push(AppliedOperation {
                         mcp_id: op.mcp_id.clone(),
                         action: "delete".to_string(),
@@ -508,15 +536,12 @@ async fn apply_scene_delta_batch(
                 deletes.push(json!({ "mcp_id": op.mcp_id }));
             }
             SyncAction::Noop => {
-                db.record_operation(
-                    run_id,
-                    scene_id,
-                    &op.mcp_id,
-                    "noop",
-                    "success",
-                    "no changes needed",
-                )
-                .await?;
+                op_records.push((
+                    op.mcp_id.clone(),
+                    "noop".to_string(),
+                    "success".to_string(),
+                    "no changes needed".to_string(),
+                ));
                 pre_results.push(AppliedOperation {
                     mcp_id: op.mcp_id.clone(),
                     action: "noop".to_string(),
@@ -526,15 +551,12 @@ async fn apply_scene_delta_batch(
                 });
             }
             SyncAction::Conflict => {
-                db.record_operation(
-                    run_id,
-                    scene_id,
-                    &op.mcp_id,
-                    "conflict",
-                    "skipped",
-                    "conflict not auto-resolved",
-                )
-                .await?;
+                op_records.push((
+                    op.mcp_id.clone(),
+                    "conflict".to_string(),
+                    "skipped".to_string(),
+                    "conflict not auto-resolved".to_string(),
+                ));
                 pre_results.push(AppliedOperation {
                     mcp_id: op.mcp_id.clone(),
                     action: "conflict".to_string(),
@@ -544,15 +566,12 @@ async fn apply_scene_delta_batch(
                 });
             }
             SyncAction::Unsupported => {
-                db.record_operation(
-                    run_id,
-                    scene_id,
-                    &op.mcp_id,
-                    "unsupported",
-                    "skipped",
-                    "unsupported action",
-                )
-                .await?;
+                op_records.push((
+                    op.mcp_id.clone(),
+                    "unsupported".to_string(),
+                    "skipped".to_string(),
+                    "unsupported action".to_string(),
+                ));
                 pre_results.push(AppliedOperation {
                     mcp_id: op.mcp_id.clone(),
                     action: "unsupported".to_string(),
@@ -564,12 +583,69 @@ async fn apply_scene_delta_batch(
         }
     }
 
+    // --- Build O(1) plan lookup to avoid repeated linear scans ---------
+    let plan_lookup: HashMap<&str, &SyncOperation> = plan
+        .operations
+        .iter()
+        .map(|op| (op.mcp_id.as_str(), op))
+        .collect();
+
     // --- Send batch delta if any creates/updates/deletes exist ------------
-    // Keep create batches intentionally small. The Unreal MCP bridge can abort
-    // larger apply_scene_delta responses on Windows under editor load.
-    const CREATE_CHUNK_SIZE: usize = 1;
-    let create_chunks: Vec<Vec<serde_json::Value>> = creates
-        .chunks(CREATE_CHUNK_SIZE)
+    // Chunk size is configurable via SCENE_SYNCD_CREATE_CHUNK_SIZE env var.
+    // --- Template clone grouping: same (type, mesh, tags) → group ------
+    // C++ side already supports clone_actor. We group identical templates
+    // so only the first in each group spawns; the rest are cloned.
+    #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+    struct CloneGroupKey(String, String, Vec<String>); // actor_type, static_mesh, sorted_tags
+
+    let mut groups: std::collections::HashMap<CloneGroupKey, Vec<usize>> =
+        std::collections::HashMap::new();
+    for (idx, create) in creates.iter().enumerate() {
+        let actor_type = create
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("StaticMeshActor");
+        let mesh = create
+            .get("static_mesh")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let mut tags = create
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        tags.sort();
+        let key = CloneGroupKey(actor_type.to_string(), mesh.to_string(), tags);
+        groups.entry(key).or_default().push(idx);
+    }
+
+    // Build reduced creates (group leaders) and clone_ops
+    let mut reduced_creates: Vec<serde_json::Value> = Vec::new();
+    // (source_create_index_in_reduced, clone_params_json)
+    let mut clone_ops: Vec<(usize, serde_json::Value)> = Vec::new();
+    let mut reduced_index_to_group_first: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+
+    for (_key, indices) in groups {
+        if indices.is_empty() {
+            continue;
+        }
+        let leader_idx = reduced_creates.len();
+        reduced_index_to_group_first.insert(leader_idx, indices[0]);
+        reduced_creates.push(creates[indices[0]].clone());
+        for &idx in &indices[1..] {
+            clone_ops.push((leader_idx, creates[idx].clone()));
+        }
+    }
+
+    // Re-chunk the reduced creates
+    let chunk_sz = create_chunk_size();
+    let create_chunks: Vec<Vec<serde_json::Value>> = reduced_creates
+        .chunks(chunk_sz)
         .map(|c| c.to_vec())
         .collect();
 
@@ -720,6 +796,157 @@ async fn apply_scene_delta_batch(
                         "apply_scene_delta succeeded"
                     );
 
+                    // Build source actor name map for clone operations
+                    let mut source_names: std::collections::HashMap<usize, String> =
+                        std::collections::HashMap::new();
+                    if let Some(created_arr) = response.get("created").and_then(|v| v.as_array()) {
+                        for (i, created) in created_arr.iter().enumerate() {
+                            let name = created
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let reduced_idx = chunk_idx * chunk_sz + i;
+                            if !name.is_empty() && reduced_idx < reduced_creates.len() {
+                                source_names.insert(reduced_idx, name.to_string());
+                            }
+                        }
+                    }
+
+                    // Execute clone_ops for this chunk's spawned leaders
+                    for (leader_idx, clone_params) in &clone_ops {
+                        if let Some(source_name) = source_names.get(leader_idx) {
+                            let clone_name = clone_params
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let clone_mcp_id = clone_params
+                                .get("mcp_id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let loc = clone_params
+                                .get("location")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    [
+                                        arr.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                        arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                        arr.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                    ]
+                                })
+                                .unwrap_or([0.0, 0.0, 0.0]);
+                            let rot = clone_params
+                                .get("rotation")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    [
+                                        arr.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                        arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                        arr.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                    ]
+                                })
+                                .unwrap_or([0.0, 0.0, 0.0]);
+                            let scl = clone_params
+                                .get("scale")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    [
+                                        arr.get(0).and_then(|v| v.as_f64()).unwrap_or(1.0),
+                                        arr.get(1).and_then(|v| v.as_f64()).unwrap_or(1.0),
+                                        arr.get(2).and_then(|v| v.as_f64()).unwrap_or(1.0),
+                                    ]
+                                })
+                                .unwrap_or([1.0, 1.0, 1.0]);
+                            let clone_tags = clone_params
+                                .get("tags")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
+                            match unreal
+                                .clone_actor(
+                                    source_name, clone_name, loc, rot, scl, clone_mcp_id,
+                                    &clone_tags,
+                                )
+                                .await
+                            {
+                                Ok(clone_resp) => {
+                                    let clone_success = clone_resp
+                                        .get("success")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false);
+                                    if clone_success {
+                                        let clone_actor_name = clone_resp
+                                            .get("actor_name")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.to_string());
+                                        let desired = plan_lookup
+                                            .get(clone_mcp_id)
+                                            .and_then(|op| op.desired.as_ref());
+                                        let desired_hash = desired
+                                            .and_then(|d| d.get("desired_hash"))
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
+                                        sync_marks.push((
+                                            clone_mcp_id.to_string(),
+                                            desired_hash.to_string(),
+                                            clone_actor_name.clone(),
+                                        ));
+                                        op_records.push((
+                                            clone_mcp_id.to_string(),
+                                            "create".to_string(),
+                                            "success".to_string(),
+                                            "actor cloned from template".to_string(),
+                                        ));
+                                        pre_results.push(AppliedOperation {
+                                            mcp_id: clone_mcp_id.to_string(),
+                                            action: "create".to_string(),
+                                            status: "success".to_string(),
+                                            unreal_actor_name: clone_actor_name,
+                                            error: None,
+                                        });
+                                    } else {
+                                        let clone_err = clone_resp
+                                            .get("error")
+                                            .and_then(|e| e.as_str())
+                                            .unwrap_or("clone failed");
+                                        op_records.push((
+                                            clone_mcp_id.to_string(),
+                                            "create".to_string(),
+                                            "error".to_string(),
+                                            clone_err.to_string(),
+                                        ));
+                                        pre_results.push(AppliedOperation {
+                                            mcp_id: clone_mcp_id.to_string(),
+                                            action: "create".to_string(),
+                                            status: "error".to_string(),
+                                            unreal_actor_name: None,
+                                            error: Some(clone_err.to_string()),
+                                        });
+                                    }
+                                }
+                                Err(e) => {
+                                    let err_msg = e.to_string();
+                                    op_records.push((
+                                        clone_mcp_id.to_string(),
+                                        "create".to_string(),
+                                        "error".to_string(),
+                                        err_msg.clone(),
+                                    ));
+                                    pre_results.push(AppliedOperation {
+                                        mcp_id: clone_mcp_id.to_string(),
+                                        action: "create".to_string(),
+                                        status: "error".to_string(),
+                                        unreal_actor_name: None,
+                                        error: Some(err_msg),
+                                    });
+                                }
+                            }
+                        }
+                    }
+
                     // Mark created objects in this chunk as synced
                     for create in create_chunk {
                         if let Some(mcp_id) = create.get("mcp_id").and_then(|v| v.as_str()) {
@@ -731,10 +958,12 @@ async fn apply_scene_delta_batch(
                                 && created_count == create_chunk.len()
                                 || created_names.contains(actor_name);
                             if !actor_created {
-                                db.record_operation(
-                                    run_id, scene_id, mcp_id, "create", "error", &err_msg,
-                                )
-                                .await?;
+                                op_records.push((
+                                    mcp_id.to_string(),
+                                    "create".to_string(),
+                                    "error".to_string(),
+                                    err_msg.clone(),
+                                ));
                                 pre_results.push(AppliedOperation {
                                     mcp_id: mcp_id.to_string(),
                                     action: "create".to_string(),
@@ -744,26 +973,24 @@ async fn apply_scene_delta_batch(
                                 });
                                 continue;
                             }
-                            let desired = plan
-                                .operations
-                                .iter()
-                                .find(|op| op.mcp_id == mcp_id)
+                            let desired = plan_lookup
+                                .get(mcp_id)
                                 .and_then(|op| op.desired.as_ref());
                             let desired_hash = desired
                                 .and_then(|d| d.get("desired_hash"))
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("");
-                            db.mark_object_synced(scene_id, mcp_id, desired_hash, Some(actor_name))
-                                .await?;
-                            db.record_operation(
-                                run_id,
-                                scene_id,
-                                mcp_id,
-                                "create",
-                                "success",
-                                "actor created in Unreal (batch)",
-                            )
-                            .await?;
+                            sync_marks.push((
+                                mcp_id.to_string(),
+                                desired_hash.to_string(),
+                                Some(actor_name.to_string()),
+                            ));
+                            op_records.push((
+                                mcp_id.to_string(),
+                                "create".to_string(),
+                                "success".to_string(),
+                                "actor created in Unreal (batch)".to_string(),
+                            ));
                             pre_results.push(AppliedOperation {
                                 mcp_id: mcp_id.to_string(),
                                 action: "create".to_string(),
@@ -777,10 +1004,8 @@ async fn apply_scene_delta_batch(
                     if chunk_idx == 0 {
                         for update in &updates {
                             if let Some(mcp_id) = update.get("mcp_id").and_then(|v| v.as_str()) {
-                                let desired_name = plan
-                                    .operations
-                                    .iter()
-                                    .find(|op| op.mcp_id == mcp_id)
+                                let desired_name = plan_lookup
+                                    .get(mcp_id)
                                     .and_then(|op| op.desired.as_ref())
                                     .and_then(|d| d.get("desired_name"))
                                     .and_then(|v| v.as_str())
@@ -789,15 +1014,12 @@ async fn apply_scene_delta_batch(
                                     && updated_count == updates.len()
                                     || updated_names.contains(desired_name);
                                 if !actor_updated {
-                                    db.record_operation(
-                                        run_id,
-                                        scene_id,
-                                        mcp_id,
-                                        "update_transform",
-                                        "error",
-                                        &err_msg,
-                                    )
-                                    .await?;
+                                    op_records.push((
+                                        mcp_id.to_string(),
+                                        "update_transform".to_string(),
+                                        "error".to_string(),
+                                        err_msg.clone(),
+                                    ));
                                     pre_results.push(AppliedOperation {
                                         mcp_id: mcp_id.to_string(),
                                         action: "update_transform".to_string(),
@@ -807,26 +1029,24 @@ async fn apply_scene_delta_batch(
                                     });
                                     continue;
                                 }
-                                let desired = plan
-                                    .operations
-                                    .iter()
-                                    .find(|op| op.mcp_id == mcp_id)
+                                let desired = plan_lookup
+                                    .get(mcp_id)
                                     .and_then(|op| op.desired.as_ref());
                                 let desired_hash = desired
                                     .and_then(|d| d.get("desired_hash"))
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
-                                db.mark_object_synced(scene_id, mcp_id, desired_hash, None)
-                                    .await?;
-                                db.record_operation(
-                                    run_id,
-                                    scene_id,
-                                    mcp_id,
-                                    "update_transform",
-                                    "success",
-                                    "transform updated (batch)",
-                                )
-                                .await?;
+                                sync_marks.push((
+                                    mcp_id.to_string(),
+                                    desired_hash.to_string(),
+                                    None,
+                                ));
+                                op_records.push((
+                                    mcp_id.to_string(),
+                                    "update_transform".to_string(),
+                                    "success".to_string(),
+                                    "transform updated (batch)".to_string(),
+                                ));
                                 pre_results.push(AppliedOperation {
                                     mcp_id: mcp_id.to_string(),
                                     action: "update_transform".to_string(),
@@ -839,15 +1059,12 @@ async fn apply_scene_delta_batch(
                         for delete in &deletes {
                             if let Some(mcp_id) = delete.get("mcp_id").and_then(|v| v.as_str()) {
                                 db.mark_object_deleted_applied(scene_id, mcp_id).await?;
-                                db.record_operation(
-                                    run_id,
-                                    scene_id,
-                                    mcp_id,
-                                    "delete",
-                                    "success",
-                                    "actor deleted (batch)",
-                                )
-                                .await?;
+                                op_records.push((
+                                    mcp_id.to_string(),
+                                    "delete".to_string(),
+                                    "success".to_string(),
+                                    "actor deleted (batch)".to_string(),
+                                ));
                                 pre_results.push(AppliedOperation {
                                     mcp_id: mcp_id.to_string(),
                                     action: "delete".to_string(),
@@ -870,10 +1087,12 @@ async fn apply_scene_delta_batch(
                     );
                     for create in create_chunk {
                         if let Some(mcp_id) = create.get("mcp_id").and_then(|v| v.as_str()) {
-                            db.record_operation(
-                                run_id, scene_id, mcp_id, "create", "error", err_msg,
-                            )
-                            .await?;
+                            op_records.push((
+                                mcp_id.to_string(),
+                                "create".to_string(),
+                                "error".to_string(),
+                                err_msg.to_string(),
+                            ));
                             pre_results.push(AppliedOperation {
                                 mcp_id: mcp_id.to_string(),
                                 action: "create".to_string(),
@@ -890,8 +1109,12 @@ async fn apply_scene_delta_batch(
                 tracing::warn!(chunk = chunk_idx, error = %err_msg, "apply_scene_delta bridge error");
                 for create in create_chunk {
                     if let Some(mcp_id) = create.get("mcp_id").and_then(|v| v.as_str()) {
-                        db.record_operation(run_id, scene_id, mcp_id, "create", "error", &err_msg)
-                            .await?;
+                        op_records.push((
+                            mcp_id.to_string(),
+                            "create".to_string(),
+                            "error".to_string(),
+                            err_msg.clone(),
+                        ));
                         pre_results.push(AppliedOperation {
                             mcp_id: mcp_id.to_string(),
                             action: "create".to_string(),
@@ -903,6 +1126,16 @@ async fn apply_scene_delta_batch(
                 }
             }
         }
+    }
+
+    // Batch apply all accumulated sync status updates
+    if !sync_marks.is_empty() {
+        db.mark_objects_synced_batch(scene_id, &sync_marks).await?;
+    }
+
+    // Batch insert all accumulated operation records
+    if !op_records.is_empty() {
+        db.record_operations_batch(run_id, scene_id, &op_records).await?;
     }
 
     Ok(pre_results)

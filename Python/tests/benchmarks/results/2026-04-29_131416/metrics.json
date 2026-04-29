@@ -1,0 +1,132 @@
+{
+  "run_id": "test_compare_with_baseline_20260429131419",
+  "timestamp": "2026-04-29 13:14:19",
+  "total_elapsed_ms": 1666.7009002994746,
+  "total_tcp_roundtrips": 3,
+  "phases": [
+    {
+      "name": "db_bulk_upsert",
+      "elapsed_ms": 34.08040013164282,
+      "tcp_roundtrips": 0,
+      "http_calls": 1,
+      "retries": 0,
+      "bytes_sent": 6488,
+      "bytes_recv": 11412,
+      "actors_created": 16,
+      "actors_attempted": 16,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": []
+    },
+    {
+      "name": "sync_plan",
+      "elapsed_ms": 278.94799993373454,
+      "tcp_roundtrips": 0,
+      "http_calls": 1,
+      "retries": 0,
+      "bytes_sent": 43,
+      "bytes_recv": 35385,
+      "actors_created": 0,
+      "actors_attempted": 0,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": []
+    },
+    {
+      "name": "sync_apply",
+      "elapsed_ms": 700.1874002162367,
+      "tcp_roundtrips": 0,
+      "http_calls": 1,
+      "retries": 0,
+      "bytes_sent": 111,
+      "bytes_recv": 9267,
+      "actors_created": 16,
+      "actors_attempted": 16,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": []
+    },
+    {
+      "name": "get_actors_verify",
+      "elapsed_ms": 298.7152999266982,
+      "tcp_roundtrips": 0,
+      "http_calls": 0,
+      "retries": 0,
+      "bytes_sent": 0,
+      "bytes_recv": 0,
+      "actors_created": 16,
+      "actors_attempted": 16,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": []
+    },
+    {
+      "name": "p7_commands",
+      "elapsed_ms": 16.741700004786253,
+      "tcp_roundtrips": 3,
+      "http_calls": 0,
+      "retries": 0,
+      "bytes_sent": 625,
+      "bytes_recv": 655,
+      "actors_created": 0,
+      "actors_attempted": 0,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": [
+        {
+          "cmd": "create_nav_mesh_volume",
+          "ms": 7.983699906617403,
+          "bytes_sent": 148,
+          "bytes_recv": 258,
+          "retries": 0,
+          "error": null
+        },
+        {
+          "cmd": "create_patrol_route",
+          "ms": 1.0104000102728605,
+          "bytes_sent": 275,
+          "bytes_recv": 320,
+          "retries": 0,
+          "error": null
+        },
+        {
+          "cmd": "set_ai_behavior",
+          "ms": 7.577999960631132,
+          "bytes_sent": 202,
+          "bytes_recv": 77,
+          "retries": 0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "cleanup",
+      "elapsed_ms": 338.02810008637607,
+      "tcp_roundtrips": 0,
+      "http_calls": 2,
+      "retries": 0,
+      "bytes_sent": 153,
+      "bytes_recv": 20743,
+      "actors_created": 0,
+      "actors_attempted": 0,
+      "success_rate": 1.0,
+      "error_types": [],
+      "tcp_commands": []
+    }
+  ],
+  "extra_metrics": {
+    "plan_create_count": 16,
+    "apply_result_summary": {
+      "total": 67,
+      "succeeded": 16,
+      "failed": 0,
+      "skipped": 51,
+      "creates": 16,
+      "update_transforms": 0,
+      "update_visuals": 0,
+      "deletes": 0,
+      "noops": 0
+    },
+    "missing_actors_after_retry": []
+  }
+}
