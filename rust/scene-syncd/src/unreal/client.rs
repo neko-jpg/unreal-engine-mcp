@@ -214,6 +214,41 @@ impl UnrealClient {
             .await
     }
 
+    /// Spawn an ISM/HISM instance set in Unreal (Phase 4).
+    pub async fn spawn_instance_set(
+        &self,
+        set_id: &str,
+        mesh_path: &str,
+        material_path: Option<&str>,
+        transforms: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut params = serde_json::Map::new();
+        params.insert("set_id".to_string(), json!(set_id));
+        params.insert("mesh_path".to_string(), json!(mesh_path));
+        if let Some(mat) = material_path {
+            params.insert("material_path".to_string(), json!(mat));
+        }
+        params.insert("transforms".to_string(), json!(transforms));
+        self.send_command("spawn_instance_set", serde_json::Value::Object(params))
+            .await
+    }
+
+    /// Update an existing instance set (Phase 4).
+    pub async fn update_instance_set(
+        &self,
+        set_id: &str,
+        transforms: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(
+            "update_instance_set",
+            json!({
+                "set_id": set_id,
+                "transforms": transforms,
+            }),
+        )
+        .await
+    }
+
     async fn send_command(
         &self,
         command: &str,

@@ -93,6 +93,18 @@ pub async fn create_scene(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ListScenesRequest {}
+
+pub async fn list_scenes(
+    State(state): State<AppState>,
+    Json(_req): Json<ListScenesRequest>,
+) -> Result<Json<Value>, AppError> {
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let scenes = repo.list_scenes().await?;
+    Ok(Json(success_response(json!({ "scenes": scenes }))))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UpsertObjectRequest {
     pub scene_id: String,
     pub mcp_id: String,
@@ -633,7 +645,7 @@ fn default_apply_mode() -> String {
 }
 
 fn default_max_operations() -> usize {
-    500
+    2000
 }
 
 pub async fn apply_sync_route(
@@ -1268,6 +1280,31 @@ pub async fn preview_layout_route(
     }))))
 }
 
+pub async fn compile_preview_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let result = crate::compiler::pipeline::CompilerPipeline::compile_preview(&repo, &scene_id,
+    )
+    .await?;
+
+    Ok(Json(success_response(json!({
+        "scene_id": result.scene_id,
+        "stage": result.stage,
+        "summary": {
+            "errors": result.summary.errors,
+            "warnings": result.summary.warnings,
+            "infos": result.summary.infos,
+            "objects": result.summary.objects,
+        },
+        "objects": result.objects,
+        "diagnostics": result.diagnostics,
+    }))))
+}
+
 // ------------------------------------------------------------------
 // Realization pipeline
 // ------------------------------------------------------------------
@@ -1349,6 +1386,108 @@ pub async fn denormalize_layout_route(
         "error_count": errors.len(),
         "objects": created,
         "errors": errors,
+    }))))
+}
+
+// ------------------------------------------------------------------
+// Sprint F: Compiler API routes
+// ------------------------------------------------------------------
+
+pub async fn validate_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let result =
+        crate::compiler::pipeline::CompilerPipeline::compile_validate_only(&repo, &scene_id,
+        )
+        .await?;
+
+    Ok(Json(success_response(json!({
+        "scene_id": result.scene_id,
+        "stage": result.stage,
+        "summary": {
+            "errors": result.summary.errors,
+            "warnings": result.summary.warnings,
+            "infos": result.summary.infos,
+            "objects": result.summary.objects,
+            "instance_sets": result.summary.instance_sets,
+            "world_cells": result.summary.world_cells,
+        },
+        "diagnostics": result.diagnostics,
+    }))))
+}
+
+pub async fn compile_plan_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    // Fetch actual state from Unreal for diff comparison.
+    let actual_objects = repo
+        .list_desired_objects(&scene_id, true, None, None
+        )
+        .await?;
+
+    let result =
+        crate::compiler::pipeline::CompilerPipeline::compile_plan(
+            &repo, &scene_id, actual_objects,
+        )
+        .await?;
+
+    Ok(Json(success_response(json!({
+        "scene_id": result.scene_id,
+        "stage": result.stage,
+        "mode": result.mode,
+        "summary": {
+            "errors": result.summary.errors,
+            "warnings": result.summary.warnings,
+            "infos": result.summary.infos,
+            "objects": result.summary.objects,
+            "instance_sets": result.summary.instance_sets,
+            "world_cells": result.summary.world_cells,
+        },
+        "diagnostics": result.diagnostics,
+    }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CompileApplyRequest {
+    #[serde(default)]
+    pub allow_delete: bool,
+}
+
+pub async fn compile_apply_route(
+    State(state): State<AppState>,
+    axum::extract::Path(scene_id): axum::extract::Path<String>,
+    Json(req): Json<CompileApplyRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+
+    let result =
+        crate::compiler::pipeline::CompilerPipeline::compile_apply(
+            &repo, &scene_id, req.allow_delete,
+        )
+        .await?;
+
+    Ok(Json(success_response(json!({
+        "scene_id": result.scene_id,
+        "stage": result.stage,
+        "mode": result.mode,
+        "summary": {
+            "errors": result.summary.errors,
+            "warnings": result.summary.warnings,
+            "infos": result.summary.infos,
+            "objects": result.summary.objects,
+            "instance_sets": result.summary.instance_sets,
+            "world_cells": result.summary.world_cells,
+        },
+        "diagnostics": result.diagnostics,
     }))))
 }
 

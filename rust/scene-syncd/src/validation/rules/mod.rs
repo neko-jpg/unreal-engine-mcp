@@ -1,0 +1,15 @@
+pub mod bridge_crosses_moat;
+pub mod bridge_endpoint_grounded;
+pub mod gate_opening_width;
+pub mod ground_contact;
+pub mod keep_inside_boundary;
+pub mod moat_offset_validity;
+pub mod nav_walkability;
+pub mod no_duplicate_mcp_id;
+pub mod no_nan_transform;
+pub mod no_overlap;
+pub mod no_zero_scale;
+pub mod no_z_fighting;
+pub mod tower_wall_connectivity;
+pub mod wall_self_intersection;
+pub mod wall_span_valid;

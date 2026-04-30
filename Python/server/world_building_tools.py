@@ -38,7 +38,7 @@ from helpers.actor_utilities import spawn_blueprint_actor
 from helpers.bridge_aqueduct_creation import (
     build_suspension_bridge_structure, build_aqueduct_structure
 )
-from server.generators import CastleFortressGenerator
+from server.generators import CastleFortressGenerator, CapitalCityGenerator
 from server.specs.realization_spec import RealizationPolicy
 
 logger = logging.getLogger("UnrealMCP_Advanced")
@@ -1179,4 +1179,124 @@ def create_aqueduct(
 
     except Exception as e:
         logger.error(f"create_aqueduct error: {e}")
+        return make_error_response(str(e))
+
+
+@mcp.tool()
+def generate_capital_city(
+    city_size: str = "large",
+    location: Optional[List[float]] = None,
+    name_prefix: str = "CapitalCity",
+    include_noble_quarter: bool = True,
+    include_commoner_quarter: bool = True,
+    dry_run: bool = False,
+    target: str = "scene_db",
+    scene_id: str = "main",
+    group_id: Optional[str] = None,
+    apply: bool = False,
+) -> Dict[str, Any]:
+    """Generate a massive medieval capital city with castle, noble quarter, and dense town.
+
+    Uses the semantic layout graph pipeline so that the Rust denormalizer produces
+    SceneObjects with proper tags, layers, and validation.
+    """
+    try:
+        if location is None:
+            location = [0.0, 0.0, 0.0]
+
+        logger.info(f"Generating {city_size} capital city at {location}")
+
+        generator = CapitalCityGenerator(
+            city_size=city_size,
+            location=location,
+            name_prefix=name_prefix,
+            include_noble_quarter=include_noble_quarter,
+            include_commoner_quarter=include_commoner_quarter,
+        )
+        graph = generator.generate_semantic()
+        nodes = [e.to_layout_node() for e in graph.entities]
+        edges = [r.to_layout_edge() for r in graph.relations]
+
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "message": f"Would create semantic layout for {city_size} capital city with {len(nodes)} entities and {len(edges)} relations.",
+                "scene_id": scene_id,
+                "nodes": nodes,
+                "edges": edges,
+                "spec_graph": graph.summary(),
+            }
+
+        # Create/update scene
+        scene_result = call_scene_syncd("/scenes/create", {
+            "scene_id": scene_id,
+            "name": group_id or name_prefix,
+            "description": f"Semantic layout: {name_prefix} {city_size} capital city",
+        })
+        if not scene_result.get("success", False):
+            return make_error_response(f"scene_create failed: {scene_result.get('error', 'unknown')}")
+
+        # Upsert entities
+        entity_result = call_scene_syncd("/entities/bulk-upsert", {
+            "scene_id": scene_id,
+            "entities": nodes,
+        })
+        if not entity_result.get("success", False):
+            return make_error_response(f"entities/bulk-upsert failed: {entity_result.get('error', 'unknown')}")
+
+        # Upsert relations
+        relation_result = call_scene_syncd("/relations/bulk-upsert", {
+            "scene_id": scene_id,
+            "relations": edges,
+        })
+        if not relation_result.get("success", False):
+            return make_error_response(f"relations/bulk-upsert failed: {relation_result.get('error', 'unknown')}")
+
+        # Denormalize to scene_objects
+        denorm_result = call_scene_syncd(f"/layouts/{scene_id}/denormalize", {})
+        if not denorm_result.get("success", False):
+            return make_error_response(f"layout denormalize failed: {denorm_result.get('error', 'unknown')}")
+
+        object_count = denorm_result.get("data", {}).get("object_count", 0)
+
+        result = {
+            "success": True,
+            "scene_id": scene_id,
+            "message": f"Capital city created with {len(nodes)} entities, {len(edges)} relations, {object_count} objects.",
+            "stats": {
+                "size": city_size,
+                "entity_count": len(nodes),
+                "relation_count": len(edges),
+                "total_actors": object_count,
+                "has_noble_quarter": include_noble_quarter,
+                "has_commoner_quarter": include_commoner_quarter,
+            },
+            "spec_graph": graph.summary(),
+        }
+
+        # Optionally apply sync to Unreal
+        if apply:
+            try:
+                plan = call_scene_syncd("/sync/plan", {"scene_id": scene_id, "mode": "plan_only"})
+                if plan.get("success"):
+                    sync_result = call_scene_syncd("/sync/apply", {
+                        "scene_id": scene_id,
+                        "mode": "apply_safe",
+                        "allow_delete": False,
+                    })
+                    result["sync"] = sync_result
+                    # Surface validation diagnostics if any
+                    if not sync_result.get("success", False):
+                        result["sync_error"] = sync_result.get("error", "unknown")
+                else:
+                    result["sync_plan_error"] = plan.get("error", "unknown")
+            except Exception as e:
+                logger.warning(f"Failed to apply sync: {e}")
+                result["sync_error"] = str(e)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"generate_capital_city error: {e}")
         return make_error_response(str(e))

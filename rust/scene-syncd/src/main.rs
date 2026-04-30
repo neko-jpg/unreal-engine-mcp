@@ -54,6 +54,10 @@ async fn main() -> anyhow::Result<()> {
             post(scene_syncd::api::routes::create_scene),
         )
         .route(
+            "/scenes/list",
+            post(scene_syncd::api::routes::list_scenes),
+        )
+        .route(
             "/objects/upsert",
             post(scene_syncd::api::routes::upsert_object),
         )
@@ -176,6 +180,22 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/layouts/{scene_id}/preview",
             post(scene_syncd::api::routes::preview_layout_route),
+        )
+        .route(
+            "/layouts/{scene_id}/compile/preview",
+            post(scene_syncd::api::routes::compile_preview_route),
+        )
+        .route(
+            "/layouts/{scene_id}/validate",
+            post(scene_syncd::api::routes::validate_route),
+        )
+        .route(
+            "/layouts/{scene_id}/compile/plan",
+            post(scene_syncd::api::routes::compile_plan_route),
+        )
+        .route(
+            "/layouts/{scene_id}/compile/apply",
+            post(scene_syncd::api::routes::compile_apply_route),
         )
         .route(
             "/realizations/{scene_id}/realize",

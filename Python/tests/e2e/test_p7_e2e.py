@@ -170,6 +170,7 @@ class TestRealizationCRUD:
         update_result = api_post("/realizations/update-status", {
             "scene_id": isolated_scene,
             "entity_id": "p7_realization_02",
+            "policy": "blueprint",
             "status": "realized",
             "unreal_actor_name": "BP_Tower_C_01",
         })

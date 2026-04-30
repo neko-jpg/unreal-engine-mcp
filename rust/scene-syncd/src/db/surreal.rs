@@ -332,6 +332,15 @@ impl SurrealSceneRepository {
         }
     }
 
+    pub async fn list_scenes(&self) -> Result<Vec<Scene>, AppError> {
+        let scenes: Vec<Scene> = self
+            .db
+            .select("scene")
+            .await
+            .map_err(|e| AppError::Database(format!("list scenes error: {e}")))?;
+        Ok(scenes)
+    }
+
     pub async fn update_scene_status(
         &self,
         scene_id: &str,

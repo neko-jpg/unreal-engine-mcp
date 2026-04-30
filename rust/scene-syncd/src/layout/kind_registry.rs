@@ -92,6 +92,26 @@ impl Default for KindRegistry {
                 layer: -2,
             },
         );
+        map.insert(
+            "building".to_string(),
+            KindSpec {
+                actor_type: "StaticMeshActor",
+                asset_path: "/Engine/BasicShapes/Cube.Cube",
+                default_tags: vec!["building"],
+                draft_color: [0.7, 0.7, 0.7, 0.3],
+                layer: 0,
+            },
+        );
+        map.insert(
+            "decoration".to_string(),
+            KindSpec {
+                actor_type: "StaticMeshActor",
+                asset_path: "/Engine/BasicShapes/Cube.Cube",
+                default_tags: vec!["decoration"],
+                draft_color: [0.9, 0.8, 0.3, 0.3],
+                layer: 0,
+            },
+        );
         Self { map }
     }
 }
@@ -117,6 +137,8 @@ mod tests {
             "ground",
             "bridge",
             "moat",
+            "building",
+            "decoration",
         ] {
             assert!(registry.get(kind).is_some(), "missing kind: {kind}");
         }

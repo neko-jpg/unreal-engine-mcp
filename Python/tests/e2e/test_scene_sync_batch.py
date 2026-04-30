@@ -55,7 +55,7 @@ def wall_and_pyramid_scene(scene_syncd_available):
         })
 
     assert_success(
-        api_post("/objects/bulk-upsert", {"objects": wall_objects}),
+        api_post("/objects/bulk-upsert", {"scene_id": scene_id, "objects": wall_objects}),
         "bulk upsert wall",
     )
 
@@ -77,7 +77,7 @@ def wall_and_pyramid_scene(scene_syncd_available):
         })
 
     assert_success(
-        api_post("/objects/bulk-upsert", {"objects": pyramid_objects}),
+        api_post("/objects/bulk-upsert", {"scene_id": scene_id, "objects": pyramid_objects}),
         "bulk upsert pyramid",
     )
 

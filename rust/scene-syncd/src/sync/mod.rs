@@ -1,4 +1,6 @@
 pub mod applier;
+pub mod cell_aware;
+pub mod instance_set_planner;
 pub mod planner;
 
 use serde::{Deserialize, Serialize};
@@ -15,7 +17,7 @@ pub enum SyncAction {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyncOperation {
     pub action: SyncAction,
     pub mcp_id: String,

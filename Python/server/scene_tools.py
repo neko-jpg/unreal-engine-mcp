@@ -252,6 +252,24 @@ def scene_list_objects(
     )
 
 
+
+@mcp.tool()
+def scene_list_scenes() -> Dict[str, Any]:
+    """List all managed scenes in the database."""
+    return _scene_syncd_error_response(
+        call_scene_syncd("/scenes/list", {}), "scene_list_scenes"
+    )
+
+
+@mcp.tool()
+def scene_list_snapshots(
+    scene_id: str = "main",
+) -> Dict[str, Any]:
+    """List all snapshots for a given scene."""
+    payload = {"scene_id": scene_id}
+    return _scene_syncd_error_response(
+        call_scene_syncd("/snapshots/list", payload), "scene_list_snapshots"
+    )
 @mcp.tool()
 def scene_create_wall(
     scene_id: str = "main",

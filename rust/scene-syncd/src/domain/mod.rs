@@ -105,7 +105,7 @@ pub struct GeneratorRun {
     pub created_at: Datetime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SceneObject {
     #[serde(default, skip_serializing, skip_deserializing)]
     #[allow(dead_code)]
