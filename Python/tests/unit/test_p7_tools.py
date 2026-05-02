@@ -4,8 +4,6 @@ These tests use FakeUnrealConnection and mock scene-syncd responses
 to verify tool behavior without external services.
 """
 
-import json
-import pytest
 from unittest.mock import patch, MagicMock
 
 from server.specs.component_spec import CollisionSpec, NavSpec, AISpec, LightSpec, MeshComponentSpec

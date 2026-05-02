@@ -8,7 +8,7 @@ Prevents duplicate name errors by automatically generating unique names and trac
 import logging
 import time
 import uuid
-from typing import Dict, Any, Set, Optional
+from typing import Dict, Any, Set
 from utils.responses import is_success_response, make_error_response
 
 logger = logging.getLogger("ActorNameManager")

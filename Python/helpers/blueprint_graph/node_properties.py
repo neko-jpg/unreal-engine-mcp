@@ -56,9 +56,8 @@ Read them before implementing new node types!
 ================================================================================
 """
 
-import json
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from utils.responses import is_success_response
 
 logger = logging.getLogger("BlueprintGraph.NodeProperties")

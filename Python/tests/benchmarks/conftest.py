@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from .bench_metrics import MetricsCollector, BenchmarkReport, build_comparison_markdown
+from .bench_metrics import MetricsCollector, BenchmarkReport
 
 SCENE_SYNCD_URL = "http://127.0.0.1:8787"
 UNREAL_HOST = "127.0.0.1"

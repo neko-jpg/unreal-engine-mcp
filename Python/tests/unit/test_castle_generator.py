@@ -1,6 +1,5 @@
 """Tests for CastleFortressGenerator and SpecGraph realization."""
 
-import pytest
 
 from server.generators.castle import CastleFortressGenerator
 from server.specs.realization_spec import RealizationPolicy
@@ -93,7 +92,6 @@ class TestCastleFortressGenerator:
 
     def test_realize_game_ready_entity_components_override(self):
         """Entity components should override default collision/navmesh values."""
-        from server.specs.component_spec import CollisionSpec, NavSpec
 
         gen = CastleFortressGenerator(
             castle_size="small",

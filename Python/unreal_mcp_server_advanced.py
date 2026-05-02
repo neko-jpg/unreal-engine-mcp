@@ -25,9 +25,6 @@ from server.actor_tools import (
     spawn_actor,
     set_actor_transform,
     batch_spawn_actors,
-    find_actor_by_mcp_id,
-    set_actor_transform_by_mcp_id,
-    delete_actor_by_mcp_id,
 )
 
 from server.blueprint_tools import (
@@ -81,6 +78,11 @@ from server.world_building_tools import (
     create_suspension_bridge,
     create_aqueduct,
 )
+
+from server.analysis_tools.project_analyzer import analyze_project_structure
+from server.analysis_tools.gdd_tools import upload_gdd, query_gdd
+from server.analysis_tools.cpp_blueprint_analyzer import analyze_execution_flow
+from server.analysis_tools.ci_cd_tools import run_unreal_build, get_latest_unreal_logs
 
 from server.scene_tools import (
     scene_create,
@@ -176,6 +178,12 @@ __all__ = [
     "scene_create_sdf_mesh",
     "scene_create_superformula_mesh",
     "scene_create_lsystem_spline",
+    "analyze_project_structure",
+    "upload_gdd",
+    "query_gdd",
+    "analyze_execution_flow",
+    "run_unreal_build",
+    "get_latest_unreal_logs",
 ]
 
 

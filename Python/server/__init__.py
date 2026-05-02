@@ -25,6 +25,10 @@ def bootstrap():
     from server import blueprint_tools    # noqa: F401
     from server import blueprint_graph_tools  # noqa: F401
     from server import world_building_tools  # noqa: F401
+    from server.analysis_tools import project_analyzer  # noqa: F401
+    from server.analysis_tools import gdd_tools  # noqa: F401
+    from server.analysis_tools import cpp_blueprint_analyzer  # noqa: F401
+    from server.analysis_tools import ci_cd_tools  # noqa: F401
 
 
 if __name__ == "__main__":

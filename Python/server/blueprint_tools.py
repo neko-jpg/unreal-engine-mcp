@@ -171,7 +171,7 @@ def read_blueprint_content(
         response = unreal.send_command("read_blueprint_content", params)
 
         if response and is_success_response(response):
-            logger.info(f"Successfully read Blueprint content. Found:")
+            logger.info("Successfully read Blueprint content. Found:")
             if response.get("variables"):
                 logger.info(f"  - {len(response['variables'])} variables")
             if response.get("functions"):
@@ -218,7 +218,7 @@ def analyze_blueprint_graph(
 
         if response and is_success_response(response):
             graph_data = response.get("graph_data", {})
-            logger.info(f"Graph analysis complete:")
+            logger.info("Graph analysis complete:")
             logger.info(f"  - Graph: {graph_data.get('graph_name', 'Unknown')}")
             logger.info(f"  - Nodes: {len(graph_data.get('nodes', []))}")
             logger.info(f"  - Connections: {len(graph_data.get('connections', []))}")

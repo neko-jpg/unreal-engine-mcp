@@ -1,7 +1,7 @@
 """Material-related tools for the Unreal MCP server."""
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 
 from server.core import mcp, get_unreal_connection
 from utils.responses import make_error_response, is_success_response

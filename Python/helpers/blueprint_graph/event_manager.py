@@ -3,9 +3,8 @@ Filename: event_manager.py
 Description: Python wrapper for Blueprint event node management
 """
 
-import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 logger = logging.getLogger("BlueprintGraph.EventManager")
 

@@ -3,7 +3,6 @@ Filename: node_deleter.py
 Description: Python wrapper for Blueprint node deletion
 """
 
-import json
 import logging
 from typing import Dict, Any, Optional
 

@@ -10,10 +10,9 @@ Run:
     pytest tests/e2e/test_p7_e2e.py                  # Full E2E with Unreal
 """
 
-import json
 import pytest
 
-from .conftest import api_post, api_get, assert_success, SCENE_SYNCD_URL, unreal_command
+from .conftest import api_post, assert_success, unreal_command
 
 
 class TestComponentCRUD:

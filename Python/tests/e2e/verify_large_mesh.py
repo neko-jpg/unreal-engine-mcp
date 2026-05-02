@@ -32,7 +32,8 @@ if __name__ == "__main__":
 
     print("Spawning 10K terrain mesh...")
 
-    import math, random
+    import math
+    import random
 
     random.seed(42)
     resolution = 100

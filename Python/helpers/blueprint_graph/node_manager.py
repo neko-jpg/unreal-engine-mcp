@@ -3,9 +3,8 @@ Filename: node_manager.py
 Description: Python wrapper for Blueprint node management
 """
 
-import json
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger("BlueprintGraph.NodeManager")
 

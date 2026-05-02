@@ -1,7 +1,6 @@
 """Tests for the ActorSink abstraction."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from server.actor_sink import ActorSpec, DryRunActorSink, SceneDbActorSink, UnrealActorSink
 
 

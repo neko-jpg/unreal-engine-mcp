@@ -4,7 +4,6 @@ Description: MCP tool wrappers for Blueprint function lifecycle management (crea
 """
 
 from typing import Dict, Any
-import json
 
 
 def create_function_handler(unreal_connection, blueprint_name: str, function_name: str, return_type: str = "void") -> Dict[str, Any]:

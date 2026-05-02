@@ -30,7 +30,7 @@ Total target: 3,000 – 5,000 SceneObjects.
 """
 
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from server.specs.entity_spec import EntitySpec
 from server.specs.relation_spec import RelationSpec

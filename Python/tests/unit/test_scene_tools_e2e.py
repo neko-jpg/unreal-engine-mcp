@@ -5,7 +5,7 @@ flush path produces correct API payloads.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from server.actor_sink import SceneDbActorSink
 from server.scene_tools import scene_create_wall, scene_create_pyramid

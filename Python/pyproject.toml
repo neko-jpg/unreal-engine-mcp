@@ -5,13 +5,14 @@ description = "Unreal MCP Advanced Server: A streamlined server for advanced Unr
 readme = "README_advanced.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
-  "mcp[cli]>=1.4.1",
-  "fastmcp>=0.2.0",
+  "mcp[cli]==1.2.0",
+  "fastmcp==0.4.1",
   "uvicorn",
   "fastapi",
   "pydantic>=2.6.1",
   "requests",
-  "PyYAML>=6.0"
+  "PyYAML>=6.0",
+  "pytest-asyncio>=1.3.0",
 ]
 
 [project.optional-dependencies]

@@ -14,16 +14,13 @@ Run:
 """
 
 import json
-import statistics
 import time
 
 import pytest
 
 from .conftest import (
     MetricsCollector,
-    BenchmarkReport,
     build_comparison_markdown,
-    load_latest_report,
     load_previous_report,
     api_post,
     api_post_simple,

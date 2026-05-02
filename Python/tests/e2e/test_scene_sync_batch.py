@@ -16,7 +16,7 @@ import json
 import time
 import pytest
 
-from .conftest import api_post, api_get, unreal_command, assert_success, SCENE_SYNCD_URL
+from .conftest import api_post, unreal_command, assert_success
 
 
 @pytest.fixture(scope="module")

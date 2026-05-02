@@ -5,8 +5,7 @@ under the hood, but wraps their output in a semantic SpecGraph so that
 the same design can be realized under different RealizationPolicies.
 """
 
-import math
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from helpers.castle_creation import (
     add_decorative_flags,

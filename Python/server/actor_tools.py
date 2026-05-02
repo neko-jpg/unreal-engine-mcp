@@ -166,7 +166,6 @@ def batch_spawn_actors(
             {"name": "Wall_002", "type": "StaticMeshActor", "location": [100,0,0]}
         ]
     """
-    from server.validation import validate_positive_int
     if not isinstance(actors, list):
         return make_error_response("actors must be a list of actor dictionaries")
     if len(actors) == 0:

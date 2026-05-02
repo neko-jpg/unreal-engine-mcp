@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from server.specs.actor_spec import ActorSpec, params_to_spec

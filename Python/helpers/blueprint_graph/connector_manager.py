@@ -3,7 +3,6 @@ Filename: connector_manager.py
 Description: Python wrapper for Blueprint node connection management
 """
 
-import json
 import logging
 from typing import Dict, Any, Optional
 

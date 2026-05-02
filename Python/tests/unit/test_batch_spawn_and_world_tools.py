@@ -12,9 +12,7 @@ Covers:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 
-import unreal_mcp_server_advanced as srv
 from server.actor_tools import batch_spawn_actors
 from server.validation import MAX_ACTORS_PER_BATCH, is_success_response
 from tests.conftest import FakeUnrealConnection

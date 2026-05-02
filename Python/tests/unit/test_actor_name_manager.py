@@ -12,15 +12,12 @@ Covers:
 - find_actors_by_name response shapes (top-level actors after normalization)
 """
 
-import json
 
 import pytest
-from unittest.mock import MagicMock
 
 import helpers.actor_name_manager as anm
 from helpers.actor_name_manager import (
     ActorNameManager,
-    get_unique_actor_name,
     safe_spawn_actor,
     safe_delete_actor,
     clear_actor_cache,

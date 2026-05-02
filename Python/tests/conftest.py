@@ -5,12 +5,10 @@ All tests should be runnable without an actual Unreal Engine instance.
 
 import json
 import socket
-import threading
 import time
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 

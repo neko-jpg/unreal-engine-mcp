@@ -13,7 +13,6 @@ Covers:
 """
 
 import json
-import socket
 from unittest.mock import patch
 
 import pytest

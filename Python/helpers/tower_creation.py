@@ -7,7 +7,7 @@ with various architectural styles and color schemes.
 
 import math
 import random
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 import logging
 from utils.responses import is_success_response
 

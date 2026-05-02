@@ -242,7 +242,7 @@ def build_comparison_markdown(before: BenchmarkReport, after: BenchmarkReport, o
     lines = [
         "# 最適化 前後比較",
         "",
-        f"## 概要",
+        "## 概要",
         f"- 最適化前: {before.run_id} (総時間: {before.total_elapsed_ms:.0f}ms = {before.total_elapsed_ms / 1000:.1f}s)",
         f"- 最適化後: {after.run_id} (総時間: {after.total_elapsed_ms:.0f}ms = {after.total_elapsed_ms / 1000:.1f}s)",
         f"- 総改善率: **{(1 - after.total_elapsed_ms / max(before.total_elapsed_ms, 1)) * 100:.1f}%** (速度比: {before.total_elapsed_ms / max(after.total_elapsed_ms, 1):.1f}x)",
@@ -275,8 +275,8 @@ def build_comparison_markdown(before: BenchmarkReport, after: BenchmarkReport, o
     lines.append("")
     lines.append("## 通信効率比較")
     lines.append("")
-    lines.append(f"| Metric | Before | After | Improvement |")
-    lines.append(f"|--------|--------|-------|-------------|")
+    lines.append("| Metric | Before | After | Improvement |")
+    lines.append("|--------|--------|-------|-------------|")
     total_tcp_before = before.total_tcp_roundtrips
     total_tcp_after = after.total_tcp_roundtrips
     lines.append(f"| TCP Round-trips | {total_tcp_before} | {total_tcp_after} | {(1 - total_tcp_after / max(total_tcp_before, 1)) * 100:.1f}% |")
