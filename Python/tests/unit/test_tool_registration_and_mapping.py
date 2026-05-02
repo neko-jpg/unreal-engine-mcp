@@ -348,6 +348,7 @@ class TestPythonToCppCommandMapping:
             "scene_create_sdf_mesh",
             "scene_create_superformula_mesh",
             "scene_create_lsystem_spline",
+            "auto_skin_mesh", "cleanup_animation", "generate_control_rig", "generate_procedural_anim",
         }
         registered = self._collect_registered_tool_names()
         missing = []

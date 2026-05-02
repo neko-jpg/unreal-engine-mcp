@@ -66,6 +66,13 @@ from server.material_tools import (
     set_mesh_material_color,
 )
 
+from server.animation_tools import (
+    auto_skin_mesh,
+    generate_control_rig,
+    cleanup_animation,
+    generate_procedural_anim,
+)
+
 from server.world_building_tools import (
     create_pyramid,
     create_wall,
@@ -176,6 +183,10 @@ __all__ = [
     "scene_create_sdf_mesh",
     "scene_create_superformula_mesh",
     "scene_create_lsystem_spline",
+    "auto_skin_mesh",
+    "generate_control_rig",
+    "cleanup_animation",
+    "generate_procedural_anim",
 ]
 
 

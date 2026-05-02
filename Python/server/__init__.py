@@ -25,6 +25,7 @@ def bootstrap():
     from server import blueprint_tools    # noqa: F401
     from server import blueprint_graph_tools  # noqa: F401
     from server import world_building_tools  # noqa: F401
+    from server import animation_tools    # noqa: F401
 
 
 if __name__ == "__main__":

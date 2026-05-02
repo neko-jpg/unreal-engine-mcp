@@ -76,6 +76,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
         {TEXT("delete_instance_set"), &FEpicUnrealMCPEditorCommands::HandleDeleteInstanceSet},
         {TEXT("get_instance_set_state"), &FEpicUnrealMCPEditorCommands::HandleGetInstanceSetState},
         {TEXT("list_instance_sets"), &FEpicUnrealMCPEditorCommands::HandleListInstanceSets},
+        {TEXT("auto_skin_mesh"), &FEpicUnrealMCPEditorCommands::HandleAutoSkinMesh},
+        {TEXT("generate_control_rig"), &FEpicUnrealMCPEditorCommands::HandleGenerateControlRig},
+        {TEXT("cleanup_animation"), &FEpicUnrealMCPEditorCommands::HandleCleanupAnimation},
+        {TEXT("generate_procedural_anim"), &FEpicUnrealMCPEditorCommands::HandleGenerateProceduralAnim},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -2465,4 +2469,72 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleListInstanceSets(con
     ResultObj->SetNumberField(TEXT("count"), SetArray.Num());
     ResultObj->SetArrayField(TEXT("sets"), SetArray);
     return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleAutoSkinMesh(const TSharedPtr<FJsonObject>& Params)
+{
+    FString StaticMeshPath;
+    if (!Params->TryGetStringField(TEXT("static_mesh_path"), StaticMeshPath))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'static_mesh_path' parameter"));
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPEditorCommands::HandleAutoSkinMesh: Target=%s"), *StaticMeshPath);
+
+    TSharedPtr<FJsonObject> ResultData = MakeShareable(new FJsonObject);
+    ResultData->SetStringField(TEXT("message"), TEXT("Auto skinning mesh command received (Stub implementation)"));
+    ResultData->SetStringField(TEXT("static_mesh_path"), StaticMeshPath);
+
+    return FEpicUnrealMCPCommonUtils::CreateSuccessResponse(ResultData);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGenerateControlRig(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SkeletalMeshPath;
+    if (!Params->TryGetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'skeletal_mesh_path' parameter"));
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPEditorCommands::HandleGenerateControlRig: Target=%s"), *SkeletalMeshPath);
+
+    TSharedPtr<FJsonObject> ResultData = MakeShareable(new FJsonObject);
+    ResultData->SetStringField(TEXT("message"), TEXT("Generate Control Rig command received (Stub implementation)"));
+    ResultData->SetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath);
+
+    return FEpicUnrealMCPCommonUtils::CreateSuccessResponse(ResultData);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCleanupAnimation(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AnimationPath;
+    if (!Params->TryGetStringField(TEXT("animation_path"), AnimationPath))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'animation_path' parameter"));
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPEditorCommands::HandleCleanupAnimation: Target=%s"), *AnimationPath);
+
+    TSharedPtr<FJsonObject> ResultData = MakeShareable(new FJsonObject);
+    ResultData->SetStringField(TEXT("message"), TEXT("Cleanup animation command received (Stub implementation)"));
+    ResultData->SetStringField(TEXT("animation_path"), AnimationPath);
+
+    return FEpicUnrealMCPCommonUtils::CreateSuccessResponse(ResultData);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGenerateProceduralAnim(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ControlRigPath;
+    if (!Params->TryGetStringField(TEXT("control_rig_path"), ControlRigPath))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'control_rig_path' parameter"));
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPEditorCommands::HandleGenerateProceduralAnim: Target=%s"), *ControlRigPath);
+
+    TSharedPtr<FJsonObject> ResultData = MakeShareable(new FJsonObject);
+    ResultData->SetStringField(TEXT("message"), TEXT("Generate procedural animation command received (Stub implementation)"));
+    ResultData->SetStringField(TEXT("control_rig_path"), ControlRigPath);
+
+    return FEpicUnrealMCPCommonUtils::CreateSuccessResponse(ResultData);
 }

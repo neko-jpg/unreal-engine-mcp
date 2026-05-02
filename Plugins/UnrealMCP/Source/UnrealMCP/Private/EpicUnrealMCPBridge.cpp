@@ -329,6 +329,10 @@ namespace
             {TEXT("add_function_output"), 3},
             {TEXT("delete_function"), 3},
             {TEXT("rename_function"), 3},
+            {TEXT("auto_skin_mesh"), 1},
+            {TEXT("generate_control_rig"), 1},
+            {TEXT("cleanup_animation"), 1},
+            {TEXT("generate_procedural_anim"), 1},
         };
         const int32* Found = Router.Find(CommandType);
         return Found ? *Found : -1;

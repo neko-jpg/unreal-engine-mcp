@@ -100,4 +100,10 @@ private:
     TSharedPtr<FJsonObject> HandleDeleteInstanceSet(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleGetInstanceSetState(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleListInstanceSets(const TSharedPtr<FJsonObject>& Params);
+
+    // Animation & Rigging commands
+    TSharedPtr<FJsonObject> HandleAutoSkinMesh(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleGenerateControlRig(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCleanupAnimation(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleGenerateProceduralAnim(const TSharedPtr<FJsonObject>& Params);
 }; 
