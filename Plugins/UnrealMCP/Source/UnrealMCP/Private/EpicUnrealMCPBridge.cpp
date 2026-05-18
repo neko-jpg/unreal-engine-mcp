@@ -51,10 +51,35 @@
 #include "HAL/CriticalSection.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/ScopeLock.h"
+// ---------------------------------------------------------------------------
+// Command-handler #includes -- only required in this translation unit because
+// the bridge now owns its handlers exclusively through the registry's
+// captured TSharedPtrs.  These do not need to leak into EpicUnrealMCPBridge.h.
+// ---------------------------------------------------------------------------
 #include "Commands/EpicUnrealMCPEditorCommands.h"
+#include "Commands/EpicUnrealMCPActorCommands.h"
+#include "Commands/EpicUnrealMCPNavigationCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintCommands.h"
 #include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
 #include "Commands/EpicUnrealMCPMaterialCommands.h"
+#include "Commands/EpicUnrealMCPProjectEditorCommands.h"
+#include "Commands/EpicUnrealMCPContentBrowserCommands.h"
+#include "Commands/EpicUnrealMCPAssetImportCommands.h"
+#include "Commands/EpicUnrealMCPMeshEditingCommands.h"
+#include "Commands/EpicUnrealMCPEnhancedInputCommands.h"
+#include "Commands/EpicUnrealMCPGameplayFrameworkCommands.h"
+#include "Commands/EpicUnrealMCPUMGCommands.h"
+#include "Commands/EpicUnrealMCPRenderingCommands.h"
+#include "Commands/EpicUnrealMCPLightingAtmosphereCommands.h"
+#include "Commands/EpicUnrealMCPDataTableCommands.h"
+#include "Commands/EpicUnrealMCPAudioCommands.h"
+#include "Commands/EpicUnrealMCPSequencerCommands.h"
+#include "Commands/EpicUnrealMCPVroidCommands.h"
+#include "Commands/EpicUnrealMCPCesiumCommands.h"
+#include "Commands/EpicUnrealMCPProceduralCommands.h"
+#include "Commands/EpicUnrealMCPPhysicsCommands.h"
+#include "Commands/EpicUnrealMCPValidationCommands.h"
+#include "Commands/EpicUnrealMCPInstanceCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "UnrealMCPSettings.h"
 
@@ -252,6 +277,68 @@ FCriticalSection GDeferredEditorCommandMutex;
 double GLastDeferredEditorCommandEndSeconds = 0.0;
 }
 
+template <typename HandlerType>
+void UEpicUnrealMCPBridge::RegisterHandler(int32 RouteId)
+{
+    TSharedPtr<HandlerType> Handler = MakeShared<HandlerType>();
+    CommandHandlerRegistry.Add(
+        RouteId,
+        [Handler](const FString& CommandType, const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonObject>
+        {
+            return Handler->HandleCommand(CommandType, Params);
+        }
+    );
+}
+
+void UEpicUnrealMCPBridge::RegisterHandlers()
+{
+    // ---------------------------------------------------------------
+    // The single source of truth for "which RouteId belongs to which
+    // handler class" inside the bridge.  Adding a new handler is a
+    // **single-line edit here** (plus a matching command-name -> RouteId
+    // entry in EpicUnrealMCPRouter.cpp).
+    // ---------------------------------------------------------------
+
+    // Route 0: built-in ping handled inline (no dedicated handler class).
+    CommandHandlerRegistry.Add(
+        0,
+        [](const FString& /*CommandType*/, const TSharedPtr<FJsonObject>& /*Params*/) -> TSharedPtr<FJsonObject>
+        {
+            TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+            Result->SetStringField(TEXT("message"), TEXT("pong"));
+            return Result;
+        }
+    );
+
+    // Route 1..21: Phase 1/2/3 handler split lanes.  RouteId order is
+    // intentionally preserved for backward compat with existing JSON
+    // command -> route mappings inside EpicUnrealMCPRouter.cpp.
+    RegisterHandler<FEpicUnrealMCPActorCommands>(1);             // Actor CRUD (Phase 2)
+    RegisterHandler<FEpicUnrealMCPBlueprintCommands>(2);         // Blueprints
+    RegisterHandler<FEpicUnrealMCPBlueprintGraphCommands>(3);    // Blueprint graph nodes
+    RegisterHandler<FEpicUnrealMCPMaterialCommands>(4);          // Materials
+    RegisterHandler<FEpicUnrealMCPProjectEditorCommands>(5);     // Project / editor
+    RegisterHandler<FEpicUnrealMCPContentBrowserCommands>(6);    // Content browser
+    RegisterHandler<FEpicUnrealMCPAssetImportCommands>(7);       // Asset import / export
+    RegisterHandler<FEpicUnrealMCPMeshEditingCommands>(8);       // Static-mesh editing
+    RegisterHandler<FEpicUnrealMCPEnhancedInputCommands>(9);     // Enhanced Input
+    RegisterHandler<FEpicUnrealMCPGameplayFrameworkCommands>(10);// Gameplay framework
+    RegisterHandler<FEpicUnrealMCPUMGCommands>(11);              // UMG / Common UI
+    RegisterHandler<FEpicUnrealMCPRenderingCommands>(12);        // Rendering
+    RegisterHandler<FEpicUnrealMCPLightingAtmosphereCommands>(13);// Lighting / atmosphere
+    RegisterHandler<FEpicUnrealMCPDataTableCommands>(14);        // Data tables
+    RegisterHandler<FEpicUnrealMCPAudioCommands>(15);            // Audio
+    RegisterHandler<FEpicUnrealMCPSequencerCommands>(16);        // Sequencer
+    RegisterHandler<FEpicUnrealMCPVroidCommands>(17);            // VRoid / VRM
+    RegisterHandler<FEpicUnrealMCPCesiumCommands>(18);           // Cesium
+    RegisterHandler<FEpicUnrealMCPProceduralCommands>(19);       // Procedural generation + request_cognitive_processing (Phase 4 trim)
+    RegisterHandler<FEpicUnrealMCPNavigationCommands>(20);       // NavAI + Spline (Phase 3)
+    // Route 21 is intentionally reserved for the next handler split.
+    RegisterHandler<FEpicUnrealMCPPhysicsCommands>(22);          // Collision / physics body / forces / constraints (Phase 4)
+    RegisterHandler<FEpicUnrealMCPValidationCommands>(23);       // compile_all_blueprints / run_map_check / find_broken_references (Phase 4)
+    RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
+}
+
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()
     : bIsRunning(false)
     , ListenerSocket(nullptr)
@@ -259,27 +346,7 @@ UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()
     , ServerThread(nullptr)
     , Runnable(nullptr)
 {
-    EditorCommands = MakeShared<FEpicUnrealMCPEditorCommands>();
-    ActorCommands = MakeShared<FEpicUnrealMCPActorCommands>();
-    NavigationCommands = MakeShared<FEpicUnrealMCPNavigationCommands>();
-    BlueprintCommands = MakeShared<FEpicUnrealMCPBlueprintCommands>();
-    BlueprintGraphCommands = MakeShared<FEpicUnrealMCPBlueprintGraphCommands>();
-    MaterialCommands = MakeShared<FEpicUnrealMCPMaterialCommands>();
-    ProjectEditorCommands = MakeShared<FEpicUnrealMCPProjectEditorCommands>();
-    ContentBrowserCommands = MakeShared<FEpicUnrealMCPContentBrowserCommands>();
-    AssetImportCommands = MakeShared<FEpicUnrealMCPAssetImportCommands>();
-    MeshEditingCommands = MakeShared<FEpicUnrealMCPMeshEditingCommands>();
-    EnhancedInputCommands = MakeShared<FEpicUnrealMCPEnhancedInputCommands>();
-    GameplayFrameworkCommands = MakeShared<FEpicUnrealMCPGameplayFrameworkCommands>();
-    UMGCommands = MakeShared<FEpicUnrealMCPUMGCommands>();
-    RenderingCommands = MakeShared<FEpicUnrealMCPRenderingCommands>();
-    LightingAtmosphereCommands = MakeShared<FEpicUnrealMCPLightingAtmosphereCommands>();
-    DataTableCommands = MakeShared<FEpicUnrealMCPDataTableCommands>();
-    AudioCommands = MakeShared<FEpicUnrealMCPAudioCommands>();
-    SequencerCommands = MakeShared<FEpicUnrealMCPSequencerCommands>();
-    VroidCommands = MakeShared<FEpicUnrealMCPVroidCommands>();
-    CesiumCommands = MakeShared<FEpicUnrealMCPCesiumCommands>();
-    ProceduralCommands = MakeShared<FEpicUnrealMCPProceduralCommands>();
+    RegisterHandlers();
 
     const UUnrealMCPSettings* Settings = GetDefault<UUnrealMCPSettings>();
     FString HostStr = Settings ? Settings->Host : TEXT(MCP_SERVER_HOST);
@@ -327,30 +394,17 @@ UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()
 UEpicUnrealMCPBridge::~UEpicUnrealMCPBridge()
 {
     StopServer();
-    EditorCommands.Reset();
-    ActorCommands.Reset();
-    NavigationCommands.Reset();
-    BlueprintCommands.Reset();
-    BlueprintGraphCommands.Reset();
-    MaterialCommands.Reset();
-    ProjectEditorCommands.Reset();
-    ContentBrowserCommands.Reset();
-    AssetImportCommands.Reset();
-    MeshEditingCommands.Reset();
-    EnhancedInputCommands.Reset();
-    GameplayFrameworkCommands.Reset();
-    UMGCommands.Reset();
-    RenderingCommands.Reset();
-    LightingAtmosphereCommands.Reset();
-    DataTableCommands.Reset();
-    AudioCommands.Reset();
-    SequencerCommands.Reset();
+    // The registry is the sole owner of every handler instance via the
+    // captured TSharedPtrs.  Empty it explicitly here so handlers are
+    // destroyed in a deterministic order (after the server thread is
+    // stopped, before the rest of the bridge is torn down).
+    CommandHandlerRegistry.Empty();
 }
 
 void UEpicUnrealMCPBridge::Initialize(FSubsystemCollectionBase& Collection)
 {
     UE_LOG(LogTemp, Log, TEXT("EpicUnrealMCPBridge: Initializing"));
-    // Defer actor index rebuild to first command 遯ｶ繝ｻeditor world may not be ready yet
+    // Defer actor index rebuild to first command -- editor world may not be ready yet
     StartServer();
 }
 
@@ -501,75 +555,9 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 
         try
         {
-            TSharedPtr<FJsonObject> ResultJson;
-
-            switch (Route)
+            const FCommandHandlerFn* Handler = CommandHandlerRegistry.Find(Route);
+            if (!Handler)
             {
-            case 0: // ping
-                ResultJson = MakeShareable(new FJsonObject);
-                ResultJson->SetStringField(TEXT("message"), TEXT("pong"));
-                break;
-            case 1: // ActorCommands (keeps legacy Actor route ID)
-                ResultJson = ActorCommands->HandleCommand(CommandType, Params);
-                break;
-            case 2: // BlueprintCommands
-                ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
-                break;
-            case 3: // BlueprintGraphCommands
-                ResultJson = BlueprintGraphCommands->HandleCommand(CommandType, Params);
-                break;
-            case 4: // MaterialCommands
-                ResultJson = MaterialCommands->HandleCommand(CommandType, Params);
-                break;
-            case 5: // ProjectEditorCommands
-                ResultJson = ProjectEditorCommands->HandleCommand(CommandType, Params);
-                break;
-            case 6: // ContentBrowserCommands
-                ResultJson = ContentBrowserCommands->HandleCommand(CommandType, Params);
-                break;
-            case 7: // AssetImportCommands
-                ResultJson = AssetImportCommands->HandleCommand(CommandType, Params);
-                break;
-            case 8: // MeshEditingCommands
-                ResultJson = MeshEditingCommands->HandleCommand(CommandType, Params);
-                break;
-            case 9: // EnhancedInputCommands
-                ResultJson = EnhancedInputCommands->HandleCommand(CommandType, Params);
-                break;
-            case 10: // GameplayFrameworkCommands
-                ResultJson = GameplayFrameworkCommands->HandleCommand(CommandType, Params);
-                break;
-            case 11: // UMGCommands
-                ResultJson = UMGCommands->HandleCommand(CommandType, Params);
-                break;
-            case 12: // RenderingCommands
-                ResultJson = RenderingCommands->HandleCommand(CommandType, Params);
-                break;
-            case 13: // LightingAtmosphereCommands
-                ResultJson = LightingAtmosphereCommands->HandleCommand(CommandType, Params);
-                break;
-            case 14: // DataTableCommands
-                ResultJson = DataTableCommands->HandleCommand(CommandType, Params);
-                break;
-            case 15: // AudioCommands
-                ResultJson = AudioCommands->HandleCommand(CommandType, Params);
-                break;
-            case 16: // SequencerCommands
-                ResultJson = SequencerCommands->HandleCommand(CommandType, Params);
-                break;
-            case 17: // VroidCommands
-                ResultJson = VroidCommands->HandleCommand(CommandType, Params);
-                break;
-            case 18: // CesiumCommands
-                ResultJson = CesiumCommands->HandleCommand(CommandType, Params);
-                break;
-            case 19: // ProceduralCommands
-                ResultJson = ProceduralCommands->HandleCommand(CommandType, Params);
-                break;
-            case 20: // NavigationCommands (Phase 3: NavAI + Spline split from EditorCommands)
-                ResultJson = NavigationCommands->HandleCommand(CommandType, Params);
-                break;
-            default:
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
                 ResponseJson->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *CommandType));
 
@@ -580,16 +568,23 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                 return UnknownCommandResult;
             }
 
+            TSharedPtr<FJsonObject> ResultJson = (*Handler)(CommandType, Params);
+
             bool bSuccess = true;
             FString ErrorMessage;
 
-            if (ResultJson->HasField(TEXT("success")))
+            if (ResultJson.IsValid() && ResultJson->HasField(TEXT("success")))
             {
                 bSuccess = ResultJson->GetBoolField(TEXT("success"));
                 if (!bSuccess && ResultJson->HasField(TEXT("error")))
                 {
                     ErrorMessage = ResultJson->GetStringField(TEXT("error"));
                 }
+            }
+
+            if (!ResultJson.IsValid())
+            {
+                ResultJson = MakeShareable(new FJsonObject);
             }
 
             if (bSuccess)
@@ -661,6 +656,3 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 
     return Future.Get();
 }
-
-
-

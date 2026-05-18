@@ -8,27 +8,6 @@
 #include "Json.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
-#include "Commands/EpicUnrealMCPEditorCommands.h"
-#include "Commands/EpicUnrealMCPActorCommands.h"
-#include "Commands/EpicUnrealMCPNavigationCommands.h"
-#include "Commands/EpicUnrealMCPBlueprintCommands.h"
-#include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
-#include "Commands/EpicUnrealMCPMaterialCommands.h"
-#include "Commands/EpicUnrealMCPProjectEditorCommands.h"
-#include "Commands/EpicUnrealMCPContentBrowserCommands.h"
-#include "Commands/EpicUnrealMCPAssetImportCommands.h"
-#include "Commands/EpicUnrealMCPMeshEditingCommands.h"
-#include "Commands/EpicUnrealMCPEnhancedInputCommands.h"
-#include "Commands/EpicUnrealMCPGameplayFrameworkCommands.h"
-#include "Commands/EpicUnrealMCPUMGCommands.h"
-#include "Commands/EpicUnrealMCPRenderingCommands.h"
-#include "Commands/EpicUnrealMCPLightingAtmosphereCommands.h"
-#include "Commands/EpicUnrealMCPDataTableCommands.h"
-#include "Commands/EpicUnrealMCPAudioCommands.h"
-#include "Commands/EpicUnrealMCPSequencerCommands.h"
-#include "Commands/EpicUnrealMCPVroidCommands.h"
-#include "Commands/EpicUnrealMCPCesiumCommands.h"
-#include "Commands/EpicUnrealMCPProceduralCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "Commands/EpicUnrealMCPRouter.h"
 #include "MCPServerRunnable.h"
@@ -36,9 +15,25 @@
 
 /**
  * Editor subsystem for MCP Bridge
+ *
  * Handles communication between external tools and the Unreal Editor
  * through a TCP socket connection. Commands are received as JSON and
- * routed to appropriate command handlers.
+ * routed to the appropriate command handler.
+ *
+ * Routing model (Phase 4 / Issue #32 registry refactor):
+ *
+ *   FEpicUnrealMCPRouter::RouteCommand(name)  ->  int32 RouteId
+ *   CommandHandlerRegistry[RouteId]           ->  handler closure
+ *
+ * The legacy `switch (Route)` block in `ExecuteCommand` was replaced
+ * with a runtime registry of TFunctions populated once during
+ * construction (see `RegisterHandlers()` in `EpicUnrealMCPBridge.cpp`).
+ *
+ * To add a new handler class, only **one** location in
+ * `EpicUnrealMCPBridge.cpp` needs to change: a single
+ * `RegisterHandler<FEpicUnrealMCPXxxCommands>(<RouteId>);` line in
+ * `RegisterHandlers()`.  The matching command-name -> RouteId mapping
+ * still lives in `EpicUnrealMCPRouter.cpp`.
  */
 #if WITH_EDITOR
 
@@ -71,6 +66,14 @@ public:
 	// Actor index for O(1) lookup by name/mcp_id
 	FActorIndex ActorIndex;
 
+	/**
+	 * Type alias for a single registered handler closure.  The closure
+	 * receives the original JSON command name plus its params object,
+	 * and returns the per-handler result payload (i.e. the inner
+	 * `result` of the success envelope).
+	 */
+	using FCommandHandlerFn = TFunction<TSharedPtr<FJsonObject>(const FString&, const TSharedPtr<FJsonObject>&)>;
+
 private:
 	// Server state
 	bool bIsRunning;
@@ -83,29 +86,30 @@ private:
 	FIPv4Address ServerAddress;
 	uint16 Port;
 
-	// Command handler instances
-	TSharedPtr<FEpicUnrealMCPEditorCommands> EditorCommands;
-	TSharedPtr<FEpicUnrealMCPActorCommands> ActorCommands;
-	TSharedPtr<FEpicUnrealMCPNavigationCommands> NavigationCommands;
-	TSharedPtr<FEpicUnrealMCPBlueprintCommands> BlueprintCommands;
-	TSharedPtr<FEpicUnrealMCPBlueprintGraphCommands> BlueprintGraphCommands;
-	TSharedPtr<FEpicUnrealMCPMaterialCommands> MaterialCommands;
-	TSharedPtr<FEpicUnrealMCPProjectEditorCommands> ProjectEditorCommands;
-	TSharedPtr<FEpicUnrealMCPContentBrowserCommands> ContentBrowserCommands;
-	TSharedPtr<FEpicUnrealMCPAssetImportCommands> AssetImportCommands;
-	TSharedPtr<FEpicUnrealMCPMeshEditingCommands> MeshEditingCommands;
-	TSharedPtr<FEpicUnrealMCPEnhancedInputCommands> EnhancedInputCommands;
-	TSharedPtr<FEpicUnrealMCPGameplayFrameworkCommands> GameplayFrameworkCommands;
-	TSharedPtr<FEpicUnrealMCPUMGCommands> UMGCommands;
-	TSharedPtr<FEpicUnrealMCPRenderingCommands> RenderingCommands;
-	TSharedPtr<FEpicUnrealMCPLightingAtmosphereCommands> LightingAtmosphereCommands;
-	TSharedPtr<FEpicUnrealMCPDataTableCommands> DataTableCommands;
-	TSharedPtr<FEpicUnrealMCPAudioCommands> AudioCommands;
-	TSharedPtr<FEpicUnrealMCPSequencerCommands> SequencerCommands;
-	TSharedPtr<FEpicUnrealMCPVroidCommands> VroidCommands;
-	TSharedPtr<FEpicUnrealMCPCesiumCommands> CesiumCommands;
-	TSharedPtr<FEpicUnrealMCPProceduralCommands> ProceduralCommands;
+	/**
+	 * Route id -> handler closure registry.
+	 *
+	 * Populated once in the constructor by `RegisterHandlers()`.  Each
+	 * lambda owns a TSharedPtr to its handler instance, which keeps the
+	 * handler alive for the lifetime of the registry (which is destroyed
+	 * with the bridge).  Thread-safety: writes happen only at
+	 * construction; reads are concurrent and the TMap is never mutated
+	 * after `RegisterHandlers()` returns, so no extra locking is needed.
+	 */
+	TMap<int32, FCommandHandlerFn> CommandHandlerRegistry;
+
+	/** Populates `CommandHandlerRegistry` with the full route table. */
+	void RegisterHandlers();
+
+	/**
+	 * Helper: register a handler closure under `RouteId`.
+	 * Each handler class is created and owned exclusively by the
+	 * captured TSharedPtr inside the closure, so removing or replacing
+	 * the entry here is the only place a handler needs to be touched
+	 * inside `EpicUnrealMCPBridge.cpp`.
+	 */
+	template <typename HandlerType>
+	void RegisterHandler(int32 RouteId);
 };
 
 #endif // WITH_EDITOR
-

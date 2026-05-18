@@ -43,6 +43,7 @@ public class UnrealMCP : ModuleRules
 				"GameplayTags",       // For Enhanced Input input modes
 				"AIModule",           // For AIController and gameplay framework
 				"DeveloperSettings",
+				"EditorSubsystem",      // Public: UEpicUnrealMCPBridge.h inherits UEditorSubsystem
 				"PhysicsCore",
 				"EngineSettings",     // For Project/Game Maps settings
 				"EnhancedInput",      // For UE5 Enhanced Input assets/subsystems
@@ -62,7 +63,6 @@ public class UnrealMCP : ModuleRules
 			new string[]
 			{
 				"EditorScriptingUtilities",
-				"EditorSubsystem",
 				"Slate",
 				"SlateCore",
 				"Kismet",
