@@ -44,8 +44,5 @@
 			"Name": "UnrealMCP",
 			"Enabled": true
 		}
-	],
-	"AdditionalPluginDirectories": [
-		"../Plugins"
 	]
 }

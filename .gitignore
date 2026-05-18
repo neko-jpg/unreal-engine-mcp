@@ -169,3 +169,9 @@ scripts/fix_*.py
 scripts/test_blueprint_phase6.py
 scripts/test_new_mesh_apis.py
 FlopperamUnrealMCP/Content/Tests/MCP_Runtime/
+
+# Generated source-built UnrealMCP plugin copy; canonical source is Plugins/UnrealMCP/.
+FlopperamUnrealMCP/Plugins/
+
+# Generated test/report artifacts
+artifacts/
