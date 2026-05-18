@@ -13,6 +13,6 @@ pub mod sync;
 pub mod unreal;
 pub mod validation;
 
-pub use api::routes::AppState;
+pub use api::common::AppState;
 pub use config::Config;
 pub use db::SurrealSceneRepository;
