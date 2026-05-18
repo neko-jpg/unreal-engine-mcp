@@ -13,7 +13,7 @@ import server.scene_tools as scene_tools
 
 class TestSceneCreate:
     def test_sends_correct_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True}
             result = scene_tools.scene_create(scene_id="test_scene", name="Test", description="A scene")
 
@@ -25,7 +25,7 @@ class TestSceneCreate:
         assert args[0][1]["description"] == "A scene"
 
     def test_missing_optional_fields(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True}
             result = scene_tools.scene_create()
 
@@ -38,7 +38,7 @@ class TestSceneCreate:
 
 class TestSceneUpsertActor:
     def test_sends_full_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True}
             result = scene_tools.scene_upsert_actor(
                 scene_id="main",
@@ -62,7 +62,7 @@ class TestSceneUpsertActor:
         assert payload["tags"] == ["wall"]
 
     def test_rejects_empty_mcp_id(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_upsert_actor(scene_id="main", mcp_id="")
         assert result.get("success") is False
         assert "mcp_id" in result.get("error", "").lower() or "validation" in result.get("error", "").lower()
@@ -70,21 +70,21 @@ class TestSceneUpsertActor:
 
 class TestSceneDeleteActor:
     def test_sends_delete_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True}
             result = scene_tools.scene_delete_actor(scene_id="main", mcp_id="actor_01")
 
         mock_call.assert_called_once_with("/objects/delete", {"scene_id": "main", "mcp_id": "actor_01"})
 
     def test_rejects_empty_mcp_id(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_delete_actor(scene_id="main", mcp_id="")
         assert result.get("success") is False
 
 
 class TestScenePlanSync:
     def test_sends_plan_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {"summary": {}}}
             result = scene_tools.scene_plan_sync(scene_id="main", mode="plan_only")
 
@@ -96,7 +96,7 @@ class TestScenePlanSync:
         assert payload["mode"] == "plan_only"
 
     def test_orphan_policy_passed(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {"summary": {}}}
             result = scene_tools.scene_plan_sync(scene_id="main", orphan_policy="adopt")
 
@@ -106,7 +106,7 @@ class TestScenePlanSync:
 
 class TestSceneSync:
     def test_sends_apply_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True}
             result = scene_tools.scene_sync(scene_id="main", mode="apply_safe", allow_delete=True)
 
@@ -120,13 +120,13 @@ class TestSceneSync:
 
 class TestSceneCreateWall:
     def test_rejects_zero_segments(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_create_wall(segments=0)
         assert result.get("success") is False
         assert "segments" in result.get("error", "").lower()
 
     def test_rejects_bad_axis(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_create_wall(axis="z")
         assert result.get("success") is False
         assert "axis" in result.get("error", "").lower()
@@ -134,13 +134,13 @@ class TestSceneCreateWall:
 
 class TestSceneCreatePyramid:
     def test_rejects_zero_levels(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_create_pyramid(levels=0)
         assert result.get("success") is False
         assert "levels" in result.get("error", "").lower()
 
     def test_rejects_zero_block_size(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_create_pyramid(block_size=0)
         assert result.get("success") is False
         assert "block_size" in result.get("error", "").lower()
@@ -148,8 +148,8 @@ class TestSceneCreatePyramid:
 
 class TestSceneNavMeshAndPatrol:
     def test_navmesh_sends_component_payload(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_ss, \
-             patch("server.core.get_unreal_connection") as mock_ue:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_ss, \
+             patch("server.scene_tools_common.get_unreal_connection") as mock_ue:
             mock_ue.return_value = MagicMock()
             mock_ue.return_value.send_command.return_value = {"success": True}
             mock_ss.return_value = {"success": True}
@@ -166,7 +166,7 @@ class TestSceneNavMeshAndPatrol:
         assert ue_call[0][1]["extent"] == [500.0, 500.0, 500.0]
 
     def test_patrol_requires_two_points(self):
-        with patch("server.scene_tools.call_scene_syncd"):
+        with patch("server.scene_tools_common.call_scene_syncd"):
             result = scene_tools.scene_create_patrol_route(points=[])
         assert result.get("success") is False
         assert "at least 2" in result.get("error", "").lower()
@@ -191,7 +191,7 @@ class TestDraftProxyHelpers:
 
 class TestSceneValidate:
     def test_calls_validate_endpoint(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_validate(scene_id="demo")
 
@@ -199,14 +199,14 @@ class TestSceneValidate:
         assert result["success"] is True
 
     def test_rejects_invalid_scene_id(self):
-        with patch("server.scene_tools.call_scene_syncd", return_value={"success": True, "data": {}}):
+        with patch("server.scene_tools_common.call_scene_syncd", return_value={"success": True, "data": {}}):
             result = scene_tools.scene_validate(scene_id="")
         assert result.get("success") is False
 
 
 class TestSceneCompilePlan:
     def test_calls_compile_plan_endpoint(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_compile_plan(scene_id="demo")
 
@@ -216,7 +216,7 @@ class TestSceneCompilePlan:
 
 class TestSceneCompileApply:
     def test_calls_compile_apply_with_defaults(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_compile_apply(scene_id="demo")
 
@@ -227,7 +227,7 @@ class TestSceneCompileApply:
         assert result["success"] is True
 
     def test_calls_compile_apply_allowing_delete(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_compile_apply(scene_id="demo", allow_delete=True)
 
@@ -237,7 +237,7 @@ class TestSceneCompileApply:
 
 class TestSceneCompilePreview:
     def test_calls_compile_preview_endpoint(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_compile_preview(scene_id="demo")
 
@@ -245,14 +245,14 @@ class TestSceneCompilePreview:
         assert result["success"] is True
 
     def test_rejects_empty_scene_id(self):
-        with patch("server.scene_tools.call_scene_syncd", return_value={"success": True, "data": {}}):
+        with patch("server.scene_tools_common.call_scene_syncd", return_value={"success": True, "data": {}}):
             result = scene_tools.scene_compile_preview(scene_id="")
         assert result.get("success") is False
 
 
 class TestSceneRunPieTest:
     def test_calls_pie_run_with_defaults(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_run_pie_test(scene_id="demo")
 
@@ -266,7 +266,7 @@ class TestSceneRunPieTest:
         assert result["success"] is True
 
     def test_calls_pie_run_with_custom_params(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_run_pie_test(scene_id="demo", mode="full", timeout_secs=90)
 
@@ -275,7 +275,7 @@ class TestSceneRunPieTest:
         assert payload["timeout_secs"] == 90
 
     def test_caps_timeout_at_120(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             scene_tools.scene_run_pie_test(scene_id="demo", timeout_secs=999)
 
@@ -285,7 +285,7 @@ class TestSceneRunPieTest:
 
 class TestSceneGenerateFixPlan:
     def test_calls_fix_plan_with_empty_diagnostics(self):
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_generate_fix_plan(scene_id="demo")
 
@@ -299,7 +299,7 @@ class TestSceneGenerateFixPlan:
 
     def test_calls_fix_plan_with_diagnostics(self):
         diagnostics = [{"severity": "error", "code": "NO_MESH", "description": "Missing mesh"}]
-        with patch("server.scene_tools.call_scene_syncd") as mock_call:
+        with patch("server.scene_tools_common.call_scene_syncd") as mock_call:
             mock_call.return_value = {"success": True, "data": {}}
             result = scene_tools.scene_generate_fix_plan(scene_id="demo", diagnostics=diagnostics)
 
