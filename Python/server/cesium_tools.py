@@ -1,9 +1,11 @@
-﻿"""Cesium for Unreal MCP tools (PoC).
+﻿"""Cesium for Unreal MCP tools.
 
-Wraps the C++ Cesium command handler for capability detection. Heavier
-operations (georeference, tileset spawn, geolocation placement) are exposed
-as documented stubs that return actionable hints when the plugin is missing
-or the C++-side implementation is not yet wired.
+Wraps the C++ Cesium command handlers in `EpicUnrealMCPCesiumCommands`:
+- `cesium_check_plugin` - works without Cesium installed and reports plugin status.
+- `cesium_setup_georeference`, `cesium_add_tileset`,
+  `cesium_place_actor_at_geolocation` - require Cesium for Unreal (v2.18+ for
+  official UE 5.7 support); when the plugin is missing they return an
+  actionable error envelope that tells the LLM exactly what to install.
 """
 
 from typing import Any, Dict, Optional
@@ -35,8 +37,8 @@ def cesium_check_plugin() -> Dict[str, Any]:
 
     Returns the plugin descriptor info (version, enabled state) and per-module
     load status for `CesiumRuntime` / `CesiumEditor`. When unavailable the
-    response includes a `hint` describing how to install the plugin (UE 5.7
-    typically requires a source build).
+    response includes a `hint` describing how to install the plugin (Cesium
+    for Unreal v2.18+ ships official UE 5.7 binaries).
     """
     try:
         conn = get_unreal_connection()
@@ -53,12 +55,12 @@ def cesium_setup_georeference(
     origin_longitude: float = 0.0,
     origin_height: float = 0.0,
 ) -> Dict[str, Any]:
-    """[PoC stub] Spawn an `ACesiumGeoreference` actor anchored at a Lat/Lon/Height.
+    """Spawn or reuse an `ACesiumGeoreference` actor anchored at a Lat/Lon/Height.
 
-    This call always reaches the C++ side, but the underlying georeference spawn
-    is intentionally a stub until the Cesium plugin is added as a public Build.cs
-    dependency. The C++ handler returns an actionable error envelope describing
-    the next implementation step.
+    Reuses any existing georeference actor in the level, otherwise spawns one.
+    Sets the origin via `SetOriginLongitudeLatitudeHeight` and tags the actor
+    with `managed_by_mcp`. Requires the CesiumForUnreal plugin (v2.18+ on
+    UE 5.7); when missing, returns an actionable error envelope.
     """
     try:
         validate_string(actor_name, "actor_name")
@@ -85,11 +87,13 @@ def cesium_add_tileset(
     ion_access_token: Optional[str] = None,
     url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """[PoC stub] Spawn an `ACesium3DTileset` actor sourced from an Ion asset or URL.
+    """Spawn an `ACesium3DTileset` actor sourced from an Ion asset or URL.
 
     Token values are NEVER logged. Pass `ion_access_token` only when needed.
-    The C++ side currently returns an actionable error until the Cesium runtime
-    dependency is wired (see plan 2026-05-13-cesium-wfc-async-semantic.md).
+    Either `url` (3D Tiles `tileset.json`) or the pair (`ion_asset_id`,
+    `ion_access_token`) must be supplied. Returns the spawned actor's name and
+    path on success, or an actionable error envelope when CesiumForUnreal is
+    not installed.
     """
     try:
         validate_string(actor_name, "actor_name")
@@ -118,11 +122,12 @@ def cesium_place_actor_at_geolocation(
     longitude: float,
     height: float = 0.0,
 ) -> Dict[str, Any]:
-    """[PoC stub] Convert Lat/Lon/Height to Unreal coordinates and move an actor.
+    """Convert Lat/Lon/Height to Unreal coordinates and move an actor.
 
-    Requires the `ACesiumGeoreference` to exist in the level (use
-    `cesium_setup_georeference` first). The C++ handler currently returns an
-    actionable error envelope until the Cesium runtime dependency is wired.
+    Looks up the target actor by `mcp_id:<actor_mcp_id>` tag (the convention
+    set by `spawn_actor`). Attaches a `UCesiumGlobeAnchorComponent` if missing
+    and calls `MoveToLongitudeLatitudeHeight`. Requires `cesium_setup_georeference`
+    to have placed an `ACesiumGeoreference` in the level first.
     """
     try:
         validate_string(actor_mcp_id, "actor_mcp_id")
