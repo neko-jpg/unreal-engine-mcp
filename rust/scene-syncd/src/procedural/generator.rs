@@ -64,6 +64,10 @@ pub struct ProgressTracker {
     /// Optional explicit fraction in [0,1] times 1_000_000 (for sub-step granularity).
     /// Set to u64::MAX when unset.
     fraction_micro: std::sync::atomic::AtomicU64,
+    /// Optional human-readable progress message (e.g. "collapsed 13/64 cells",
+    /// "iteration 4/10"). Generators should throttle writes to avoid lock
+    /// contention; the job-registry watchdog snapshots this every 200ms.
+    message: std::sync::Mutex<Option<String>>,
 }
 
 impl ProgressTracker {
@@ -72,6 +76,7 @@ impl ProgressTracker {
             current: std::sync::atomic::AtomicU64::new(0),
             total: std::sync::atomic::AtomicU64::new(0),
             fraction_micro: std::sync::atomic::AtomicU64::new(u64::MAX),
+            message: std::sync::Mutex::new(None),
         }
     }
 
@@ -84,6 +89,22 @@ impl ProgressTracker {
         let clamped = fraction.clamp(0.0, 1.0);
         let micro = (clamped * 1_000_000.0) as u64;
         self.fraction_micro.store(micro, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Replace the human-readable progress message.
+    /// Call this from generator hot loops AT MOST every few hundred ms to
+    /// avoid lock contention - typically when a meaningful step boundary is
+    /// crossed (e.g. WFC collapsed-count high-water mark advances, L-System
+    /// iteration completes).
+    pub fn set_message(&self, msg: impl Into<String>) {
+        if let Ok(mut guard) = self.message.lock() {
+            *guard = Some(msg.into());
+        }
+    }
+
+    /// Snapshot the current human-readable message, if any.
+    pub fn read_message(&self) -> Option<String> {
+        self.message.lock().ok().and_then(|g| g.clone())
     }
 
     /// Returns a fraction in [0,1] if any progress is known, otherwise None.

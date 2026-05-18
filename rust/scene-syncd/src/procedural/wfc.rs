@@ -391,6 +391,10 @@ fn backtrack(
                 *max_collapsed = collapsed_count;
                 if total_cells > 0 {
                     progress.set(*max_collapsed, total_cells);
+                    progress.set_message(format!(
+                        "WFC: collapsed {}/{} cells",
+                        *max_collapsed, total_cells
+                    ));
                 }
             }
             if backtrack(

@@ -1,5 +1,5 @@
 use crate::domain::SceneObject;
-use crate::validation::diagnostic::{Diagnostic, Severity};
+use crate::validation::diagnostic::Diagnostic;
 use crate::validation::engine::ValidationRule;
 
 /// Validates that objects with similar kinds use consistent materials.

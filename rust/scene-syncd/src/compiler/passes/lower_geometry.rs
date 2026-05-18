@@ -3,7 +3,7 @@ use crate::compiler::passes::Pass;
 use crate::error::AppError;
 use crate::geom::footprint::Footprint2;
 use crate::ir::geometric::{
-    Connector, ConnectorType, FootprintPrimitive, GeometricIr, GeometricPrimitive, VolumePrimitive,
+    FootprintPrimitive, GeometricIr, GeometricPrimitive, VolumePrimitive,
 };
 use crate::layout::kind_registry::KindRegistry;
 
