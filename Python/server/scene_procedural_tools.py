@@ -17,6 +17,7 @@ from server.scene_tools_common import (
     _send_draft_proxy_replace,
     _unreal_envelope,
 )
+from server.scene_crud_tools import scene_upsert_actors
 
 @mcp.tool()
 def scene_upsert_procedural_mesh(
