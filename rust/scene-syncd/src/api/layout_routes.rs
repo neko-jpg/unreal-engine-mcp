@@ -1,8 +1,8 @@
+use crate::api::common::{normalize_scene_id_input, success_response, AppState};
 use axum::extract::State;
+use axum::routing::post;
 use axum::Json;
 use axum::Router;
-use axum::routing::post;
-use crate::api::common::{AppState, success_response, normalize_scene_id_input};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -317,14 +317,28 @@ pub async fn compile_apply_route(
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/layouts/{scene_id}/denormalize", post(denormalize_layout_route))
-        .route("/layouts/{scene_id}/nodes/{entity_id}/transform", post(update_layout_node_transform))
+        .route(
+            "/layouts/{scene_id}/denormalize",
+            post(denormalize_layout_route),
+        )
+        .route(
+            "/layouts/{scene_id}/nodes/{entity_id}/transform",
+            post(update_layout_node_transform),
+        )
         .route("/layouts/{scene_id}/approve", post(approve_layout))
         .route("/layouts/{scene_id}/preview", post(preview_layout_route))
-        .route("/layouts/{scene_id}/compile/preview", post(compile_preview_route))
+        .route(
+            "/layouts/{scene_id}/compile/preview",
+            post(compile_preview_route),
+        )
         .route("/layouts/{scene_id}/validate", post(validate_route))
         .route("/layouts/{scene_id}/compile/plan", post(compile_plan_route))
-        .route("/layouts/{scene_id}/compile/apply", post(compile_apply_route))
-        .route("/realizations/{scene_id}/realize", post(realize_layout_route))
+        .route(
+            "/layouts/{scene_id}/compile/apply",
+            post(compile_apply_route),
+        )
+        .route(
+            "/realizations/{scene_id}/realize",
+            post(realize_layout_route),
+        )
 }
-

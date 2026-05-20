@@ -9,8 +9,12 @@ pub struct MeshData {
     pub indices: Vec<u32>,
 }
 
+/// Per-Z slice intermediate output (positions, normals, indices) produced in parallel
+/// by the marching cubes triangulation step.
+type SliceData = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>);
+
 pub fn marching_cubes(sdf: &SdfTree, bounds: SdfBounds, resolution: u32) -> MeshData {
-    let res = resolution.max(1).min(256) as usize;
+    let res = resolution.clamp(1, 256) as usize;
     let size = bounds.size();
     let cell_size = size / res as f32;
 
@@ -38,7 +42,7 @@ pub fn marching_cubes(sdf: &SdfTree, bounds: SdfBounds, resolution: u32) -> Mesh
         });
 
     // Extract triangles using Marching Cubes LUT
-    let slices: Vec<(Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>)> = (0..res)
+    let slices: Vec<SliceData> = (0..res)
         .into_par_iter()
         .map(|z| {
             let mut positions = Vec::new();
@@ -247,10 +251,10 @@ mod tests {
         });
         let bounds = SdfBounds::new(Vec3::new(-1.5, -1.5, -1.5), Vec3::new(1.5, 1.5, 1.5));
         let mesh = marching_cubes(&sphere, bounds, 16);
-        assert!(mesh.positions.len() > 0, "should have vertices");
-        assert!(mesh.indices.len() > 0, "should have indices");
+        assert!(!mesh.positions.is_empty(), "should have vertices");
+        assert!(!mesh.indices.is_empty(), "should have indices");
         assert!(
-            mesh.indices.len() % 3 == 0,
+            mesh.indices.len().is_multiple_of(3),
             "indices should be multiple of 3"
         );
         // All indices should be valid
@@ -281,8 +285,8 @@ mod tests {
         });
         let bounds = SdfBounds::new(Vec3::new(-3.0, -3.0, -3.0), Vec3::new(3.0, 3.0, 3.0));
         let mesh = marching_cubes(&gyroid, bounds, 16);
-        assert!(mesh.positions.len() > 0, "gyroid should produce vertices");
-        assert!(mesh.indices.len() > 0);
+        assert!(!mesh.positions.is_empty(), "gyroid should produce vertices");
+        assert!(!mesh.indices.is_empty());
     }
 
     #[test]
@@ -299,7 +303,7 @@ mod tests {
         // resolution=2 is coarse but enough to capture the sphere
         let mesh2 = marching_cubes(&sphere, bounds, 2);
         assert!(
-            mesh2.positions.len() > 0,
+            !mesh2.positions.is_empty(),
             "resolution 2 should produce vertices"
         );
     }

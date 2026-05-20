@@ -67,6 +67,80 @@ def scene_sync(
     )
 
 
+@mcp.tool()
+def scene_compile_apply_streaming(
+    scene_id: str = "main",
+    mode: str = "apply_safe",
+    allow_delete: bool = False,
+    batch_size: int = 500,
+    max_operations: int = 50000,
+) -> Dict[str, Any]:
+    """Apply a sync in streaming mode for large scenes (中長期-3).
+
+    Hits the scene-syncd `/sync/apply-stream` NDJSON endpoint, collects all
+    progress events, and returns the aggregate result.
+
+    Args:
+        scene_id: Scene identifier.
+        mode: `apply_safe` (default, no deletes) or `apply_all`.
+        allow_delete: Allow actor removal regardless of mode.
+        batch_size: Number of operations per progress checkpoint (default 500).
+        max_operations: Hard cap; rejects plans larger than this (default 50000).
+
+    Returns:
+        Aggregate dict with `success`, `events` (list of all NDJSON events),
+        `progress_events` count, `warnings`, and `result` (final apply result)
+        when the stream completes successfully.
+    """
+    try:
+        validate_string(scene_id, "scene_id")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+
+    from server.scene_client import call_scene_syncd_stream
+
+    payload: Dict[str, Any] = {
+        "scene_id": scene_id,
+        "mode": mode,
+        "allow_delete": allow_delete,
+        "batch_size": batch_size,
+        "max_operations": max_operations,
+    }
+
+    events: List[Dict[str, Any]] = []
+    progress_count = 0
+    final_result: Optional[Dict[str, Any]] = None
+    warnings: List[str] = []
+    error_message: Optional[str] = None
+
+    for event in call_scene_syncd_stream("/sync/apply-stream", payload):
+        events.append(event)
+        kind = event.get("event")
+        if kind == "progress":
+            progress_count += 1
+        elif kind == "warning":
+            warnings.append(str(event.get("message", "")))
+        elif kind == "complete":
+            final_result = event.get("result")
+        elif kind == "error":
+            error_message = str(event.get("message", ""))
+            break
+
+    if error_message is not None:
+        return make_error_response(
+            f"scene_compile_apply_streaming failed: {error_message}"
+        )
+
+    return {
+        "success": True,
+        "scene_id": scene_id,
+        "events": events,
+        "progress_events": progress_count,
+        "warnings": warnings,
+        "result": final_result,
+    }
+
+
 
 
 @mcp.tool()

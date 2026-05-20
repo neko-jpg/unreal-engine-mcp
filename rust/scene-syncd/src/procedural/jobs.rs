@@ -41,12 +41,14 @@ pub enum JobGenerator {
     Lsystem,
 }
 
-impl JobGenerator {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for JobGenerator {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "wfc" => Some(Self::Wfc),
-            "lsystem" | "l_system" | "l-system" => Some(Self::Lsystem),
-            _ => None,
+            "wfc" => Ok(Self::Wfc),
+            "lsystem" | "l_system" | "l-system" => Ok(Self::Lsystem),
+            _ => Err(()),
         }
     }
 }
@@ -174,7 +176,9 @@ impl JobRegistry {
             let permit = match permit {
                 Ok(p) => p,
                 Err(_) => {
-                    registry.mark_failed(&job_id_clone, "semaphore closed", None).await;
+                    registry
+                        .mark_failed(&job_id_clone, "semaphore closed", None)
+                        .await;
                     return;
                 }
             };
@@ -214,24 +218,9 @@ impl JobRegistry {
 
             let outcome: Result<Value, String> = match generator {
                 JobGenerator::Wfc => match serde_json::from_value::<WfcParams>(params_value) {
-                    Ok(params) => run_with_cancellation(cancel_clone.clone(), move || {
-                        let g = WfcGenerator;
-                        match g.generate(&params, &ctx) {
-                            Ok(out) => Ok(json!({
-                                "data": out.data,
-                                "stats": out.stats,
-                                "warnings": out.warnings,
-                            })),
-                            Err(e) => Err(format!("{e}")),
-                        }
-                    })
-                    .await,
-                    Err(e) => Err(format!("invalid WFC params: {e}")),
-                },
-                JobGenerator::Lsystem => {
-                    match serde_json::from_value::<LSystemParams>(params_value) {
-                        Ok(params) => run_with_cancellation(cancel_clone.clone(), move || {
-                            let g = LSystemGenerator;
+                    Ok(params) => {
+                        run_with_cancellation(cancel_clone.clone(), move || {
+                            let g = WfcGenerator;
                             match g.generate(&params, &ctx) {
                                 Ok(out) => Ok(json!({
                                     "data": out.data,
@@ -241,7 +230,26 @@ impl JobRegistry {
                                 Err(e) => Err(format!("{e}")),
                             }
                         })
-                        .await,
+                        .await
+                    }
+                    Err(e) => Err(format!("invalid WFC params: {e}")),
+                },
+                JobGenerator::Lsystem => {
+                    match serde_json::from_value::<LSystemParams>(params_value) {
+                        Ok(params) => {
+                            run_with_cancellation(cancel_clone.clone(), move || {
+                                let g = LSystemGenerator;
+                                match g.generate(&params, &ctx) {
+                                    Ok(out) => Ok(json!({
+                                        "data": out.data,
+                                        "stats": out.stats,
+                                        "warnings": out.warnings,
+                                    })),
+                                    Err(e) => Err(format!("{e}")),
+                                }
+                            })
+                            .await
+                        }
                         Err(e) => Err(format!("invalid L-System params: {e}")),
                     }
                 }
@@ -394,12 +402,7 @@ impl JobRegistry {
         }
     }
 
-    async fn mark_failed(
-        &self,
-        job_id: &str,
-        error: &str,
-        final_progress_message: Option<String>,
-    ) {
+    async fn mark_failed(&self, job_id: &str, error: &str, final_progress_message: Option<String>) {
         let mut g = self.inner.lock().await;
         if let Some(entry) = g.get_mut(job_id) {
             entry.record.status = JobStatus::Failed;
@@ -471,14 +474,19 @@ mod tests {
             width: 2,
             height: 2,
             tileset: WfcTileset {
-                tiles: vec![WfcTile { id: "g".into(), weight: 1.0 }],
+                tiles: vec![WfcTile {
+                    id: "g".into(),
+                    weight: 1.0,
+                }],
                 constraints: vec![
                     crate::procedural::wfc::WfcConstraint {
-                        left: "g".into(), right: "g".into(),
+                        left: "g".into(),
+                        right: "g".into(),
                         direction: crate::procedural::wfc::WfcDirection::East,
                     },
                     crate::procedural::wfc::WfcConstraint {
-                        left: "g".into(), right: "g".into(),
+                        left: "g".into(),
+                        right: "g".into(),
                         direction: crate::procedural::wfc::WfcDirection::South,
                     },
                 ],
@@ -512,9 +520,9 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_generator_returns_none() {
-        assert!(JobGenerator::from_str("does-not-exist").is_none());
-        assert!(JobGenerator::from_str("WFC").is_some());
-        assert!(JobGenerator::from_str("L-System").is_some());
+        assert!("does-not-exist".parse::<JobGenerator>().is_err());
+        assert!("WFC".parse::<JobGenerator>().is_ok());
+        assert!("L-System".parse::<JobGenerator>().is_ok());
     }
 
     #[tokio::test]
@@ -548,16 +556,33 @@ mod tests {
         let mut max_seen = 0.0_f32;
         for _ in 0..30 {
             let s = registry.status(&job_id).await.unwrap();
-            if s.progress > max_seen { max_seen = s.progress; }
-            if matches!(s.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
+            if s.progress > max_seen {
+                max_seen = s.progress;
+            }
+            if matches!(
+                s.status,
+                JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled
+            ) {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(40)).await;
         }
         let final_status = registry.status(&job_id).await.unwrap();
-        assert!(matches!(final_status.status, JobStatus::Completed), "{:?}", final_status);
-        assert!(final_status.progress >= 0.99, "final progress = {}", final_status.progress);
-        assert!(max_seen >= 0.05, "max observed progress = {} (should be >= initial 0.05)", max_seen);
+        assert!(
+            matches!(final_status.status, JobStatus::Completed),
+            "{:?}",
+            final_status
+        );
+        assert!(
+            final_status.progress >= 0.99,
+            "final progress = {}",
+            final_status.progress
+        );
+        assert!(
+            max_seen >= 0.05,
+            "max observed progress = {} (should be >= initial 0.05)",
+            max_seen
+        );
     }
 
     #[tokio::test]
@@ -615,8 +640,7 @@ mod tests {
         assert!(
             saw_progress_msg,
             "progress_message never populated; last={:?}, final_status={:?}",
-            last_msg,
-            final_status
+            last_msg, final_status
         );
         // The final message should reference one of the L-System phases.
         let final_msg = final_status

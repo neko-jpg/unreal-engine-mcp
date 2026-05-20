@@ -43,7 +43,8 @@ fn make_object(mcp_id: &str, x: f64) -> SceneObject {
 }
 
 fn bench_plan_sync(c: &mut Criterion) {
-    for size in [10, 50, 100, 500] {
+    // Includes the 10k actor case (中長期-2 goal: <2s).
+    for size in [10, 50, 100, 500, 1000, 10_000] {
         let desired: Vec<SceneObject> = (0..size)
             .map(|i| make_object(&format!("obj_{}", i), i as f64 * 100.0))
             .collect();
@@ -55,7 +56,8 @@ fn bench_plan_sync(c: &mut Criterion) {
                 let mut ctx = CompilerContext::new("bench".to_string());
                 ctx.objects = desired.clone();
                 let pass = DiffPlanningPass::with_actual(actual.clone());
-                black_box(pass.run(&mut ctx).unwrap());
+                pass.run(&mut ctx).unwrap();
+                black_box(());
             })
         });
     }

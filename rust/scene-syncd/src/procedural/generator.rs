@@ -81,14 +81,17 @@ impl ProgressTracker {
     }
 
     pub fn set(&self, current: u64, total: u64) {
-        self.current.store(current, std::sync::atomic::Ordering::Relaxed);
-        self.total.store(total, std::sync::atomic::Ordering::Relaxed);
+        self.current
+            .store(current, std::sync::atomic::Ordering::Relaxed);
+        self.total
+            .store(total, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn set_fraction(&self, fraction: f32) {
         let clamped = fraction.clamp(0.0, 1.0);
         let micro = (clamped * 1_000_000.0) as u64;
-        self.fraction_micro.store(micro, std::sync::atomic::Ordering::Relaxed);
+        self.fraction_micro
+            .store(micro, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Replace the human-readable progress message.
@@ -109,7 +112,9 @@ impl ProgressTracker {
 
     /// Returns a fraction in [0,1] if any progress is known, otherwise None.
     pub fn read(&self) -> Option<f32> {
-        let micro = self.fraction_micro.load(std::sync::atomic::Ordering::Relaxed);
+        let micro = self
+            .fraction_micro
+            .load(std::sync::atomic::Ordering::Relaxed);
         if micro != u64::MAX {
             return Some((micro as f32 / 1_000_000.0).clamp(0.0, 1.0));
         }
@@ -268,6 +273,11 @@ pub enum ProceduralError {
 ///
 /// The framework uses this to dispatch the correct Unreal C++ command
 /// or Scene DB persistence path.
+///
+/// `large_enum_variant` is allowed because the Mesh variant intentionally
+/// owns a `ProceduralMeshPayload` to avoid heap copies of the vertex /
+/// index buffers between generator output and the Unreal TCP send.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "variant")]
 pub enum ProceduralResultVariant {
@@ -425,20 +435,26 @@ mod tests {
 
     #[test]
     fn test_generate_context_check_timeout() {
-        let ctx = GenerateContext::new(None, Some(GenerationLimits {
-            max_execution_ms: 0,
-            ..Default::default()
-        }));
+        let ctx = GenerateContext::new(
+            None,
+            Some(GenerationLimits {
+                max_execution_ms: 0,
+                ..Default::default()
+            }),
+        );
         // Should immediately exceed 0ms limit
         assert!(ctx.check_timeout().is_err());
     }
 
     #[test]
     fn test_generate_context_no_timeout() {
-        let ctx = GenerateContext::new(None, Some(GenerationLimits {
-            max_execution_ms: 1_000_000,
-            ..Default::default()
-        }));
+        let ctx = GenerateContext::new(
+            None,
+            Some(GenerationLimits {
+                max_execution_ms: 1_000_000,
+                ..Default::default()
+            }),
+        );
         assert!(ctx.check_timeout().is_ok());
     }
 

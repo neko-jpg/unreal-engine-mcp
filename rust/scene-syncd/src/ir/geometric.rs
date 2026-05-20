@@ -10,6 +10,12 @@ pub struct GeometricIr {
     pub nav_surfaces: Vec<NavSurfaceHint>,
 }
 
+impl Default for GeometricIr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GeometricIr {
     pub fn new() -> Self {
         Self {

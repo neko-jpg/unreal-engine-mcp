@@ -42,4 +42,3 @@ pub fn error_response(code: &str, message: &str) -> Value {
 pub fn normalize_scene_id_input(id: &str) -> Result<String, AppError> {
     crate::domain::ids::normalize_scene_id(id).map_err(AppError::Validation)
 }
-

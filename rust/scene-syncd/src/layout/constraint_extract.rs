@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn one_tower_one_wall_extracts_constraints() {
         let objects = vec![make_obj("t1", "tower"), make_obj("w1", "curtain_wall")];
-        let (hard, soft) = extract_constraints(&objects, &[], None);
+        let (hard, _soft) = extract_constraints(&objects, &[], None);
         assert_eq!(hard.len(), 1); // TowerConnectedToWall
         assert!(hard
             .iter()
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn keep_with_walls_extracts_boundary() {
         let objects = vec![make_obj("k1", "keep"), make_obj("w1", "curtain_wall")];
-        let (hard, soft) = extract_constraints(&objects, &[], None);
+        let (hard, _soft) = extract_constraints(&objects, &[], None);
         assert!(hard
             .iter()
             .any(|c| matches!(c, HardConstraint::KeepInsideBoundary { .. })));

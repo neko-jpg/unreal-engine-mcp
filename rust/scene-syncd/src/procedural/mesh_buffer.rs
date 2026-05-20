@@ -56,6 +56,7 @@ pub enum MeshValidationError {
 }
 
 impl<'a> ProceduralMeshPayload<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mcp_id: &str,
         request_id: u64,
@@ -84,7 +85,7 @@ impl<'a> ProceduralMeshPayload<'a> {
             ));
         }
 
-        if index_count % 3 != 0 {
+        if !index_count.is_multiple_of(3) {
             return Err(MeshValidationError::IndexCountNotMultipleOf3(index_count));
         }
 
@@ -323,7 +324,7 @@ impl<'a> ProceduralMeshPayload<'a> {
         if v == 0 {
             return Err(MeshValidationError::IndexCountNotMultipleOf3(0));
         }
-        if i == 0 || i % 3 != 0 {
+        if i == 0 || !i.is_multiple_of(3) {
             return Err(MeshValidationError::IndexCountNotMultipleOf3(i as u32));
         }
 

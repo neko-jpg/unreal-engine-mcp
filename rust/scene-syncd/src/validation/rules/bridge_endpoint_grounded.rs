@@ -27,7 +27,7 @@ impl ValidationRule for BridgeEndpointGrounded {
                 continue;
             }
             let z = obj.transform.location.z;
-            if z < MIN_BRIDGE_Z_CM || z > MAX_BRIDGE_Z_CM {
+            if !(MIN_BRIDGE_Z_CM..=MAX_BRIDGE_Z_CM).contains(&z) {
                 results.push(
                     Diagnostic::warning(
                         self.code(),

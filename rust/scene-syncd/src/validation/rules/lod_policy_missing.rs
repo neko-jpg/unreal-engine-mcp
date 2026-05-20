@@ -60,7 +60,7 @@ mod tests {
     use crate::domain::{Rotator, Transform, Vec3};
     use serde_json::json;
 
-    fn make_obj(mcp_id: &str, kind: &str, tags: Vec<&str>) -> SceneObject {
+    fn make_obj(mcp_id: &str, _kind: &str, tags: Vec<&str>) -> SceneObject {
         SceneObject {
             id: String::new(),
             scene: "scene:test".to_string(),

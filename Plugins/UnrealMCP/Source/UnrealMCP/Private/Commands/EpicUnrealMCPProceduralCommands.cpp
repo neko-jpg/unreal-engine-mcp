@@ -16,6 +16,7 @@
 
 #include "Commands/EpicUnrealMCPProceduralCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
+#include "Commands/EpicUnrealMCPDataLayerHelpers.h"
 #include "EpicUnrealMCPBridge.h"
 
 #include "Editor.h"
@@ -34,6 +35,8 @@
 #include "ScopedTransaction.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "WorldPartition/DataLayer/DataLayerAsset.h"
+#include "WorldPartition/DataLayer/DataLayerInstance.h"
 
 // =====================================================================
 // Class members
@@ -878,11 +881,39 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPProceduralCommands::HandleCreateDataLayerF
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
     }
 
+    FString ColorHex;
+    Params->TryGetStringField(TEXT("color_hex"), ColorHex);
+
+    FString InitialState;
+    Params->TryGetStringField(TEXT("initial_state"), InitialState);
+
     FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Create Data Layer For Generation")));
+
+    // Attempt to allocate a real WP DataLayer asset + instance. When the level
+    // does not have World Partition (no UDataLayerEditorSubsystem), this returns
+    // nullptr and we fall back to the legacy actor-tag mode.
+    UDataLayerAsset* DataLayerAsset = FEpicUnrealMCPDataLayerHelpers::FindOrCreateDataLayerAsset(DataLayerName);
+    UDataLayerInstance* DataLayerInstance = DataLayerAsset
+        ? FEpicUnrealMCPDataLayerHelpers::FindOrCreateDataLayerInstance(DataLayerName, DataLayerAsset)
+        : nullptr;
+    const bool bUseRealLayer = (DataLayerInstance != nullptr);
+
+    if (bUseRealLayer)
+    {
+        if (!ColorHex.IsEmpty())
+        {
+            FEpicUnrealMCPDataLayerHelpers::ApplyDebugColor(DataLayerInstance, ColorHex);
+        }
+        if (!InitialState.IsEmpty())
+        {
+            FEpicUnrealMCPDataLayerHelpers::ApplyInitialRuntimeState(DataLayerInstance, InitialState);
+        }
+    }
 
     const FName LayerTag(*FString::Printf(TEXT("data_layer:%s"), *DataLayerName));
     TArray<TSharedPtr<FJsonValue>> Skipped;
-    int32 AssignedCount = 0;
+    TArray<AActor*> ResolvedActors;
+    ResolvedActors.Reserve(IdsArray->Num());
 
     for (const TSharedPtr<FJsonValue>& V : *IdsArray)
     {
@@ -899,21 +930,39 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPProceduralCommands::HandleCreateDataLayerF
             Skipped.Add(MakeShared<FJsonValueObject>(S));
             continue;
         }
+        // Always tag managed_by_mcp so cleanup tools can find it.
         Actor->Tags.AddUnique(FName(TEXT("managed_by_mcp")));
-        Actor->Tags.AddUnique(LayerTag);
-        Actor->Modify();
-        Actor->MarkPackageDirty();
-        ++AssignedCount;
+        ResolvedActors.Add(Actor);
+    }
+
+    int32 AssignedCount = 0;
+    if (bUseRealLayer)
+    {
+        AssignedCount = FEpicUnrealMCPDataLayerHelpers::AddActorsToInstance(ResolvedActors, DataLayerInstance);
+    }
+    else
+    {
+        for (AActor* Actor : ResolvedActors)
+        {
+            Actor->Tags.AddUnique(LayerTag);
+            Actor->Modify();
+            Actor->MarkPackageDirty();
+            ++AssignedCount;
+        }
     }
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("data_layer_name"), DataLayerName);
     Data->SetStringField(TEXT("data_layer_tag"), LayerTag.ToString());
-    Data->SetStringField(TEXT("method"), TEXT("tag"));
+    Data->SetStringField(TEXT("method"), bUseRealLayer ? TEXT("data_layer_instance") : TEXT("tag"));
     Data->SetNumberField(TEXT("requested_count"), IdsArray->Num());
     Data->SetNumberField(TEXT("actors_assigned_count"), AssignedCount);
     Data->SetArrayField(TEXT("skipped"), Skipped);
-    Data->SetStringField(TEXT("note"), TEXT("First-pass implementation uses actor tags as a logical data layer. A follow-up will wire UDataLayerEditorSubsystem when the level uses World Partition."));
+    Data->SetStringField(
+        TEXT("note"),
+        bUseRealLayer
+            ? TEXT("Used UDataLayerEditorSubsystem to attach actors to a real UDataLayerInstance.")
+            : TEXT("Fell back to actor tags because the current level does not have a UDataLayerEditorSubsystem (non-WorldPartition level)."));
 
     TSharedPtr<FJsonObject> Resp = MakeShared<FJsonObject>();
     Resp->SetBoolField(TEXT("success"), true);

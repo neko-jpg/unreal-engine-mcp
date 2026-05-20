@@ -1,8 +1,8 @@
+use crate::api::common::{success_response, AppState};
 use axum::extract::State;
+use axum::routing::{get, post};
 use axum::Json;
 use axum::Router;
-use axum::routing::{get, post};
-use crate::api::common::{AppState, success_response};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -673,12 +673,14 @@ pub async fn wfc_grid_route(
     State(_state): State<AppState>,
     Json(req): Json<WfcGridRequest>,
 ) -> Result<Json<Value>, AppError> {
+    use crate::procedural::generator::Generator;
     use crate::procedural::generator::{GenerateContext, GenerationLimits};
     use crate::procedural::wfc::{WfcGenerator, WfcParams};
-    use crate::procedural::generator::Generator;
 
-    let mut limits = GenerationLimits::default();
-    limits.max_iterations = (req.width * req.height * 100).max(1000) as u32;
+    let limits = GenerationLimits {
+        max_iterations: (req.width * req.height * 100).max(1000),
+        ..GenerationLimits::default()
+    };
     let ctx = GenerateContext::new(req.seed, Some(limits));
 
     let params = WfcParams {
@@ -735,7 +737,7 @@ pub async fn procedural_job_submit_route(
     use crate::procedural::generator::GenerationLimits;
     use crate::procedural::jobs::JobGenerator;
 
-    let generator = JobGenerator::from_str(&req.generator).ok_or_else(|| {
+    let generator = req.generator.parse::<JobGenerator>().map_err(|_| {
         AppError::Validation(format!(
             "Unknown procedural generator '{}': supported = wfc, lsystem",
             req.generator
@@ -744,11 +746,21 @@ pub async fn procedural_job_submit_route(
 
     let mut limits = GenerationLimits::default();
     if let Some(input) = req.limits {
-        if let Some(v) = input.max_iterations { limits.max_iterations = v; }
-        if let Some(v) = input.max_execution_ms { limits.max_execution_ms = v; }
-        if let Some(v) = input.max_segment_count { limits.max_segment_count = v; }
-        if let Some(v) = input.max_actor_count { limits.max_actor_count = v; }
-        if let Some(v) = input.max_string_length { limits.max_string_length = v; }
+        if let Some(v) = input.max_iterations {
+            limits.max_iterations = v;
+        }
+        if let Some(v) = input.max_execution_ms {
+            limits.max_execution_ms = v;
+        }
+        if let Some(v) = input.max_segment_count {
+            limits.max_segment_count = v;
+        }
+        if let Some(v) = input.max_actor_count {
+            limits.max_actor_count = v;
+        }
+        if let Some(v) = input.max_string_length {
+            limits.max_string_length = v;
+        }
     }
 
     state.procedural_jobs.evict_old().await;
@@ -774,9 +786,10 @@ pub async fn procedural_job_status_route(
         .status(&job_id)
         .await
         .ok_or_else(|| AppError::NotFound(format!("job '{job_id}' not found")))?;
-    Ok(Json(success_response(serde_json::to_value(record).map_err(
-        |e| AppError::Internal(format!("serialize job error: {e}")),
-    )?)))
+    Ok(Json(success_response(
+        serde_json::to_value(record)
+            .map_err(|e| AppError::Internal(format!("serialize job error: {e}")))?,
+    )))
 }
 
 pub async fn procedural_job_cancel_route(
@@ -788,9 +801,10 @@ pub async fn procedural_job_cancel_route(
         .cancel(&job_id)
         .await
         .map_err(AppError::Validation)?;
-    Ok(Json(success_response(serde_json::to_value(record).map_err(
-        |e| AppError::Internal(format!("serialize job error: {e}")),
-    )?)))
+    Ok(Json(success_response(
+        serde_json::to_value(record)
+            .map_err(|e| AppError::Internal(format!("serialize job error: {e}")))?,
+    )))
 }
 
 pub async fn procedural_job_list_route(
@@ -803,13 +817,25 @@ pub async fn procedural_job_list_route(
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/procedural/create-mesh", post(create_procedural_mesh_route))
+        .route(
+            "/procedural/create-mesh",
+            post(create_procedural_mesh_route),
+        )
         .route("/procedural/sdf-mesh", post(sdf_mesh_route))
-        .route("/procedural/superformula-mesh", post(superformula_mesh_route))
+        .route(
+            "/procedural/superformula-mesh",
+            post(superformula_mesh_route),
+        )
         .route("/procedural/lsystem-spline", post(lsystem_spline_route))
         .route("/procedural/wfc-grid", post(wfc_grid_route))
         .route("/procedural/jobs/submit", post(procedural_job_submit_route))
-        .route("/procedural/jobs/{job_id}", get(procedural_job_status_route))
-        .route("/procedural/jobs/{job_id}/cancel", post(procedural_job_cancel_route))
+        .route(
+            "/procedural/jobs/{job_id}",
+            get(procedural_job_status_route),
+        )
+        .route(
+            "/procedural/jobs/{job_id}/cancel",
+            post(procedural_job_cancel_route),
+        )
         .route("/procedural/jobs", get(procedural_job_list_route))
 }

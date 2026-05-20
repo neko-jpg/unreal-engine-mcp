@@ -1,11 +1,11 @@
-name: Rust checks
+name: cargo-deny
 
 on:
   push:
   pull_request:
 
 jobs:
-  test-rust:
+  cargo-deny:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test
-      - run: cargo build --release
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --version ^0.16
+      - name: Run cargo-deny
+        run: cargo deny --all-features check

@@ -1,4 +1,5 @@
 pub mod generator;
+pub mod jobs;
 pub mod lsystem;
 pub mod lsystem_presets;
 pub mod marching_cubes;
@@ -8,4 +9,3 @@ pub mod protocol;
 pub mod sdf;
 pub mod superformula;
 pub mod wfc;
-pub mod jobs;

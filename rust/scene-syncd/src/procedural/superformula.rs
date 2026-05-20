@@ -71,7 +71,7 @@ pub fn superformula_mesh(
     mcp_id: &str,
     request_id: u64,
 ) -> Result<ProceduralMeshPayload<'static>, MeshGenError> {
-    let res = resolution.max(4).min(256) as usize;
+    let res = resolution.clamp(4, 256) as usize;
     let lat_steps = res;
     let lon_steps = res * 2; // longitude needs double resolution for proper wrapping
 
@@ -88,11 +88,11 @@ pub fn superformula_mesh(
 
     // Precompute radii for each latitude and longitude
     let mut r_lat = vec![0.0f32; lat_count];
-    for i in 0..lat_count {
+    for (i, slot) in r_lat.iter_mut().enumerate() {
         let theta =
             -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * i as f32 / lat_steps as f32;
         // Map theta ∈ [-π/2, π/2] to superformula angle ∈ [-π/2, π/2]
-        r_lat[i] = sf2d(
+        *slot = sf2d(
             theta,
             params.m1,
             params.n1_1,
@@ -104,9 +104,9 @@ pub fn superformula_mesh(
     }
 
     let mut r_lon = vec![0.0f32; lon_count];
-    for j in 0..lon_count {
+    for (j, slot) in r_lon.iter_mut().enumerate() {
         let phi = 2.0 * std::f32::consts::PI * j as f32 / lon_steps as f32;
-        r_lon[j] = sf2d(
+        *slot = sf2d(
             phi,
             params.m2,
             params.n1_2,
@@ -118,19 +118,16 @@ pub fn superformula_mesh(
     }
 
     // Generate vertices
-    for i in 0..lat_count {
+    for (i, &r1) in r_lat.iter().enumerate() {
         let theta =
             -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * i as f32 / lat_steps as f32;
         let cos_theta = f32::cos(theta);
         let sin_theta = f32::sin(theta);
 
-        for j in 0..lon_count {
+        for (j, &r2) in r_lon.iter().enumerate() {
             let phi = 2.0 * std::f32::consts::PI * j as f32 / lon_steps as f32;
             let cos_phi = f32::cos(phi);
             let sin_phi = f32::sin(phi);
-
-            let r1 = r_lat[i];
-            let r2 = r_lon[j];
 
             let x = r1 * cos_theta * r2 * cos_phi * scale;
             let y = r1 * cos_theta * r2 * sin_phi * scale;
@@ -279,7 +276,7 @@ mod tests {
         };
         let payload = superformula_mesh(&params, 32, 1.0, "sf_star", 3).unwrap();
         assert!(payload.header.vertex_count > 0);
-        assert!(payload.header.index_count % 3 == 0);
+        assert!(payload.header.index_count.is_multiple_of(3));
     }
 
     #[test]

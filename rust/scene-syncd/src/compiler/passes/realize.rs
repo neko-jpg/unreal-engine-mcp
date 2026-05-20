@@ -81,8 +81,8 @@ impl Pass for RealizePass {
                     "detail" => {
                         let mut tags = obj.tags.clone();
                         // Only add detail tags to objects that are detail kinds
-                        let is_detail = DETAIL_KINDS.iter().any(|dk| kind == *dk)
-                            || tags.iter().any(|t| t == "detail");
+                        let is_detail =
+                            DETAIL_KINDS.contains(&kind) || tags.iter().any(|t| t == "detail");
                         if is_detail && !tags.iter().any(|t| t.starts_with("detail:")) {
                             tags.push(format!("detail:{}", kind));
                         }

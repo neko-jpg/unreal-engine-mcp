@@ -110,6 +110,53 @@ pub fn compute_scale(kind: &str, properties: &serde_json::Value, span: Option<&S
     }
 }
 
+fn extract_vec3(value: &serde_json::Value, field: &str) -> Option<Vec3> {
+    let obj = value.get(field)?;
+    Some(Vec3 {
+        x: obj.get("x")?.as_f64()?,
+        y: obj.get("y")?.as_f64()?,
+        z: obj.get("z")?.as_f64()?,
+    })
+}
+
+/// Kinds whose Unreal actor origin is at the center; offset Z up by half the
+/// height so the bottom face sits on the ground plane.
+const BOTTOM_GROUNDED_KINDS: &[&str] = &["curtain_wall", "tower", "keep", "gatehouse"];
+
+pub fn make_transform(
+    kind: &str,
+    properties: &serde_json::Value,
+    span: Option<&Span>,
+    registry: &KindRegistry,
+) -> crate::domain::Transform {
+    let mut location = compute_location(kind, properties, span);
+    let scale = compute_scale(kind, properties, span);
+
+    // If location.z was not explicitly set, apply layer-based Z offset.
+    let has_explicit_z = properties
+        .get("location")
+        .and_then(|l| l.get("z"))
+        .and_then(|z| z.as_f64())
+        .is_some();
+
+    if !has_explicit_z {
+        let layer = registry.get(kind).map(|s| s.layer).unwrap_or(0);
+        location.z = layer as f64 * LAYER_GAP;
+    }
+
+    // Center-origin kinds: raise by half the height so the bottom face sits
+    // on the ground plane.
+    if BOTTOM_GROUNDED_KINDS.contains(&kind) {
+        location.z += scale.z * 100.0 / 2.0;
+    }
+
+    crate::domain::Transform {
+        location,
+        rotation: compute_rotation(properties, span),
+        scale,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,52 +217,5 @@ mod tests {
         let ground = make_transform("ground", &serde_json::json!({}), None, &registry);
         assert_ne!(moat.location.z, ground.location.z);
         assert!(moat.location.z < ground.location.z);
-    }
-}
-
-fn extract_vec3(value: &serde_json::Value, field: &str) -> Option<Vec3> {
-    let obj = value.get(field)?;
-    Some(Vec3 {
-        x: obj.get("x")?.as_f64()?,
-        y: obj.get("y")?.as_f64()?,
-        z: obj.get("z")?.as_f64()?,
-    })
-}
-
-/// Kinds whose Unreal actor origin is at the center; offset Z up by half the
-/// height so the bottom face sits on the ground plane.
-const BOTTOM_GROUNDED_KINDS: &[&str] = &["curtain_wall", "tower", "keep", "gatehouse"];
-
-pub fn make_transform(
-    kind: &str,
-    properties: &serde_json::Value,
-    span: Option<&Span>,
-    registry: &KindRegistry,
-) -> crate::domain::Transform {
-    let mut location = compute_location(kind, properties, span);
-    let scale = compute_scale(kind, properties, span);
-
-    // If location.z was not explicitly set, apply layer-based Z offset.
-    let has_explicit_z = properties
-        .get("location")
-        .and_then(|l| l.get("z"))
-        .and_then(|z| z.as_f64())
-        .is_some();
-
-    if !has_explicit_z {
-        let layer = registry.get(kind).map(|s| s.layer).unwrap_or(0);
-        location.z = layer as f64 * LAYER_GAP;
-    }
-
-    // Center-origin kinds: raise by half the height so the bottom face sits
-    // on the ground plane.
-    if BOTTOM_GROUNDED_KINDS.contains(&kind) {
-        location.z += scale.z * 100.0 / 2.0;
-    }
-
-    crate::domain::Transform {
-        location,
-        rotation: compute_rotation(properties, span),
-        scale,
     }
 }

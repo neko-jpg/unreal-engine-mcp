@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 import time
@@ -193,7 +194,9 @@ def case_scene_create_wfc_grid_unreal(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def case_compile_all_blueprints(state: Dict[str, Any]) -> Dict[str, Any]:
-    out = _unreal_send("compile_all_blueprints", {"max_compiles": 200})
+    # Cesium for Unreal ships ~17 Blueprint assets that cold-compile on first
+    # run; 30s default is too tight. Allow up to 5 minutes for the first call.
+    out = _unreal_send("compile_all_blueprints", {"max_compiles": 200}, timeout=300.0)
     assert out.get("success") is True or out.get("status") == "success", out
     return {"unreal_result": out}
 
@@ -202,6 +205,53 @@ def case_run_map_check(state: Dict[str, Any]) -> Dict[str, Any]:
     out = _unreal_send("run_map_check", {})
     assert out.get("success") is True or out.get("status") == "success", out
     return {"unreal_result": out}
+
+
+# ----- B-4 Cesium live cases (require Cesium for Unreal v2.18+ + token) ------
+
+def case_cesium_check_plugin(state: Dict[str, Any]) -> Dict[str, Any]:
+    out = _unreal_send("cesium_check_plugin", {})
+    assert out.get("success") is True or out.get("status") == "success", out
+    data = (out.get("data") or {}) if isinstance(out.get("data"), dict) else {}
+    assert data.get("available") is True or data.get("installed") is True, out
+    return {"unreal_result": out}
+
+
+def case_cesium_setup_georeference(state: Dict[str, Any]) -> Dict[str, Any]:
+    out = _unreal_send("cesium_setup_georeference", {
+        "origin_latitude": 35.6586, "origin_longitude": 139.7454, "origin_height": 0,
+    })
+    assert out.get("success") is True or out.get("status") == "success", out
+    return {"unreal_result": out}
+
+
+def case_cesium_add_tileset(state: Dict[str, Any]) -> Dict[str, Any]:
+    token = os.environ.get("CESIUM_ION_TOKEN", "")
+    assert token, "set CESIUM_ION_TOKEN"
+    out = _unreal_send("cesium_add_tileset", {
+        "actor_name": "CesiumWorldTerrain_Smoke",
+        "ion_asset_id": 96188,
+        "ion_access_token": token,
+    })
+    assert out.get("success") is True or out.get("status") == "success", out
+    return {"unreal_result": out}
+
+
+def case_cesium_place_actor_at_geolocation(state: Dict[str, Any]) -> Dict[str, Any]:
+    mcp_id = f"cesium_pin_{uuid.uuid4().hex[:6]}"
+    spawn = _unreal_send("spawn_actor", {
+        "name": mcp_id,
+        "type": "StaticMeshActor",
+        "static_mesh": "/Engine/BasicShapes/Cube.Cube",
+        "mcp_id": mcp_id,
+    })
+    assert spawn.get("success") is True or spawn.get("status") == "success", spawn
+    out = _unreal_send("cesium_place_actor_at_geolocation", {
+        "actor_mcp_id": mcp_id,
+        "latitude": 35.6586, "longitude": 139.7454, "height": 100.0,
+    })
+    assert out.get("success") is True or out.get("status") == "success", out
+    return {"unreal_result": out, "spawn_result": spawn}
 
 
 CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
@@ -218,22 +268,53 @@ CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
     ("scene_create_wfc_grid_unreal",  "syncd",  case_scene_create_wfc_grid_unreal),
     ("compile_all_blueprints",        "unreal", case_compile_all_blueprints),
     ("run_map_check",                 "unreal", case_run_map_check),
+    # ----- B-4 Cesium live cases (auto-skip when plugin/token missing) -----
+    ("cesium_check_plugin",                "cesium", case_cesium_check_plugin),
+    ("cesium_setup_georeference",          "cesium", case_cesium_setup_georeference),
+    ("cesium_add_tileset",                 "cesium", case_cesium_add_tileset),
+    ("cesium_place_actor_at_geolocation",  "cesium", case_cesium_place_actor_at_geolocation),
 ]
 
 
 # ----- Runner ----------------------------------------------------------------
 
+def _cesium_available() -> Tuple[bool, str]:
+    """Probe the Unreal bridge for Cesium plugin presence.
+
+    Returns (available, reason). available=True only when the editor reports
+    the plugin as available AND was compiled with WITH_CESIUM=1.
+    """
+    try:
+        out = _unreal_send("cesium_check_plugin", {}, timeout=10.0)
+    except Exception as exc:
+        return False, f"cesium_check_plugin transport error: {exc}"
+    data = (out.get("data") or {}) if isinstance(out.get("data"), dict) else {}
+    available = bool(data.get("available") or data.get("installed"))
+    compiled_with = bool(data.get("compiled_with_cesium"))
+    if not available:
+        return False, "Cesium for Unreal plugin not installed/enabled"
+    if not compiled_with:
+        return False, "UnrealMCP not compiled with WITH_CESIUM=1 (rebuild after installing Cesium)"
+    return True, ""
+
+
 def run(selected: Optional[List[str]] = None) -> int:
     have_unreal = _service_open(UNREAL_HOST, UNREAL_PORT)
     have_syncd  = _service_open("127.0.0.1", 8787)
-    print(f"[env] unreal-bridge :55557 = {have_unreal}, scene-syncd :8787 = {have_syncd}")
+    have_cesium = False
+    cesium_reason = "unreal bridge unavailable"
+    have_cesium_token = bool(os.environ.get("CESIUM_ION_TOKEN"))
+    if have_unreal:
+        have_cesium, cesium_reason = _cesium_available()
+    print(f"[env] unreal-bridge :55557 = {have_unreal}, scene-syncd :8787 = {have_syncd}, "
+          f"cesium = {have_cesium} ({cesium_reason or 'ok'}), CESIUM_ION_TOKEN set = {have_cesium_token}")
     state: Dict[str, Any] = {}
     report: List[Dict[str, Any]] = []
     passed = failed = skipped = 0
     for name, requires, fn in CASES:
         if selected and name not in selected:
             continue
-        if requires in ("unreal", "both") and not have_unreal:
+        if requires in ("unreal", "both", "cesium") and not have_unreal:
             print(f"[skip] {name}: requires Unreal bridge")
             report.append({"name": name, "status": "skipped", "reason": "no unreal"})
             skipped += 1
@@ -241,6 +322,19 @@ def run(selected: Optional[List[str]] = None) -> int:
         if requires in ("syncd", "both") and not have_syncd:
             print(f"[skip] {name}: requires scene-syncd")
             report.append({"name": name, "status": "skipped", "reason": "no scene-syncd"})
+            skipped += 1
+            continue
+        if requires == "cesium" and not have_cesium:
+            print(f"[skip] {name}: requires Cesium for Unreal plugin ({cesium_reason})")
+            report.append({"name": name, "status": "skipped",
+                           "reason": f"no cesium: {cesium_reason}"})
+            skipped += 1
+            continue
+        # cesium_add_tileset also needs an Ion token
+        if requires == "cesium" and name == "cesium_add_tileset" and not have_cesium_token:
+            print(f"[skip] {name}: CESIUM_ION_TOKEN not set")
+            report.append({"name": name, "status": "skipped",
+                           "reason": "no CESIUM_ION_TOKEN"})
             skipped += 1
             continue
         t0 = time.time()

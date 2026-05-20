@@ -1,0 +1,18 @@
+name: mypy
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - name: Run mypy
+        run: uv run mypy server helpers

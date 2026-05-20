@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Rust-side protocol structs for C++ ISM/HISM commands.
-/// Defined in Rust first as serde structs to avoid drift with C++ side.
+// Rust-side protocol structs for C++ ISM/HISM commands.
+// Defined in Rust first as serde structs to avoid drift with C++ side.
 
 /// Command to spawn or update an Instanced Static Mesh component.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

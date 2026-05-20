@@ -34,7 +34,7 @@ pub fn crenellation_count(properties: &serde_json::Value, span: &Span) -> usize 
     if spacing <= 0.0 {
         return 1;
     }
-    (span.length() / spacing).floor().max(1.0).min(512.0) as usize
+    (span.length() / spacing).floor().clamp(1.0, 512.0) as usize
 }
 
 fn crenellation_scale(properties: &serde_json::Value) -> Vec3 {

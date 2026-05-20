@@ -79,9 +79,8 @@ impl ValidationRule for MaterialCoherenceRule {
                 .find_map(|t| t.strip_prefix("layout_kind:"))
                 .unwrap_or("");
 
-            if detail_kinds.contains(&kind) {
-                if obj.metadata.get("render_mode").is_none() {
-                    diagnostics.push(
+            if detail_kinds.contains(&kind) && obj.metadata.get("render_mode").is_none() {
+                diagnostics.push(
                         Diagnostic::warning(
                             self.code(),
                             format!(
@@ -92,7 +91,6 @@ impl ValidationRule for MaterialCoherenceRule {
                         .with_mcp_id(obj.mcp_id.clone())
                         .with_suggestion("Set render_mode to instance_set for detail objects".to_string()),
                     );
-                }
             }
         }
 

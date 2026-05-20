@@ -2,9 +2,7 @@ use crate::compiler::context::CompilerContext;
 use crate::compiler::passes::Pass;
 use crate::error::AppError;
 use crate::geom::footprint::Footprint2;
-use crate::ir::geometric::{
-    FootprintPrimitive, GeometricIr, GeometricPrimitive, VolumePrimitive,
-};
+use crate::ir::geometric::{FootprintPrimitive, GeometricIr, GeometricPrimitive, VolumePrimitive};
 use crate::layout::kind_registry::KindRegistry;
 
 pub struct GeometryLoweringPass;

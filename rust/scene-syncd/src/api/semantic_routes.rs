@@ -1,8 +1,8 @@
+use crate::api::common::{normalize_scene_id_input, success_response, AppState};
 use axum::extract::State;
+use axum::routing::post;
 use axum::Json;
 use axum::Router;
-use axum::routing::post;
-use crate::api::common::{AppState, success_response, normalize_scene_id_input};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -471,6 +471,8 @@ pub fn router() -> Router<AppState> {
         .route("/blueprints/delete", post(delete_blueprint))
         .route("/realizations/upsert", post(upsert_realization))
         .route("/realizations/list", post(list_realizations))
-        .route("/realizations/update-status", post(update_realization_status))
+        .route(
+            "/realizations/update-status",
+            post(update_realization_status),
+        )
 }
-

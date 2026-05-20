@@ -1,8 +1,8 @@
+use crate::api::common::{error_response, normalize_scene_id_input, success_response, AppState};
 use axum::extract::State;
+use axum::routing::{get, post};
 use axum::Json;
 use axum::Router;
-use axum::routing::{get, post};
-use crate::api::common::{AppState, success_response, error_response, normalize_scene_id_input};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use surrealdb::sql::Datetime;
@@ -563,4 +563,3 @@ mod tests {
         );
     }
 }
-
