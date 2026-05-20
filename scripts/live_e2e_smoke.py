@@ -1,4 +1,4 @@
-﻿"""Live E2E smoke runner for the 13 commands in priority A-2.
+"""Live E2E smoke runner for the 13 commands in priority A-2.
 
 Requires (any subset works; missing services degrade gracefully):
   - Unreal Editor with UnrealMCP plugin bridge on 127.0.0.1:55557
@@ -254,6 +254,37 @@ def case_cesium_place_actor_at_geolocation(state: Dict[str, Any]) -> Dict[str, A
     return {"unreal_result": out, "spawn_result": spawn}
 
 
+def case_create_data_layer_for_generation(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Spawn a tagged actor and assign it to a generated Data Layer.
+
+    Verifies M1 wiring of FEpicUnrealMCPDataLayerHelpers (Build.cs +
+    EpicUnrealMCPProceduralCommands). Accepts either method=data_layer_instance
+    (full World Partition path via UDataLayerEditorSubsystem) or method=tag
+    (non-WP graceful fallback); both prove the helpers are wired.
+    """
+    mcp_id = f"dl_pin_{uuid.uuid4().hex[:6]}"
+    spawn = _unreal_send("spawn_actor", {
+        "name": mcp_id,
+        "type": "StaticMeshActor",
+        "static_mesh": "/Engine/BasicShapes/Cube.Cube",
+        "mcp_id": mcp_id,
+    })
+    assert spawn.get("success") is True or spawn.get("status") == "success", spawn
+    layer_name = f"M1_Smoke_{uuid.uuid4().hex[:6]}"
+    out = _unreal_send("create_data_layer_for_generation", {
+        "data_layer_name": layer_name,
+        "actor_mcp_ids": [mcp_id],
+        "color_hex": "FF8800",
+        "initial_state": "Activated",
+    })
+    assert out.get("success") is True or out.get("status") == "success", out
+    data = (out.get("data") or {}) if isinstance(out.get("data"), dict) else {}
+    method = data.get("method")
+    assert method in ("data_layer_instance", "tag"), out
+    assigned = data.get("actors_assigned_count")
+    assert assigned == 1, out
+    return {"unreal_result": out, "spawn_result": spawn, "method": method}
+
 CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
     ("ping",                          "unreal", case_ping),
     ("spawn_actor",                   "unreal", case_spawn_actor),
@@ -268,6 +299,7 @@ CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
     ("scene_create_wfc_grid_unreal",  "syncd",  case_scene_create_wfc_grid_unreal),
     ("compile_all_blueprints",        "unreal", case_compile_all_blueprints),
     ("run_map_check",                 "unreal", case_run_map_check),
+    ("create_data_layer_for_generation", "unreal", case_create_data_layer_for_generation),
     # ----- B-4 Cesium live cases (auto-skip when plugin/token missing) -----
     ("cesium_check_plugin",                "cesium", case_cesium_check_plugin),
     ("cesium_setup_georeference",          "cesium", case_cesium_setup_georeference),
