@@ -66,6 +66,11 @@ def _http_post(path: str, payload: Dict[str, Any], timeout: float = 60.0) -> Dic
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _http_get(path: str, timeout: float = 60.0) -> Dict[str, Any]:
+    with urllib.request.urlopen(f"{SCENE_SYNCD}{path}", timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def _service_open(host: str, port: int, timeout: float = 1.5) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -285,6 +290,106 @@ def case_create_data_layer_for_generation(state: Dict[str, Any]) -> Dict[str, An
     assert assigned == 1, out
     return {"unreal_result": out, "spawn_result": spawn, "method": method}
 
+def case_sublevel_restore_lifecycle(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a map asset, add it as a sublevel, toggle streaming state, remove it.
+
+    This verifies the M2 Sublevel/Level Streaming restore path. The generated
+    map asset is intentionally left on disk because Unreal keeps inactive level
+    packages resident after editor-level streaming operations in some sessions.
+    """
+    level_path = f"/Game/MCP_Smoke/Sublevel_{uuid.uuid4().hex[:6]}"
+    create = _unreal_send("create_level", {"asset_path": level_path}, timeout=60.0)
+    assert create.get("success") is True or create.get("status") == "success", create
+    add = _unreal_send("add_sublevel", {"level_path": level_path}, timeout=60.0)
+    assert add.get("success") is True or add.get("status") == "success", add
+    visible = _unreal_send("set_sublevel_visible", {"level_name": level_path, "visible": False}, timeout=30.0)
+    assert visible.get("success") is True or visible.get("status") == "success", visible
+    loaded = _unreal_send("set_sublevel_loaded", {"level_name": level_path, "loaded": True}, timeout=30.0)
+    assert loaded.get("success") is True or loaded.get("status") == "success", loaded
+    streaming = _unreal_send("set_level_streaming_settings", {
+        "level_name": level_path,
+        "should_be_loaded": True,
+        "should_be_visible": False,
+        "priority": 7,
+    }, timeout=30.0)
+    assert streaming.get("success") is True or streaming.get("status") == "success", streaming
+    remove = _unreal_send("remove_sublevel", {"level_name": level_path}, timeout=60.0)
+    assert remove.get("success") is True or remove.get("status") == "success", remove
+    return {"level_path": level_path, "create": create, "add": add, "visible": visible,
+            "loaded": loaded, "streaming": streaming, "remove": remove}
+
+
+def case_material_instance_parameters(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a material + MIC and update scalar/vector parameters."""
+    suffix = uuid.uuid4().hex[:6]
+    package_path = "/Game/MCP_Smoke/Materials/"
+    material_name = f"M_Smoke_{suffix}"
+    instance_name = f"MI_Smoke_{suffix}"
+    material_path = package_path + material_name
+    instance_path = package_path + instance_name
+    create_mat = _unreal_send("create_material", {
+        "name": material_name,
+        "package_path": package_path,
+    }, timeout=60.0)
+    assert create_mat.get("success") is True or create_mat.get("status") == "success", create_mat
+    create_inst = _unreal_send("create_material_instance", {
+        "parent_material": material_path,
+        "instance_name": instance_name,
+        "package_path": package_path,
+    }, timeout=60.0)
+    assert create_inst.get("success") is True or create_inst.get("status") == "success", create_inst
+    scalar = _unreal_send("set_material_scalar_parameter", {
+        "instance_path": instance_path,
+        "parameter_name": "Roughness",
+        "value": 0.42,
+    }, timeout=60.0)
+    assert scalar.get("success") is True or scalar.get("status") == "success", scalar
+    vector = _unreal_send("set_material_vector_parameter", {
+        "instance_path": instance_path,
+        "parameter_name": "Tint",
+        "value": [0.1, 0.4, 0.9, 1.0],
+    }, timeout=60.0)
+    assert vector.get("success") is True or vector.get("status") == "success", vector
+    return {"material_path": material_path, "instance_path": instance_path,
+            "create_material": create_mat, "create_instance": create_inst,
+            "scalar": scalar, "vector": vector}
+
+
+def case_wfc_async_job_roundtrip(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Submit a WFC generator job, poll it, and verify completed result payload."""
+    submit = _http_post("/procedural/jobs/submit", {
+        "generator": "wfc",
+        "params": {
+            "width": 1,
+            "height": 1,
+            "tileset": {"tiles": [{"id": "A", "weight": 1.0}], "constraints": []},
+            "seed": 42,
+            "periodic": False,
+        },
+        "limits": {"max_iterations": 1000, "max_execution_ms": 5000},
+    })
+    assert submit.get("success") is True or submit.get("status") == "success", submit
+    data = submit.get("data") or {}
+    job_id = data.get("job_id")
+    assert job_id, submit
+    last = None
+    for _ in range(25):
+        last = _http_get(f"/procedural/jobs/{job_id}")
+        assert last.get("success") is True or last.get("status") == "success", last
+        status = ((last.get("data") or {}).get("status") or "").lower()
+        if status in ("completed", "failed", "cancelled"):
+            break
+        time.sleep(0.2)
+    assert last is not None, submit
+    record = last.get("data") or {}
+    assert str(record.get("status")).lower() == "completed", last
+    result = record.get("result") or {}
+    grid = result.get("data") or result
+    assert grid.get("width") == 1 and grid.get("height") == 1, last
+    assert len(grid.get("tiles") or []) == 1, last
+    return {"submit": submit, "status": last}
+
+
 CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
     ("ping",                          "unreal", case_ping),
     ("spawn_actor",                   "unreal", case_spawn_actor),
@@ -300,11 +405,21 @@ CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
     ("compile_all_blueprints",        "unreal", case_compile_all_blueprints),
     ("run_map_check",                 "unreal", case_run_map_check),
     ("create_data_layer_for_generation", "unreal", case_create_data_layer_for_generation),
+    ("material_instance_parameters",  "unreal", case_material_instance_parameters),
+    ("wfc_async_job_roundtrip",       "syncd",  case_wfc_async_job_roundtrip),
     # ----- B-4 Cesium live cases (auto-skip when plugin/token missing) -----
     ("cesium_check_plugin",                "cesium", case_cesium_check_plugin),
     ("cesium_setup_georeference",          "cesium", case_cesium_setup_georeference),
     ("cesium_add_tileset",                 "cesium", case_cesium_add_tileset),
     ("cesium_place_actor_at_geolocation",  "cesium", case_cesium_place_actor_at_geolocation),
+]
+
+# Destructive/editor-state-sensitive cases must not run in the default full
+# smoke because UE 5.7 LevelStreaming/DataLayer annotations can remain in a
+# bad state after sublevel removal inside a long-lived editor session. Run these
+# in an isolated editor session via --case <name>.
+MANUAL_CASES: List[Tuple[str, str, Callable[..., Dict[str, Any]]]] = [
+    ("sublevel_restore_lifecycle", "unreal", case_sublevel_restore_lifecycle),
 ]
 
 
@@ -343,7 +458,8 @@ def run(selected: Optional[List[str]] = None) -> int:
     state: Dict[str, Any] = {}
     report: List[Dict[str, Any]] = []
     passed = failed = skipped = 0
-    for name, requires, fn in CASES:
+    case_table = CASES + MANUAL_CASES if selected else CASES
+    for name, requires, fn in case_table:
         if selected and name not in selected:
             continue
         if requires in ("unreal", "both", "cesium") and not have_unreal:

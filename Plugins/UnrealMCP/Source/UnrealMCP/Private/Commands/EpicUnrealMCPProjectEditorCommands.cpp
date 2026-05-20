@@ -2146,21 +2146,26 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPProjectEditorCommands::HandleRemoveSubleve
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Streaming level not found: %s"), *LevelName));
     }
 
-    TargetStreamingLevel->Modify();
-    TargetStreamingLevel->SetShouldBeVisible(false);
-    TargetStreamingLevel->SetShouldBeLoaded(false);
-    const bool bRemoved = World->RemoveStreamingLevel(TargetStreamingLevel);
-    if (bRemoved)
+    // UE 5.7 keeps editor bookkeeping/annotations for streaming levels and
+    // DataLayers. Removing a ULevelStreaming directly through UWorld can leave
+    // stale LevelStreaming -> ULevel annotations behind, which may assert later
+    // during unrelated actor spawns. Route removal through EditorLevelUtils so
+    // the editor performs the same cleanup as the Levels panel.
+    ULevel* LoadedLevel = TargetStreamingLevel->GetLoadedLevel();
+    if (!LoadedLevel)
     {
-        TargetStreamingLevel->MarkAsGarbage();
-        World->MarkPackageDirty();
-        World->BroadcastLevelsChanged();
-        FEditorDelegates::RefreshLevelBrowser.Broadcast();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Cannot safely remove sublevel '%s': streaming level is not currently loaded. Set it loaded=true, wait for it to load, then retry."), *LevelName));
     }
+
+    const FString StreamingLevelName = TargetStreamingLevel->GetName();
+    const bool bRemoved = UEditorLevelUtils::RemoveLevelFromWorld(LoadedLevel, true, true);
 
     TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
     R->SetBoolField(TEXT("success"), bRemoved);
     R->SetStringField(TEXT("level_name"), LevelName);
+    R->SetStringField(TEXT("streaming_level_name"), StreamingLevelName);
+    R->SetStringField(TEXT("remove_method"), TEXT("UEditorLevelUtils::RemoveLevelFromWorld"));
     return R;
 }
 
