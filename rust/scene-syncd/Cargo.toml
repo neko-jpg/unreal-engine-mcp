@@ -3,6 +3,7 @@ name = "scene-syncd"
 version = "0.1.0"
 edition = "2021"
 description = "SurrealDB-backed desired-state sync service for Unreal MCP"
+license = "MIT"
 
 [lib]
 path = "src/lib.rs"
