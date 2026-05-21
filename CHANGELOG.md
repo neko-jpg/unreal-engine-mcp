@@ -4,6 +4,119 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batch B: Router fix + Data Tables / Validation / Profiling / Physics residue
+
+Implements 14 unimplemented items from `docs/superpowers/plans/tasks.md` covering
+Data Tables (W1-9 residue, 5 items), Validation / Profiling (W1-10 residue, 5
+items), and Physics non-Chaos (W1-8 residue, 4 items). Also fixes a regression
+left by sub-batch A: 13 W1-A commands were registered in their `*Commands.cpp`
+dispatch tables but **never wired into `EpicUnrealMCPRouter.cpp`**, so live TCP
+routing would have returned "unknown command" for all of them.
+
+### Fixed
+
+- `EpicUnrealMCPRouter.cpp`: added the 13 missing router entries from sub-batch A:
+  - id 2 (Blueprint): `add_latent_node`
+  - id 7 (Asset Import): `import_animation_fbx`
+  - id 12 (Rendering): `spawn_camera_shake_source`, `spawn_camera_rig_rail`,
+    `spawn_camera_rig_crane`, `set_post_process_override`
+  - id 16 (Sequencer): `add_visibility_track`, `add_audio_track`,
+    `add_animation_track`, `add_material_parameter_track`, `delete_keyframe`,
+    `set_keyframe_interpolation`, `add_subsequence`
+
+### Added
+
+- Data Table C++ handlers (`EpicUnrealMCPDataTableCommands.{h,cpp}`, router id 14):
+  - `create_data_table_from_json` -- `UDataTable::CreateTableFromJSONString` on
+    a new or existing table.
+  - `create_curve_table` -- `UCurveTable` + optional CSV seeding with selectable
+    `ERichCurveInterpMode` (Linear / Cubic / Constant).
+  - `create_string_table` -- `UStringTable` + namespace + initial entries map
+    via `FStringTable::SetSourceString`.
+  - `set_string_table_entry` -- single (key, value) upsert on an existing
+    StringTable.
+  - `create_data_asset` -- `UDataAsset` / `UPrimaryDataAsset` instance creation
+    from a class path (validates `IsChildOf(UDataAsset)`).
+- Validation / Profiling C++ handlers
+  (`EpicUnrealMCPValidationCommands.{h,cpp}`, router id 23):
+  - `set_auto_save_settings` -- `UEditorLoadingSavingSettings` (`bAutoSaveEnable`,
+    `AutoSaveTimeMinutes`, `AutoSaveWarningInSeconds`, `bAutoSaveContent`,
+    `bAutoSaveMaps`) persisted via **`TryUpdateDefaultConfigFile()`** (UE 5.7
+    rule).
+  - `get_editor_stats` -- snapshots `FApp::GetDeltaTime` (FPS derivation) and
+    `FPlatformMemory::GetStats` (used/peak/available physical + virtual MB) and
+    optionally `GEngine->Exec("stat ...")` on the editor world.
+  - `start_unreal_insights_trace` / `stop_unreal_insights_trace` --
+    `FTraceAuxiliary::Start(EConnectionType::File, ...)` / `Stop()` /
+    `EnableChannels` with configurable channel string (defaults to
+    `default,cpu,gpu,frame,bookmark,log`).
+  - `validate_assets` -- `UEditorValidatorSubsystem::ValidateAssetsWithSettings`
+    over a content-path subtree, returns `num_checked / num_valid / num_invalid /
+    num_skipped / num_warnings / num_unable_to_validate`.
+- Physics C++ handlers (`EpicUnrealMCPPhysicsCommands.{h,cpp}`, router id 22):
+  - `set_actor_collision_response` -- per-channel
+    `UPrimitiveComponent::SetCollisionResponseToChannel` with alias-friendly
+    channel names (`Pawn`, `WorldStatic`, `PhysicsBody`, ...).
+  - `set_constraint_limits` -- `FConstraintInstance::Set*Motion` +
+    `SetLinearLimitSize` + `SetAngular{Swing1,Swing2,Twist}Limit` on an existing
+    `APhysicsConstraintActor`.
+  - `set_constraint_motor` -- `SetLinearVelocityDrive` /
+    `SetLinearPositionDrive` / `SetOrientationDriveSLERP` /
+    `SetAngularVelocityDriveSLERP` + `SetLinearVelocityTarget`.
+  - `spawn_physics_volume` -- `APhysicsVolume` spawn with `TerminalVelocity`,
+    `Priority`, `bWaterVolume`, `FluidFriction`, and brush scale.
+- Python FastMCP wrappers wired through `conn.send_command`:
+  - `server/data_table_tools.py`: 5 tools (`create_data_table_from_json`,
+    `create_curve_table`, `create_string_table`, `set_string_table_entry`,
+    `create_data_asset`).
+  - `server/validation_tools.py`: 5 tools (`set_auto_save_settings`,
+    `get_editor_stats`, `start_unreal_insights_trace`,
+    `stop_unreal_insights_trace`, `validate_assets`).
+  - `server/physics_tools.py`: 4 tools (`set_actor_collision_response`,
+    `set_constraint_limits`, `set_constraint_motor`, `spawn_physics_volume`).
+- L1 unit tests:
+  - `Python/tests/unit/test_data_table_tools_w1b.py` (14 tests).
+  - `Python/tests/unit/test_validation_tools_w1b.py` (14 tests).
+  - `Python/tests/unit/test_physics_tools_w1b.py` (14 tests).
+
+### Changed
+
+- `docs/superpowers/plans/tasks.md`: flipped 14 entries from `[ ]` to `[x]`
+  covering Data Tables / Save / Validation / Profiling / Physics items
+  implemented in this batch.
+- Sync'd canonical plugin to source-built project via
+  `scripts/sync-unrealmcp-plugin.ps1` (7 files updated, 109 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **689 passed** (was 647 before
+  this batch; +42 new W1-B tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 416` (was 402; +14 new C++ handlers with Python wrappers),
+  `cpp_only: 16`, `rust_only: 53`, no drift detected.
+- Editor build verification deferred to local `Build.bat` run.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers
+  (`Core/Public/ProfilingDebugging/TraceAuxiliary.h`,
+  `Engine/Public/Settings/EditorLoadingSavingSettings.h`,
+  `Engine/Classes/Engine/{CurveTable,DataAsset,CollisionProfile}.h`,
+  `Internationalization/StringTable.h`,
+  `PhysicsCore/Public/Chaos/ConstraintInstance.h`,
+  `Engine/Public/GameFramework/PhysicsVolume.h`).
+- `FTraceAuxiliary::FOptions` is the correct nested-struct name (not `Options`)
+  -- caught during initial drafting and fixed before commit.
+- `validate_assets` uses `EDataValidationUsecase::Manual` with
+  `bShowIfNoFailures=false` so it does not spam the editor message log.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (sub-batch A) -> **431** (sub-batch B)
+- `[ ]` 353 -> 338 -> **324**
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batch A: Sequencer / Rendering / Blueprint / Asset Import / Material residue
 
 Implements 15 unimplemented items from `docs/superpowers/plans/tasks.md` covering

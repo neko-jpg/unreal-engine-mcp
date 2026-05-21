@@ -28,9 +28,18 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_physical_material"), 22},
         {TEXT("spawn_radial_force"), 22},
         {TEXT("spawn_physics_constraint"), 22},
+        {TEXT("set_actor_collision_response"), 22},  // W1-B
+        {TEXT("set_constraint_limits"), 22},  // W1-B
+        {TEXT("set_constraint_motor"), 22},  // W1-B
+        {TEXT("spawn_physics_volume"), 22},  // W1-B
         {TEXT("compile_all_blueprints"), 23},
         {TEXT("run_map_check"), 23},
         {TEXT("find_broken_references"), 23},
+        {TEXT("set_auto_save_settings"), 23},  // W1-B
+        {TEXT("get_editor_stats"), 23},  // W1-B
+        {TEXT("start_unreal_insights_trace"), 23},  // W1-B
+        {TEXT("stop_unreal_insights_trace"), 23},  // W1-B
+        {TEXT("validate_assets"), 23},  // W1-B
         {TEXT("create_draft_proxy"), 24},
         {TEXT("update_draft_proxy"), 24},
         {TEXT("delete_draft_proxy"), 24},
@@ -84,6 +93,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("step_blueprint_debugger"), 2},
         {TEXT("get_blueprint_debug_info"), 2},
         {TEXT("blueprint_diff"), 2},
+        {TEXT("add_latent_node"), 2},  // W1-1 (W1-B router fix)
         {TEXT("add_blueprint_node"), 3},
         {TEXT("connect_nodes"), 3},
         {TEXT("create_variable"), 3},
@@ -225,6 +235,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("import_alembic"), 7},
         {TEXT("import_datasmith"), 7},
         {TEXT("reimport_asset"), 7},
+        {TEXT("import_animation_fbx"), 7},  // W1-1 (W1-B router fix)
         {TEXT("save_import_preset"), 7},
         {TEXT("load_import_preset"), 7},
         {TEXT("export_asset"), 7},
@@ -368,6 +379,10 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("spawn_cine_camera_actor"), 12},
         {TEXT("set_camera_properties"), 12},
         {TEXT("spawn_post_process_volume"), 12},
+        {TEXT("spawn_camera_shake_source"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("spawn_camera_rig_rail"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("spawn_camera_rig_crane"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("set_post_process_override"), 12},  // W1-7 (W1-B router fix)
 
         // Lighting / Atmosphere Commands (13)
         {TEXT("set_light_intensity"), 13},
@@ -407,6 +422,11 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("update_data_table_row"), 14},
         {TEXT("export_data_table_csv"), 14},
         {TEXT("export_data_table_json"), 14},
+        {TEXT("create_data_table_from_json"), 14},  // W1-B
+        {TEXT("create_curve_table"), 14},  // W1-B
+        {TEXT("create_string_table"), 14},  // W1-B
+        {TEXT("set_string_table_entry"), 14},  // W1-B
+        {TEXT("create_data_asset"), 14},  // W1-B
 
         // Audio Commands (15)
         {TEXT("create_sound_cue"), 15},
@@ -425,6 +445,13 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("add_keyframe"), 16},
         {TEXT("set_playback_range"), 16},
         {TEXT("set_frame_rate"), 16},
+        {TEXT("add_visibility_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_audio_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_animation_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_material_parameter_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("delete_keyframe"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("set_keyframe_interpolation"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_subsequence"), 16},  // W1-4 (W1-B router fix)
 
         // VRM / Avatar Commands (17)
         {TEXT("vroid_check_plugin"), 17},

@@ -26,4 +26,10 @@ private:
     TSharedPtr<FJsonObject> HandleCreatePhysicalMaterial(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSpawnRadialForce(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSpawnPhysicsConstraint(const TSharedPtr<FJsonObject>& Params);
+
+    // W1-B Physics residue (UE 5.7, non-Chaos)
+    TSharedPtr<FJsonObject> HandleSetActorCollisionResponse(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetConstraintLimits(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetConstraintMotor(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpawnPhysicsVolume(const TSharedPtr<FJsonObject>& Params);
 };
