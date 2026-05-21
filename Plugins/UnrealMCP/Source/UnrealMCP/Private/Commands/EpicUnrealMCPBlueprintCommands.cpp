@@ -6,6 +6,8 @@
 #include "Factories/BlueprintFactory.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_Event.h"
+#include "K2Node_CallFunction.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_Knot.h"
@@ -382,6 +384,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FSt
         {TEXT("step_blueprint_debugger"), &FEpicUnrealMCPBlueprintCommands::HandleStepBlueprintDebugger},
         {TEXT("get_blueprint_debug_info"), &FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintDebugInfo},
         {TEXT("blueprint_diff"), &FEpicUnrealMCPBlueprintCommands::HandleBlueprintDiff},
+        {TEXT("add_latent_node"), &FEpicUnrealMCPBlueprintCommands::HandleAddLatentNode},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -3518,4 +3521,83 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintFunct
 
     ResultObj->SetBoolField(TEXT("success"), true);
     return ResultObj;
+}
+
+// W1-1_LATENT_BEGIN
+// W1-1 Blueprint: add_latent_node - add a Delay/AsyncLoad/AIMoveTo-style latent K2 node
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddLatentNode(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintPath;
+    if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath) || BlueprintPath.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+    }
+    FString FunctionName = TEXT("Delay");
+    Params->TryGetStringField(TEXT("function_name"), FunctionName);
+    FString GraphName = TEXT("EventGraph");
+    Params->TryGetStringField(TEXT("graph_name"), GraphName);
+    float PosX = 0.0f, PosY = 0.0f;
+    Params->TryGetNumberField(TEXT("pos_x"), PosX);
+    Params->TryGetNumberField(TEXT("pos_y"), PosY);
+
+    UBlueprint* BP = FEpicUnrealMCPCommonUtils::FindBlueprint(BlueprintPath);
+    if (!BP)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
+    }
+    UEdGraph* Graph = nullptr;
+    for (UEdGraph* G : BP->UbergraphPages)
+    {
+        if (G && G->GetName() == GraphName) { Graph = G; break; }
+    }
+    if (!Graph && BP->UbergraphPages.Num() > 0)
+    {
+        Graph = BP->UbergraphPages[0];
+    }
+    if (!Graph)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No EventGraph found on Blueprint"));
+    }
+
+    // Latent functions live on UKismetSystemLibrary by default (Delay, AsyncLoadAsset, etc.).
+    // Callers may override via "library_path" (full path/Script/<Module>.<Class>).
+    FString LibraryPath = TEXT("/Script/Engine.KismetSystemLibrary");
+    Params->TryGetStringField(TEXT("library_path"), LibraryPath);
+    UClass* Library = LoadObject<UClass>(nullptr, *LibraryPath);
+    if (!Library)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Function library class not found: %s"), *LibraryPath));
+    }
+    UFunction* Function = Library->FindFunctionByName(FName(*FunctionName));
+    if (!Function || !Function->HasAnyFunctionFlags(FUNC_BlueprintCallable))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Latent function not found or not BlueprintCallable: %s::%s"), *LibraryPath, *FunctionName));
+    }
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Add Latent Node")));
+    Graph->Modify();
+
+    UK2Node_CallFunction* Node = NewObject<UK2Node_CallFunction>(Graph);
+    Node->SetFromFunction(Function);
+    Node->NodePosX = static_cast<int32>(PosX);
+    Node->NodePosY = static_cast<int32>(PosY);
+    Node->CreateNewGuid();
+    Graph->AddNode(Node, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+    Node->PostPlacedNewNode();
+    Node->AllocateDefaultPins();
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("blueprint_path"), BlueprintPath);
+    Result->SetStringField(TEXT("function_name"), FunctionName);
+    Result->SetStringField(TEXT("library_path"), LibraryPath);
+    Result->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
+    Result->SetNumberField(TEXT("pos_x"), PosX);
+    Result->SetNumberField(TEXT("pos_y"), PosY);
+    const bool bIsLatent = Function->HasAnyFunctionFlags(FUNC_BlueprintAuthorityOnly) || Function->HasMetaData(TEXT("Latent"));
+    Result->SetBoolField(TEXT("is_latent"), bIsLatent);
+    return Result;
 }

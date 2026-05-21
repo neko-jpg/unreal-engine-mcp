@@ -641,3 +641,49 @@ def export_level_tool(
     except Exception as e:
         logger.error(f"export_level_tool error: {e}")
         return make_error_response(str(e))
+
+# W1-1 Animation FBX import (UE 5.7)
+
+
+@mcp.tool()
+def animation_fbx_import_tool(
+    source_path: str,
+    destination_path: str,
+    skeleton_path: str,
+    asset_name: Optional[str] = None,
+    scale: float = 1.0,
+    convert_scene_unit: bool = False,
+) -> Dict[str, Any]:
+    """Import animation-only data from an FBX file against an existing USkeleton.
+
+    source_path: Absolute disk path to the FBX file
+    destination_path: /Game package path where the AnimSequence will be created
+    skeleton_path: /Game path to the target USkeleton asset (e.g., "/Game/Mannequin/SK_Mannequin_Skeleton")
+    asset_name: Optional override for the AnimSequence asset name (defaults to FBX filename)
+    scale: Uniform import scale (default 1.0)
+    convert_scene_unit: Convert FBX scene units to Unreal units (default False)
+    """
+    try:
+        validate_string(source_path, "source_path")
+        validate_string(destination_path, "destination_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as e:
+        return make_validation_error_response_from_exception(e)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "source_path": source_path,
+        "destination_path": destination_path,
+        "skeleton_path": skeleton_path,
+        "scale": scale,
+        "convert_scene_unit": convert_scene_unit,
+    }
+    if asset_name:
+        payload["asset_name"] = asset_name
+    try:
+        response = unreal.send_command("import_animation_fbx", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"animation_fbx_import_tool error: {e}")
+        return make_error_response(str(e))

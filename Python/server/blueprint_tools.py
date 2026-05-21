@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from server.core import mcp, get_unreal_connection
+from server.validation import validate_string, ValidationError, make_validation_error_response_from_exception
 from utils.responses import make_error_response, is_success_response
 
 logger = logging.getLogger("UnrealMCP_Advanced")
@@ -895,4 +896,48 @@ def blueprint_diff(blueprint_path: str, other_blueprint_path: str) -> Dict[str, 
         return response or make_error_response("No response from Unreal")
     except Exception as e:
         logger.error(f"blueprint_diff error: {e}")
+        return make_error_response(str(e))
+
+# W1-1 Blueprint residue (UE 5.7)
+
+
+@mcp.tool()
+def add_latent_node(
+    blueprint_path: str,
+    function_name: str = "Delay",
+    library_path: str = "/Script/Engine.KismetSystemLibrary",
+    graph_name: str = "EventGraph",
+    pos_x: float = 0.0,
+    pos_y: float = 0.0,
+) -> Dict[str, Any]:
+    """Add a latent K2 node (Delay / AsyncLoadAsset / AIMoveTo / ...) to a Blueprint event graph.
+
+    blueprint_path: /Game path to the Blueprint (e.g., "/Game/Blueprints/BP_Player")
+    function_name: Latent BlueprintCallable function name (e.g., "Delay", "AsyncLoadAsset")
+    library_path: /Script-path to the function library class (default: KismetSystemLibrary)
+    graph_name: Target event graph name (default: "EventGraph")
+    pos_x, pos_y: Node position in the graph
+    """
+    try:
+        validate_string(blueprint_path, "blueprint_path")
+        validate_string(function_name, "function_name")
+        validate_string(library_path, "library_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "blueprint_path": blueprint_path,
+        "function_name": function_name,
+        "library_path": library_path,
+        "graph_name": graph_name,
+        "pos_x": pos_x,
+        "pos_y": pos_y,
+    }
+    try:
+        response = unreal.send_command("add_latent_node", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as e:
+        logger.error(f"add_latent_node error: {e}")
         return make_error_response(str(e))

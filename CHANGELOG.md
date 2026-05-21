@@ -4,6 +4,103 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batch A: Sequencer / Rendering / Blueprint / Asset Import / Material residue
+
+Implements 15 unimplemented items from `docs/superpowers/plans/tasks.md` covering
+Sequencer (W1-4 residue: 7 items), Rendering / Post Process (W1-7 residue:
+4 items including 2 \(GI/Reflections override\) + 2 \(Camera Shake / Rig\)),
+Blueprint (W1-1 Latent Node, 1 item), Asset Import (W1-1 Animation FBX
+Import, 1 item), and fixes the Python<->C++ drift on `create_advanced_material`
+(W1-6) by re-using the existing `material_graph_tools.create_advanced_material`
+Python wrapper that was already shipped but missing test coverage. Tracks
+the plan in `docs/implementation-plan-tasks-unimplemented.md`.
+
+### Added
+
+- Sequencer C++ handlers (`Plugins/UnrealMCP/.../EpicUnrealMCPSequencerCommands.{h,cpp}`):
+  - `add_visibility_track` -- `UMovieSceneVisibilityTrack` (bHidden property track) per binding.
+  - `add_audio_track` -- master `UMovieSceneAudioTrack` with optional `USoundBase` placement.
+  - `add_animation_track` -- per-binding `UMovieSceneSkeletalAnimationTrack` with optional
+    `UAnimSequence` assignment via `FMovieSceneSkeletalAnimationParams::Animation`.
+  - `add_material_parameter_track` -- per-binding `UMovieSceneComponentMaterialTrack`
+    with UE 5.4+ `FComponentMaterialInfo` (indexed material slot).
+  - `delete_keyframe` -- scrubs all `FMovieSceneDoubleChannel` / `FMovieSceneFloatChannel`
+    keys at the supplied frame for every track on a binding.
+  - `set_keyframe_interpolation` -- bulk sets `ERichCurveInterpMode` (Cubic / Linear /
+    Constant / None) on all keys for every track on a binding.
+  - `add_subsequence` -- inserts either a regular `UMovieSceneSubTrack` section or a
+    cinematic `UMovieSceneCinematicShotTrack` section (selected by `as_shot=true`).
+- Rendering / Post Process C++ handlers (`EpicUnrealMCPRenderingCommands.{h,cpp}`):
+  - `spawn_camera_shake_source` -- spawns an actor with `UCameraShakeSourceComponent`
+    + optional `UCameraShakeBase` class override.
+  - `spawn_camera_rig_rail` -- spawns `ACameraRig_Rail` with `CurrentPositionOnRail` +
+    `bLockOrientationToRail` plumbed (`CinematicCamera` module).
+  - `spawn_camera_rig_crane` -- spawns `ACameraRig_Crane` with `CranePitch/Yaw`,
+    `CraneArmLength`, and `bLockMountPitch/Yaw` plumbed.
+  - `set_post_process_override` -- overrides
+    `FPostProcessSettings::DynamicGlobalIlluminationMethod` (`Lumen` / `ScreenSpace` /
+    `Plugin` / `None`) and `ReflectionMethod` (`Lumen` / `ScreenSpace` / `None`) on a
+    named `APostProcessVolume`.
+- Blueprint C++ handler (`EpicUnrealMCPBlueprintCommands.{h,cpp}`):
+  - `add_latent_node` -- adds a `UK2Node_CallFunction` for any BlueprintCallable
+    latent function (default: `KismetSystemLibrary::Delay`) to a Blueprint's event
+    graph. Supports `library_path` override so callers can target e.g.
+    `KismetSystemLibrary::AsyncLoadAsset` or `AIBlueprintHelperLibrary::SimpleMoveToActor`.
+- Asset Import C++ handler (`EpicUnrealMCPAssetImportCommands.{h,cpp}`):
+  - `import_animation_fbx` -- animation-only FBX import bound to an existing
+    `USkeleton` (`UFbxImportUI.MeshTypeToImport=FBXIT_Animation`,
+    `bImportMesh=false`, `bImportAnimations=true`). Reuses the existing
+    `CreateImportTask` / `ProcessImportTask` pipeline.
+- Python FastMCP wrappers wired through `conn.send_command`:
+  - `server/sequencer_tools.py`: `add_visibility_track`, `add_audio_track`,
+    `add_animation_track`, `add_material_parameter_track`, `delete_keyframe`,
+    `set_keyframe_interpolation`, `add_subsequence`.
+  - `server/rendering_tools.py`: `spawn_camera_shake_source`,
+    `spawn_camera_rig_rail`, `spawn_camera_rig_crane`,
+    `set_post_process_override`.
+  - `server/blueprint_tools.py`: `add_latent_node` (+ added validation imports).
+  - `server/asset_import_tools.py`: `animation_fbx_import_tool`.
+- L1 unit tests:
+  - `Python/tests/unit/test_sequencer_tools_w1.py` (20 tests).
+  - `Python/tests/unit/test_rendering_tools_w1.py` (15 tests).
+  - `Python/tests/unit/test_w1_misc_tools.py` (9 tests for latent node + animation FBX
+    + advanced material).
+- Planning artifact: `docs/implementation-plan-tasks-unimplemented.md` (Agent 1 turn)
+  is the single-source-of-truth for the Wave 1-4 backlog.
+
+### Changed
+
+- `Python/server/blueprint_tools.py` and `Python/server/material_tools.py` now import
+  `validate_string` / `ValidationError` / `make_validation_error_response_from_exception`
+  so the new W1 tools can return consistent validation errors.
+- `docs/superpowers/plans/tasks.md`: flipped 15 entries from `[ ]` to `[x]` covering
+  the Sequencer / Post Process / Camera / Blueprint Latent Node / Animation FBX
+  Import items implemented in this batch.
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **647 passed** (was 603 before this
+  batch; +44 new tests from W1 + 1 from `material_tools` audit retarget).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 402` (was 389; +13 = the 13 new C++ handlers with Python
+  wrappers), `cpp_only: 16`, `rust_only: 53`, no drift detected.
+- Did **not** rebuild the Unreal Editor in this turn -- C++ build verification
+  remains a follow-on local task (see `docs/a2-a3-b4-execution-report.md` for the
+  reproducible `Build.bat` command).
+
+### Notes
+
+- `create_advanced_material` Python wrapper already existed in
+  `Python/server/material_graph_tools.py:190`. The W1-6 batch covers it by adding
+  unit coverage instead of a duplicate wrapper.
+- The new C++ handlers all use UE 5.7 APIs verified against the local
+  `C:\Program Files\Epic Games\UE_5.7\Engine\Source\...` headers
+  (`MovieSceneTracks/Public/Tracks/{Visibility,Audio,SkeletalAnimation,Material,
+  CinematicShot}.h`, `CinematicCamera/Public/CameraRig_{Rail,Crane}.h`, etc.) per
+  the `AGENTS.md` rule that learning-era APIs cannot be trusted on 5.7.
+
+---
+
 ## [2026-05-03] - Jules cloud agent onboarding
 
 ### Added

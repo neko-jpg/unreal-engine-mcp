@@ -84,4 +84,7 @@ private:
     TSharedPtr<FJsonObject> HandleGetBlueprintDebugInfo(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleBlueprintDiff(const TSharedPtr<FJsonObject>& Params);
 
+    // -- W1-1 Blueprint residue (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleAddLatentNode(const TSharedPtr<FJsonObject>& Params);
+
 };
