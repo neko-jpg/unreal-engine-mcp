@@ -27,9 +27,9 @@ pub fn to_glam_quat(r: &Rotator) -> DQuat {
 pub fn from_glam_quat(q: DQuat) -> Rotator {
     let (yaw, pitch, roll) = q.to_euler(glam::EulerRot::YXZ);
     Rotator {
-        pitch: (pitch as f64).to_degrees(),
-        yaw: (yaw as f64).to_degrees(),
-        roll: (roll as f64).to_degrees(),
+        pitch: pitch.to_degrees(),
+        yaw: yaw.to_degrees(),
+        roll: roll.to_degrees(),
     }
 }
 
@@ -52,13 +52,13 @@ pub fn transform_aabb_corners(t: &Transform) -> [Vec3; 8] {
         y: 0.0,
         z: 0.0,
     });
-    for i in 0..8usize {
+    for (i, corner) in corners.iter_mut().enumerate() {
         let dx = if i & 1 != 0 { 0.5 } else { -0.5 };
         let dy = if i & 2 != 0 { 0.5 } else { -0.5 };
         let dz = if i & 4 != 0 { 0.5 } else { -0.5 };
         let local = DVec3::new(dx * s.x, dy * s.y, dz * s.z);
         let world = q.mul_vec3(local) + loc;
-        corners[i] = from_glam_vec3(world);
+        *corner = from_glam_vec3(world);
     }
     corners
 }

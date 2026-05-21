@@ -533,6 +533,7 @@ impl SurrealSceneRepository {
         Ok(groups)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_generator_run(
         &self,
         scene_id: &str,
@@ -906,6 +907,7 @@ impl SurrealSceneRepository {
     // P3: Semantic repository methods
     // ------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_entity(
         &self,
         scene_id: &str,
@@ -1008,6 +1010,7 @@ impl SurrealSceneRepository {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_relation(
         &self,
         scene_id: &str,
@@ -1074,6 +1077,7 @@ impl SurrealSceneRepository {
         Ok(relations)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_asset(
         &self,
         scene_id: &str,
@@ -1239,6 +1243,7 @@ impl SurrealSceneRepository {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_blueprint(
         &self,
         scene_id: &str,

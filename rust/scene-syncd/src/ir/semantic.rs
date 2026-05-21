@@ -52,7 +52,9 @@ impl SemanticScene {
                 .find_map(|t| t.strip_prefix("layout_kind:"))
                 .unwrap_or("");
 
-            let kind = SemanticKind::from_str(kind_str);
+            let kind = kind_str
+                .parse::<SemanticKind>()
+                .unwrap_or(SemanticKind::Unknown(kind_str.to_string()));
 
             let entry = entity_map
                 .entry(entity_id.clone())
@@ -109,9 +111,11 @@ pub enum SemanticKind {
     Unknown(String),
 }
 
-impl SemanticKind {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for SemanticKind {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let kind = match s {
             "keep" => Self::Keep,
             "tower" => Self::Tower,
             "curtain_wall" => Self::CurtainWall,
@@ -123,9 +127,12 @@ impl SemanticKind {
             "district" => Self::District,
             "patrol_route" => Self::PatrolRoute,
             other => Self::Unknown(other.to_string()),
-        }
+        };
+        Ok(kind)
     }
+}
 
+impl SemanticKind {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Keep => "keep",

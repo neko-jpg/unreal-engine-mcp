@@ -7,6 +7,12 @@ pub struct SyncIr {
     pub operations: Vec<SyncOperation>,
 }
 
+impl Default for SyncIr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SyncIr {
     pub fn new() -> Self {
         Self {
@@ -89,7 +95,7 @@ pub enum SyncOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Rotator, SceneObject, Transform, Vec3};
+    use crate::domain::{SceneObject, Transform};
     use serde_json::json;
 
     fn make_obj(mcp_id: &str, hash: &str) -> SceneObject {

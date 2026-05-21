@@ -1,6 +1,5 @@
 use crate::compiler::context::CompilerContext;
 use crate::compiler::passes::Pass;
-use crate::domain::Vec3;
 use crate::error::AppError;
 use crate::ir::geometric::Connector;
 use crate::validation::diagnostic::Diagnostic;

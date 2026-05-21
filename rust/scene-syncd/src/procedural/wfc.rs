@@ -61,12 +61,10 @@ impl Default for WfcParams {
             width: 4,
             height: 4,
             tileset: WfcTileset {
-                tiles: vec![
-                    WfcTile {
-                        id: "grass".to_string(),
-                        weight: 1.0,
-                    },
-                ],
+                tiles: vec![WfcTile {
+                    id: "grass".to_string(),
+                    weight: 1.0,
+                }],
                 constraints: vec![],
             },
             seed: None,
@@ -306,7 +304,10 @@ fn solve_wfc(
         &mut max_collapsed,
     ) {
         return Err(ProceduralError::Contradiction {
-            details: format!("WFC failed after {} attempts (max {})", attempts, max_attempts),
+            details: format!(
+                "WFC failed after {} attempts (max {})",
+                attempts, max_attempts
+            ),
         });
     }
 
@@ -332,6 +333,7 @@ fn solve_wfc(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn backtrack(
     grid: &mut Grid,
     adjacency: &AdjacencyMap,
@@ -386,16 +388,31 @@ fn backtrack(
 
         if propagate(&mut new_grid, x, y, adjacency, periodic) {
             // Count collapsed cells in this branch and update high-water mark / progress.
-            let collapsed_count: u64 = new_grid.cells.iter().filter(|c| c.collapsed.is_some()).count() as u64;
+            let collapsed_count: u64 = new_grid
+                .cells
+                .iter()
+                .filter(|c| c.collapsed.is_some())
+                .count() as u64;
             if collapsed_count > *max_collapsed {
                 *max_collapsed = collapsed_count;
                 if total_cells > 0 {
                     progress.set(*max_collapsed, total_cells);
+                    progress.set_message(format!(
+                        "WFC: collapsed {}/{} cells",
+                        *max_collapsed, total_cells
+                    ));
                 }
             }
             if backtrack(
-                &mut new_grid, adjacency, rng, attempts, max_attempts, periodic,
-                progress, total_cells, max_collapsed,
+                &mut new_grid,
+                adjacency,
+                rng,
+                attempts,
+                max_attempts,
+                periodic,
+                progress,
+                total_cells,
+                max_collapsed,
             ) {
                 *grid = new_grid;
                 return true;
@@ -447,10 +464,8 @@ fn propagate(
             if !try_dir(x + 1, y, &adjacency.east) {
                 return false;
             }
-        } else if periodic && width > 0 {
-            if !try_dir(0, y, &adjacency.east) {
-                return false;
-            }
+        } else if periodic && width > 0 && !try_dir(0, y, &adjacency.east) {
+            return false;
         }
 
         // west
@@ -458,10 +473,8 @@ fn propagate(
             if !try_dir(x - 1, y, &adjacency.west) {
                 return false;
             }
-        } else if periodic && width > 0 {
-            if !try_dir(width - 1, y, &adjacency.west) {
-                return false;
-            }
+        } else if periodic && width > 0 && !try_dir(width - 1, y, &adjacency.west) {
+            return false;
         }
 
         // south
@@ -469,10 +482,8 @@ fn propagate(
             if !try_dir(x, y + 1, &adjacency.south) {
                 return false;
             }
-        } else if periodic && height > 0 {
-            if !try_dir(x, 0, &adjacency.south) {
-                return false;
-            }
+        } else if periodic && height > 0 && !try_dir(x, 0, &adjacency.south) {
+            return false;
         }
 
         // north
@@ -480,10 +491,8 @@ fn propagate(
             if !try_dir(x, y - 1, &adjacency.north) {
                 return false;
             }
-        } else if periodic && height > 0 {
-            if !try_dir(x, height - 1, &adjacency.north) {
-                return false;
-            }
+        } else if periodic && height > 0 && !try_dir(x, height - 1, &adjacency.north) {
+            return false;
         }
     }
 

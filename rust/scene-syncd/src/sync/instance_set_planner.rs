@@ -46,7 +46,7 @@ pub fn plan_instance_set_sync(
     }
 
     // Deletes
-    for (id, _actual) in &actual_map {
+    for id in actual_map.keys() {
         if !desired_map.contains_key(id) {
             ops.push(InstanceSetOperation::Delete {
                 set_id: id.to_string(),

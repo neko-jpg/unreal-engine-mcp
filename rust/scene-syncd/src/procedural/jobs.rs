@@ -41,12 +41,14 @@ pub enum JobGenerator {
     Lsystem,
 }
 
-impl JobGenerator {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for JobGenerator {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "wfc" => Some(Self::Wfc),
-            "lsystem" | "l_system" | "l-system" => Some(Self::Lsystem),
-            _ => None,
+            "wfc" => Ok(Self::Wfc),
+            "lsystem" | "l_system" | "l-system" => Ok(Self::Lsystem),
+            _ => Err(()),
         }
     }
 }
@@ -57,7 +59,13 @@ pub struct JobRecord {
     pub generator: JobGenerator,
     pub status: JobStatus,
     pub progress: f32,
+    /// Coarse status message ("queued", "running", "completed", ...).
     pub message: Option<String>,
+    /// Fine-grained, human-readable progress text emitted by the generator
+    /// itself (e.g. "collapsed 13/64 cells", "iteration 4/10"). May lag the
+    /// `progress` fraction by up to ~200ms because the watchdog polls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress_message: Option<String>,
     pub created_at_ms: u64,
     pub started_at_ms: Option<u64>,
     pub completed_at_ms: Option<u64>,
@@ -134,6 +142,7 @@ impl JobRegistry {
                         status: JobStatus::Queued,
                         progress: 0.0,
                         message: Some("queued".to_string()),
+                        progress_message: None,
                         created_at_ms: now,
                         started_at_ms: None,
                         completed_at_ms: None,
@@ -159,7 +168,7 @@ impl JobRegistry {
             let permit = tokio::select! {
                 permit = semaphore.acquire_owned() => permit,
                 _ = cancel_clone.notified() => {
-                    registry.mark_cancelled(&job_id_clone, "cancelled before start").await;
+                    registry.mark_cancelled(&job_id_clone, "cancelled before start", None).await;
                     return;
                 }
             };
@@ -167,7 +176,9 @@ impl JobRegistry {
             let permit = match permit {
                 Ok(p) => p,
                 Err(_) => {
-                    registry.mark_failed(&job_id_clone, "semaphore closed").await;
+                    registry
+                        .mark_failed(&job_id_clone, "semaphore closed", None)
+                        .await;
                     return;
                 }
             };
@@ -178,7 +189,11 @@ impl JobRegistry {
             let ctx = GenerateContext::new(seed, Some(limits.clone()));
 
             // Spawn a watchdog that reads ctx.progress every 200ms and updates JobRecord.progress.
+            // Also keep a separate clone we can snapshot AFTER the generator
+            // returns - this guarantees we see the final progress_message even
+            // for jobs that complete before the watchdog's first 200ms tick.
             let progress_arc = ctx.progress.clone();
+            let progress_for_final = ctx.progress.clone();
             let watchdog_registry = registry.clone();
             let watchdog_job_id = job_id_clone.clone();
             let watchdog_cancel = cancel_clone.clone();
@@ -186,9 +201,12 @@ impl JobRegistry {
                 loop {
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_millis(200)) => {
-                            if let Some(frac) = progress_arc.read() {
+                            let frac = progress_arc.read();
+                            let msg = progress_arc.read_message();
+                            if frac.is_some() || msg.is_some() {
+                                let mapped = frac.map(|f| 0.05 + f * 0.9);
                                 let still_running = watchdog_registry
-                                    .update_progress(&watchdog_job_id, 0.05 + frac * 0.9)
+                                    .update_progress(&watchdog_job_id, mapped, msg)
                                     .await;
                                 if !still_running { break; }
                             }
@@ -200,24 +218,9 @@ impl JobRegistry {
 
             let outcome: Result<Value, String> = match generator {
                 JobGenerator::Wfc => match serde_json::from_value::<WfcParams>(params_value) {
-                    Ok(params) => run_with_cancellation(cancel_clone.clone(), move || {
-                        let g = WfcGenerator;
-                        match g.generate(&params, &ctx) {
-                            Ok(out) => Ok(json!({
-                                "data": out.data,
-                                "stats": out.stats,
-                                "warnings": out.warnings,
-                            })),
-                            Err(e) => Err(format!("{e}")),
-                        }
-                    })
-                    .await,
-                    Err(e) => Err(format!("invalid WFC params: {e}")),
-                },
-                JobGenerator::Lsystem => {
-                    match serde_json::from_value::<LSystemParams>(params_value) {
-                        Ok(params) => run_with_cancellation(cancel_clone.clone(), move || {
-                            let g = LSystemGenerator;
+                    Ok(params) => {
+                        run_with_cancellation(cancel_clone.clone(), move || {
+                            let g = WfcGenerator;
                             match g.generate(&params, &ctx) {
                                 Ok(out) => Ok(json!({
                                     "data": out.data,
@@ -227,20 +230,59 @@ impl JobRegistry {
                                 Err(e) => Err(format!("{e}")),
                             }
                         })
-                        .await,
+                        .await
+                    }
+                    Err(e) => Err(format!("invalid WFC params: {e}")),
+                },
+                JobGenerator::Lsystem => {
+                    match serde_json::from_value::<LSystemParams>(params_value) {
+                        Ok(params) => {
+                            run_with_cancellation(cancel_clone.clone(), move || {
+                                let g = LSystemGenerator;
+                                match g.generate(&params, &ctx) {
+                                    Ok(out) => Ok(json!({
+                                        "data": out.data,
+                                        "stats": out.stats,
+                                        "warnings": out.warnings,
+                                    })),
+                                    Err(e) => Err(format!("{e}")),
+                                }
+                            })
+                            .await
+                        }
                         Err(e) => Err(format!("invalid L-System params: {e}")),
                     }
                 }
             };
 
             let elapsed_ms = started_at.elapsed().as_millis() as u64;
+            let final_progress_message = progress_for_final.read_message();
 
             match outcome {
-                Ok(result) => registry.mark_completed(&job_id_clone, result, elapsed_ms).await,
-                Err(err) if err == "__cancelled__" => {
-                    registry.mark_cancelled(&job_id_clone, "cancelled mid-run").await
+                Ok(result) => {
+                    registry
+                        .mark_completed(
+                            &job_id_clone,
+                            result,
+                            elapsed_ms,
+                            final_progress_message.clone(),
+                        )
+                        .await
                 }
-                Err(err) => registry.mark_failed(&job_id_clone, &err).await,
+                Err(err) if err == "__cancelled__" => {
+                    registry
+                        .mark_cancelled(
+                            &job_id_clone,
+                            "cancelled mid-run",
+                            final_progress_message.clone(),
+                        )
+                        .await
+                }
+                Err(err) => {
+                    registry
+                        .mark_failed(&job_id_clone, &err, final_progress_message.clone())
+                        .await
+                }
             }
 
             // Stop the watchdog - either it already exited or we abort it.
@@ -299,18 +341,32 @@ impl JobRegistry {
         }
     }
 
-    /// Update an in-flight job's progress fraction. Returns false when the
-    /// job is gone or already finished so the watchdog task can exit.
-    pub async fn update_progress(&self, job_id: &str, fraction: f32) -> bool {
+    /// Update an in-flight job's progress fraction and/or human-readable
+    /// progress message. Either may be None to leave that field untouched.
+    /// Returns false when the job is gone or already finished so the
+    /// watchdog task can exit.
+    pub async fn update_progress(
+        &self,
+        job_id: &str,
+        fraction: Option<f32>,
+        message: Option<String>,
+    ) -> bool {
         let mut g = self.inner.lock().await;
         let Some(entry) = g.get_mut(job_id) else {
             return false;
         };
         match entry.record.status {
             JobStatus::Running | JobStatus::Queued => {
-                let bounded = fraction.clamp(0.05, 0.99);
-                if bounded > entry.record.progress {
-                    entry.record.progress = bounded;
+                if let Some(f) = fraction {
+                    let bounded = f.clamp(0.05, 0.99);
+                    if bounded > entry.record.progress {
+                        entry.record.progress = bounded;
+                    }
+                }
+                if let Some(m) = message {
+                    if !m.is_empty() {
+                        entry.record.progress_message = Some(m);
+                    }
                 }
                 true
             }
@@ -318,7 +374,13 @@ impl JobRegistry {
         }
     }
 
-    async fn mark_completed(&self, job_id: &str, result: Value, elapsed_ms: u64) {
+    async fn mark_completed(
+        &self,
+        job_id: &str,
+        result: Value,
+        elapsed_ms: u64,
+        final_progress_message: Option<String>,
+    ) {
         let mut g = self.inner.lock().await;
         if let Some(entry) = g.get_mut(job_id) {
             if entry.cancelled {
@@ -332,25 +394,45 @@ impl JobRegistry {
             entry.record.progress = 1.0;
             entry.record.completed_at_ms = Some(now_ms());
             entry.record.elapsed_ms = Some(elapsed_ms);
+            if let Some(m) = final_progress_message {
+                if !m.is_empty() {
+                    entry.record.progress_message = Some(m);
+                }
+            }
         }
     }
 
-    async fn mark_failed(&self, job_id: &str, error: &str) {
+    async fn mark_failed(&self, job_id: &str, error: &str, final_progress_message: Option<String>) {
         let mut g = self.inner.lock().await;
         if let Some(entry) = g.get_mut(job_id) {
             entry.record.status = JobStatus::Failed;
             entry.record.error = Some(error.to_string());
             entry.record.message = Some("failed".to_string());
             entry.record.completed_at_ms = Some(now_ms());
+            if let Some(m) = final_progress_message {
+                if !m.is_empty() {
+                    entry.record.progress_message = Some(m);
+                }
+            }
         }
     }
 
-    async fn mark_cancelled(&self, job_id: &str, message: &str) {
+    async fn mark_cancelled(
+        &self,
+        job_id: &str,
+        message: &str,
+        final_progress_message: Option<String>,
+    ) {
         let mut g = self.inner.lock().await;
         if let Some(entry) = g.get_mut(job_id) {
             entry.record.status = JobStatus::Cancelled;
             entry.record.message = Some(message.to_string());
             entry.record.completed_at_ms = Some(now_ms());
+            if let Some(m) = final_progress_message {
+                if !m.is_empty() {
+                    entry.record.progress_message = Some(m);
+                }
+            }
         }
     }
 }
@@ -392,14 +474,19 @@ mod tests {
             width: 2,
             height: 2,
             tileset: WfcTileset {
-                tiles: vec![WfcTile { id: "g".into(), weight: 1.0 }],
+                tiles: vec![WfcTile {
+                    id: "g".into(),
+                    weight: 1.0,
+                }],
                 constraints: vec![
                     crate::procedural::wfc::WfcConstraint {
-                        left: "g".into(), right: "g".into(),
+                        left: "g".into(),
+                        right: "g".into(),
                         direction: crate::procedural::wfc::WfcDirection::East,
                     },
                     crate::procedural::wfc::WfcConstraint {
-                        left: "g".into(), right: "g".into(),
+                        left: "g".into(),
+                        right: "g".into(),
                         direction: crate::procedural::wfc::WfcDirection::South,
                     },
                 ],
@@ -433,9 +520,9 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_generator_returns_none() {
-        assert!(JobGenerator::from_str("does-not-exist").is_none());
-        assert!(JobGenerator::from_str("WFC").is_some());
-        assert!(JobGenerator::from_str("L-System").is_some());
+        assert!("does-not-exist".parse::<JobGenerator>().is_err());
+        assert!("WFC".parse::<JobGenerator>().is_ok());
+        assert!("L-System".parse::<JobGenerator>().is_ok());
     }
 
     #[tokio::test]
@@ -469,15 +556,104 @@ mod tests {
         let mut max_seen = 0.0_f32;
         for _ in 0..30 {
             let s = registry.status(&job_id).await.unwrap();
-            if s.progress > max_seen { max_seen = s.progress; }
-            if matches!(s.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
+            if s.progress > max_seen {
+                max_seen = s.progress;
+            }
+            if matches!(
+                s.status,
+                JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled
+            ) {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(40)).await;
         }
         let final_status = registry.status(&job_id).await.unwrap();
-        assert!(matches!(final_status.status, JobStatus::Completed), "{:?}", final_status);
-        assert!(final_status.progress >= 0.99, "final progress = {}", final_status.progress);
-        assert!(max_seen >= 0.05, "max observed progress = {} (should be >= initial 0.05)", max_seen);
+        assert!(
+            matches!(final_status.status, JobStatus::Completed),
+            "{:?}",
+            final_status
+        );
+        assert!(
+            final_status.progress >= 0.99,
+            "final progress = {}",
+            final_status.progress
+        );
+        assert!(
+            max_seen >= 0.05,
+            "max observed progress = {} (should be >= initial 0.05)",
+            max_seen
+        );
+    }
+
+    #[tokio::test]
+    async fn progress_message_is_populated_during_lsystem() {
+        // Verify the human-readable progress message reaches JobRecord via the
+        // ProgressTracker -> watchdog -> update_progress path added in #28.
+        let registry = JobRegistry::new(2);
+        let params = serde_json::json!({
+            "axiom": "F",
+            "rules": [["F", "F[+F][-F]"]],
+            "iterations": 5,
+            "angle_degrees": 25.0,
+            "step_length": 5.0,
+            "width": 1.0,
+            "origin": [0.0, 0.0, 0.0],
+            "heading": [1.0, 0.0, 0.0],
+            "up": [0.0, 0.0, 1.0],
+            "dimension_mode": "ThreeD",
+        });
+        let job_id = registry
+            .submit(
+                JobGenerator::Lsystem,
+                params,
+                Some(13),
+                GenerationLimits::default(),
+            )
+            .await
+            .unwrap();
+
+        // Poll until completion or saw a non-empty progress_message.
+        let mut saw_progress_msg = false;
+        let mut last_msg: Option<String> = None;
+        for _ in 0..60 {
+            let s = registry.status(&job_id).await.unwrap();
+            if let Some(ref m) = s.progress_message {
+                if !m.is_empty() {
+                    saw_progress_msg = true;
+                    last_msg = Some(m.clone());
+                }
+            }
+            if matches!(
+                s.status,
+                JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled
+            ) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+        let final_status = registry.status(&job_id).await.unwrap();
+        assert!(
+            matches!(final_status.status, JobStatus::Completed),
+            "{:?}",
+            final_status
+        );
+        assert!(
+            saw_progress_msg,
+            "progress_message never populated; last={:?}, final_status={:?}",
+            last_msg, final_status
+        );
+        // The final message should reference one of the L-System phases.
+        let final_msg = final_status
+            .progress_message
+            .clone()
+            .or(last_msg.clone())
+            .unwrap_or_default();
+        assert!(
+            final_msg.to_lowercase().contains("l-system")
+                || final_msg.to_lowercase().contains("iteration"),
+            "expected an L-System progress message, got: {:?} (final={:?})",
+            last_msg,
+            final_msg
+        );
     }
 }

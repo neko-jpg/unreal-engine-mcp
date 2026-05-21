@@ -58,10 +58,7 @@ impl LSystemPreset {
             },
             LSystemPreset::Dragon2D => LSystemParams {
                 axiom: "FX".to_string(),
-                rules: vec![
-                    ('X', "X+YF+".to_string()),
-                    ('Y', "-FX-Y".to_string()),
-                ],
+                rules: vec![('X', "X+YF+".to_string()), ('Y', "-FX-Y".to_string())],
                 iterations: 10,
                 step_length: 1.0,
                 angle_degrees: 90.0,
@@ -72,10 +69,7 @@ impl LSystemPreset {
             },
             LSystemPreset::Sierpinski2D => LSystemParams {
                 axiom: "F-G-G".to_string(),
-                rules: vec![
-                    ('F', "F-G+F+G-F".to_string()),
-                    ('G', "GG".to_string()),
-                ],
+                rules: vec![('F', "F-G+F+G-F".to_string()), ('G', "GG".to_string())],
                 iterations: 3,
                 step_length: 1.0,
                 angle_degrees: 120.0,
@@ -180,8 +174,8 @@ mod tests {
 
     #[test]
     fn test_preset_generates_segments() {
-        use super::super::lsystem::LSystemGenerator;
         use super::super::generator::GenerateContext;
+        use super::super::lsystem::LSystemGenerator;
 
         let ctx = GenerateContext::new(None, None);
         let gen = LSystemGenerator;

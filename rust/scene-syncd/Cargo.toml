@@ -3,6 +3,7 @@ name = "scene-syncd"
 version = "0.1.0"
 edition = "2021"
 description = "SurrealDB-backed desired-state sync service for Unreal MCP"
+license = "MIT"
 
 [lib]
 path = "src/lib.rs"
@@ -20,6 +21,7 @@ geo = "0.32"
 robust = "1"
 rstar = "0.12"
 async-trait = "0.1"
+async-stream = "0.3"
 petgraph = "0.8"
 surrealdb = { version = "=2.2.2", features = ["kv-mem"] }
 thiserror = "2"

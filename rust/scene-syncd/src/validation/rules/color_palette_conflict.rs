@@ -64,7 +64,7 @@ impl ValidationRule for ColorPaletteConflictRule {
             }
             // Check if any two colors are significantly different.
             let first = &colors[0].0;
-            for (i, (color, mcp_id)) in colors.iter().enumerate().skip(1) {
+            for (_i, (color, mcp_id)) in colors.iter().enumerate().skip(1) {
                 let diff = color_diff(first, color);
                 if diff > 0.3 {
                     diagnostics.push(

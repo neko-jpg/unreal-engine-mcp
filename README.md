@@ -14,6 +14,10 @@ For transparency:
 
 Suggested display name to avoid confusion with the official project: **Unreal Engine MCP Community Fork (Unofficial)**.
 
+### Engine/version policy for this branch
+
+This repository branch targets **Unreal Engine 5.7**. The canonical plugin source is `Plugins/UnrealMCP/`. The UE 5.7 launcher project (`FlopperamUnrealMCP 5.7/`) reads that canonical plugin directly, while the source-built project (`FlopperamUnrealMCP/`) uses a generated local copy at `FlopperamUnrealMCP/Plugins/UnrealMCP/`. Run `./scripts/sync-unrealmcp-plugin.ps1` before testing the source-built project. See `docs/engine-version-split.md` for details.
+
 ---
 
 ## Update 03/25/2026
@@ -81,7 +85,7 @@ The Flop MCP gives your IDE data. **The Flop Agent** is a fully autonomous AI th
 - **Chat inside Unreal** — embedded browser panel, no window switching
 - **Text/image to 3D** — three quality tiers (Good, High Quality, Very High Quality)
 
-Supports Unreal Engine 5.5, 5.6, and 5.7. Full docs at [flopperam.com/docs](https://flopperam.com/docs).
+This community fork branch is validated against Unreal Engine 5.7; upstream/hosted product compatibility may differ. Full docs at [flopperam.com/docs](https://flopperam.com/docs).
 
 <img width="800" alt="Flop AI creating a health system in BP_MyPlayer2 from a natural language prompt" src="assets/blueprint_modification2.png" />
 
@@ -91,9 +95,9 @@ Supports Unreal Engine 5.5, 5.6, and 5.7. Full docs at [flopperam.com/docs](http
 
 # The Most Advanced MCP Server for Unreal Engine
 
-**Control Unreal Engine 5.5+ through AI with natural language** — This MCP server enables AI clients to build incredible 3D worlds and architectural masterpieces. Create entire towns, medieval castles, modern mansions, challenging mazes, and complex structures with AI-powered commands.
+**Control Unreal Engine 5.7 through AI with natural language** — This MCP server enables AI clients to build incredible 3D worlds and architectural masterpieces. Create entire towns, medieval castles, modern mansions, challenging mazes, and complex structures with AI-powered commands.
 
-[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.5%2B-orange.svg)](https://www.unrealengine.com/)
+[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.7-orange.svg)](https://www.unrealengine.com/)
 [![YouTube](https://img.shields.io/badge/YouTube-@flopperam-red.svg?logo=youtube)](https://youtube.com/@flopperam)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/3KNkke3rnH)
 [![Twitter](https://img.shields.io/badge/X-@Flopperam-1DA1F2.svg?logo=x&logoColor=white)](https://twitter.com/Flopperam)
@@ -176,7 +180,7 @@ Check out these examples of the MCP server in action on our channel:
 ## Lightning-Fast Setup
 
 ### Prerequisites
-- **Unreal Engine 5.5+** 
+- **Unreal Engine 5.7** 
 - **Python 3.10+** (3.12 recommended; 3.10–3.13 supported)
 - **MCP Client** (Claude Desktop, Cursor, or Windsurf)
 
@@ -198,7 +202,7 @@ cd unreal-engine-mcp
 **Option B: Add Plugin to Your Existing Project**
 ```bash
 # Copy the plugin to your project
-cp -r FlopperamUnrealMCP/Plugins/UnrealMCP YourProject/Plugins/
+cp -r Plugins/UnrealMCP YourProject/Plugins/
 
 # Enable in Unreal Editor
 Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
@@ -207,7 +211,7 @@ Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
 **Option C: Install for All Projects**
 ```bash
 # Copy to Engine plugins folder (available to all projects)
-cp -r FlopperamUnrealMCP/Plugins/UnrealMCP "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
+cp -r Plugins/UnrealMCP "C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/"
 
 # Enable in any project through the Plugin Browser
 Edit → Plugins → Search "UnrealMCP" → Enable
@@ -271,7 +275,7 @@ Run the Unreal Build Tool to compile the project:
 ```
 
 Replace:
-- `UE_5.X` with your Unreal Engine version (e.g., `UE_5.5`)
+- `UE_5.X` with your Unreal Engine version (this branch is validated with `UE_5.7`)
 - `/path/to/unreal-engine-mcp/` with the actual path to your cloned repository
 
 ##### Step 4: Open the Project
@@ -335,6 +339,10 @@ Note that on Mac, and sometimes on Windows, you may have to replace the "uv" str
 > **Having issues with setup?** Check our [Debugging & Troubleshooting Guide](DEBUGGING.md) for solutions to common problems like MCP installation errors and configuration issues.
 >
 > **Want to program Blueprints with AI?** Check our [Blueprint Graph Programming Guide](Guides/blueprint-graph-guide.md) to learn how to create nodes, connections, and variables programmatically.
+>
+> **Building the C++ plugin against UE 5.7?** See the [UE 5.7 Build Environment Guide](docs/build-environment.md) for the required Visual Studio 2022 17.14 / MSVC 14.44.35207 / Windows SDK 10.0.22621.0 toolchain matrix and a `BuildConfiguration.xml` snippet to silence compiler-version warnings.
+>
+> **Adding a C++ command or wondering which file owns one?** See the [UnrealMCP Handler Split Architecture](docs/architecture/handler-split.md) for the route-id → handler-class table, the recipe for adding a new handler, and the Phase 1/2/3/4 refactor history.
 
 ### 4. Start Building!
 
@@ -352,7 +360,7 @@ Note that on Mac, and sometimes on Windows, you may have to replace the "uv" str
 graph TB
     A[AI Client<br/>Cursor/Claude/Windsurf] -->|MCP Protocol| B[Python Server<br/>unreal_mcp_server_advanced.py]
     B -->|TCP Socket| C[C++ Plugin<br/>UnrealMCP]
-    C -->|Native API| D[Unreal Engine 5.5+<br/>Editor & Runtime]
+    C -->|Native API| D[Unreal Engine 5.7<br/>Editor & Runtime]
     
     B --> E[Advanced Tools]
     E --> F[World Building]

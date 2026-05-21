@@ -99,8 +99,8 @@ class TestP7ToolRegistration:
 class TestSceneCreateNavmeshVolume:
     """Test scene_create_navmesh_volume tool logic."""
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_navmesh_volume_calls_unreal_and_db(self, mock_get_conn, mock_syncd):
         mock_conn = MagicMock()
         mock_conn.send_command.return_value = {"success": True, "actor_name": "NavMeshVolume_0"}
@@ -129,8 +129,8 @@ class TestSceneCreateNavmeshVolume:
         assert call_args[0][0] == "/components/upsert"
         assert call_args[0][1]["component_type"] == "navmesh"
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_navmesh_volume_default_params(self, mock_get_conn, mock_syncd):
         mock_conn = MagicMock()
         mock_conn.send_command.return_value = {"success": True}
@@ -150,8 +150,8 @@ class TestSceneCreateNavmeshVolume:
 class TestSceneCreatePatrolRoute:
     """Test scene_create_patrol_route tool logic."""
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_patrol_route_creates_route(self, mock_get_conn, mock_syncd):
         mock_conn = MagicMock()
         mock_conn.send_command.return_value = {"success": True, "actor_name": "PatrolRoute_0"}
@@ -186,8 +186,8 @@ class TestSceneCreatePatrolRoute:
 class TestSceneSetAIBehavior:
     """Test scene_set_ai_behavior tool logic."""
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_set_ai_behavior(self, mock_get_conn, mock_syncd):
         mock_conn = MagicMock()
         mock_conn.send_command.return_value = {"success": True}
@@ -213,8 +213,8 @@ class TestSceneSetAIBehavior:
 class TestSceneSpawnBlueprint:
     """Test scene_spawn_blueprint tool logic."""
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_spawn_blueprint(self, mock_get_conn, mock_syncd):
         mock_conn = MagicMock()
         mock_conn.send_command.return_value = {"success": True, "actor_name": "BP_Tower_C_0"}
@@ -244,7 +244,7 @@ class TestSceneSpawnBlueprint:
 class TestSceneComponentUpsert:
     """Test scene_component_upsert tool logic."""
 
-    @patch("server.scene_tools.call_scene_syncd")
+    @patch("server.scene_tools_common.call_scene_syncd")
     def test_component_upsert_collision(self, mock_syncd):
         mock_syncd.return_value = {"success": True, "data": {"id": "comp_01"}}
 
@@ -263,7 +263,7 @@ class TestSceneComponentUpsert:
         assert call_args[1]["component_type"] == "collision"
         assert call_args[1]["properties"]["profile"] == "BlockAllDynamic"
 
-    @patch("server.scene_tools.call_scene_syncd")
+    @patch("server.scene_tools_common.call_scene_syncd")
     def test_component_upsert_navmesh(self, mock_syncd):
         mock_syncd.return_value = {"success": True}
 
@@ -279,7 +279,7 @@ class TestSceneComponentUpsert:
         call_args = mock_syncd.call_args[0]
         assert call_args[1]["component_type"] == "navmesh"
 
-    @patch("server.scene_tools.call_scene_syncd")
+    @patch("server.scene_tools_common.call_scene_syncd")
     def test_component_upsert_missing_required(self, mock_syncd):
         from server.scene_tools import scene_component_upsert
         result = scene_component_upsert(
@@ -294,8 +294,8 @@ class TestSceneComponentUpsert:
 class TestP7ToolErrorCases:
     """Error and boundary case tests for P7 tools."""
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_navmesh_volume_unreal_connection_failure(self, mock_get_conn, mock_syncd):
         """When Unreal connection fails, tool should return an error response."""
         mock_get_conn.side_effect = RuntimeError("Unreal bridge unreachable")
@@ -312,8 +312,8 @@ class TestP7ToolErrorCases:
         assert result.get("success") is False or "error" in result
         assert "Unreal" in str(result.get("error", "")) or "bridge" in str(result.get("error", ""))
 
-    @patch("server.scene_tools.call_scene_syncd")
-    @patch("server.core.get_unreal_connection")
+    @patch("server.scene_tools_common.call_scene_syncd")
+    @patch("server.scene_tools_common.get_unreal_connection")
     def test_spawn_blueprint_invalid_path(self, mock_get_conn, mock_syncd):
         """When Unreal reports blueprint spawn failure, tool should return error."""
         mock_conn = MagicMock()
@@ -332,7 +332,7 @@ class TestP7ToolErrorCases:
         assert result.get("success") is False
         assert "Blueprint not found" in result.get("error", "")
 
-    @patch("server.scene_tools.call_scene_syncd")
+    @patch("server.scene_tools_common.call_scene_syncd")
     def test_component_upsert_empty_properties(self, mock_syncd):
         """Component upsert with empty properties should still succeed."""
         mock_syncd.return_value = {"success": True, "data": {"id": "comp_empty"}}

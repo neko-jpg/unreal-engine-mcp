@@ -12,6 +12,12 @@ pub struct DiffPlanningPass {
     pub actual: Option<Vec<crate::domain::SceneObject>>,
 }
 
+impl Default for DiffPlanningPass {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DiffPlanningPass {
     pub fn new() -> Self {
         Self { actual: None }
@@ -31,23 +37,91 @@ impl Pass for DiffPlanningPass {
 
     fn run(&self, ctx: &mut CompilerContext) -> Result<(), AppError> {
         let total = ctx.objects.len();
-        let deleted = ctx.objects.iter().filter(|o| o.deleted).count();
-        let active = total - deleted;
+        let deleted_tombstoned = ctx.objects.iter().filter(|o| o.deleted).count();
+        let active = total - deleted_tombstoned;
 
         if total > 0 {
             ctx.add_diagnostics(vec![Diagnostic::info(
                 "DIFF_PLAN_SUMMARY",
                 format!(
                     "Diff plan: {} active objects, {} tombstoned.",
-                    active, deleted
+                    active, deleted_tombstoned
                 ),
             )]);
         }
 
-        let sync_ir = SyncIr::from_desired_and_actual(
-            &ctx.objects,
-            self.actual.as_ref().map(|v| v.as_slice()),
-        );
+        // Incremental skip pass: when last_applied_hash == desired_hash on an
+        // object, it has already been pushed to Unreal and does not need to
+        // be re-diffed. This is the cheap fast-path for steady-state scenes.
+        let already_applied = ctx
+            .objects
+            .iter()
+            .filter(|o| {
+                !o.deleted
+                    && o.last_applied_hash
+                        .as_ref()
+                        .map(|h| h == &o.desired_hash)
+                        .unwrap_or(false)
+            })
+            .count();
+        if already_applied > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_INCREMENTAL_SKIP",
+                format!(
+                    "Incremental skip: {} object(s) already in sync (last_applied_hash matches desired_hash).",
+                    already_applied
+                ),
+            )]);
+        }
+
+        let sync_ir = SyncIr::from_desired_and_actual(&ctx.objects, self.actual.as_deref());
+
+        // Detailed per-op-kind diagnostics for `compile_plan` consumers.
+        let mut creates = 0usize;
+        let mut updates = 0usize;
+        let mut deletes = 0usize;
+        let mut noops = 0usize;
+        for op in &sync_ir.operations {
+            match op {
+                crate::ir::sync::SyncOperation::Create { .. } => creates += 1,
+                crate::ir::sync::SyncOperation::Update { .. } => updates += 1,
+                crate::ir::sync::SyncOperation::Delete { .. } => deletes += 1,
+                crate::ir::sync::SyncOperation::NoOp { .. } => noops += 1,
+            }
+        }
+
+        let unchanged = active.saturating_sub(creates + updates);
+        if creates > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_WOULD_CREATE",
+                format!("Would create {creates} actor(s)."),
+            )]);
+        }
+        if updates > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_WOULD_UPDATE",
+                format!("Would update {updates} actor(s)."),
+            )]);
+        }
+        if deletes > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_WOULD_DELETE",
+                format!("Would delete {deletes} actor(s)."),
+            )]);
+        }
+        if noops > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_WOULD_NOOP",
+                format!("{noops} actor(s) reported as explicit no-op."),
+            )]);
+        }
+        if unchanged > 0 {
+            ctx.add_diagnostics(vec![Diagnostic::info(
+                "DIFF_WOULD_SKIP_UNCHANGED",
+                format!("Would skip {unchanged} unchanged actor(s)."),
+            )]);
+        }
+
         ctx.sync_ir = Some(sync_ir);
 
         Ok(())
@@ -57,7 +131,7 @@ impl Pass for DiffPlanningPass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Rotator, SceneObject, Transform, Vec3};
+    use crate::domain::{SceneObject, Transform};
     use serde_json::json;
 
     fn make_obj(mcp_id: &str, hash: &str) -> SceneObject {

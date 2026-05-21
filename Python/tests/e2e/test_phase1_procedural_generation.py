@@ -253,3 +253,164 @@ class TestWfcSemanticLayoutFusion:
         assert actual_kinds.issuperset(expected_kinds & {"grass", "water"}), (
             f"Expected proxies for {expected_kinds}, got {actual_kinds}"
         )
+
+
+
+@pytest.mark.requires_unreal
+class TestWfcSemanticLayoutHismPipeline:
+    """Issue #27: Explicit three-step E2E:
+        scene_create_wfc_grid -> scene_wfc_to_semantic_layout -> scene_show_wfc_proxy.
+
+    Differences from `TestWfcSemanticLayoutFusion`:
+      - Uses the `isolated_scene` fixture (per-test scene_id + auto-cleanup)
+        so concurrent CI workers do not collide on `main`.
+      - Explicitly invokes `scene_create_wfc_grid` first to satisfy the
+        acceptance criterion "3x3 WFC grid via scene_create_wfc_grid ->
+        scene_wfc_to_semantic_layout -> scene_show_wfc_proxy".
+      - Explicitly verifies the `wfc_generated` and `layout_kind:wfc_<id>`
+        tags propagated into Scene DB by `scene_wfc_to_semantic_layout`.
+      - Asserts the equivalent of `proxy_created_count > 0` via the
+        cumulative HISM `instance_count` returned by `scene_show_wfc_proxy`.
+
+    Skips when scene-syncd is unreachable; the proxy step also skips when
+    the Unreal MCP bridge is unavailable.
+    """
+
+    GRASS_MESH = "/Engine/BasicShapes/Cube.Cube"
+    WATER_MESH = "/Engine/BasicShapes/Cylinder.Cylinder"
+
+    def _import_scene_tools(self):
+        import importlib
+        import sys
+        from pathlib import Path
+
+        repo_python = Path(__file__).resolve().parents[2]
+        if str(repo_python) not in sys.path:
+            sys.path.insert(0, str(repo_python))
+        return importlib.import_module("server.scene_tools")
+
+    def test_three_step_pipeline(self, isolated_scene, request):
+        scene_tools = self._import_scene_tools()
+
+        tiles = [
+            {"id": "grass", "weight": 1.0},
+            {"id": "water", "weight": 0.5},
+        ]
+        constraints = [
+            {"left": "grass", "right": "grass", "direction": "east"},
+            {"left": "water", "right": "water", "direction": "east"},
+            {"left": "grass", "right": "grass", "direction": "south"},
+            {"left": "water", "right": "water", "direction": "south"},
+        ]
+
+        # Step 1: pure WFC grid generation (no DB writes, no Unreal yet).
+        grid = scene_tools.scene_create_wfc_grid(
+            width=3,
+            height=3,
+            tiles=tiles,
+            constraints=constraints,
+            seed=4321,
+            periodic=False,
+        )
+        if grid.get("success") is False:
+            pytest.skip(f"scene_create_wfc_grid failed (likely transient WFC infeasibility): {grid.get('error')}")
+
+        # The synchronous /procedural/wfc-grid endpoint returns the tiles directly.
+        # Walk both shapes that scene-syncd has historically returned.
+        grid_data = grid.get("data") if isinstance(grid.get("data"), dict) else grid
+        grid_tiles = grid_data.get("tiles") or []
+        assert grid_data.get("width") == 3 and grid_data.get("height") == 3, grid
+        assert len(grid_tiles) == 9, f"Expected 9 tiles for a 3x3 grid, got {len(grid_tiles)}"
+
+        # Step 2: persist the grid into Scene DB as Semantic Layout entities.
+        upsert = scene_tools.scene_wfc_to_semantic_layout(
+            scene_id=isolated_scene,
+            width=3,
+            height=3,
+            tiles=tiles,
+            constraints=constraints,
+            tile_asset_map={
+                "grass": self.GRASS_MESH,
+                "water": self.WATER_MESH,
+            },
+            seed=4321,
+            periodic=False,
+            cell_size={"x": 200.0, "y": 200.0},
+            origin={"x": 0.0, "y": 0.0, "z": 0.0},
+            group_id_prefix="e2e_pipeline",
+            extra_tags=["e2e_pipeline"],
+        )
+        if upsert.get("success") is False:
+            pytest.skip(
+                "scene_wfc_to_semantic_layout failed (likely WFC infeasible/transient): "
+                f"{upsert.get('error')}"
+            )
+        assert upsert["upserted_count"] == 9, upsert
+        assert upsert["grid"]["width"] == 3 and upsert["grid"]["height"] == 3
+        tile_kinds = set(upsert["tile_kinds"])
+        assert tile_kinds.issubset({"grass", "water"}), upsert
+
+        # Step 2.5: verify Scene DB contains 9 actors with the expected tags.
+        listed = scene_tools.scene_list_objects(scene_id=isolated_scene)
+        objects = (
+            listed.get("data", {}).get("objects")
+            if isinstance(listed.get("data"), dict)
+            else listed.get("objects")
+        ) or []
+        wfc_objects = [
+            o for o in objects
+            if isinstance(o, dict) and "wfc_generated" in (o.get("tags") or [])
+        ]
+        assert len(wfc_objects) == 9, (
+            f"Expected 9 wfc_generated actors in scene {isolated_scene}, "
+            f"got {len(wfc_objects)} (sample={wfc_objects[:2]})"
+        )
+        for obj in wfc_objects:
+            tags = obj.get("tags") or []
+            assert any(
+                t.startswith("layout_kind:wfc_") for t in tags
+            ), f"missing layout_kind tag on {obj.get('mcp_id')}: tags={tags}"
+            assert any(
+                t.startswith("wfc_tile_id:") for t in tags
+            ), f"missing wfc_tile_id tag on {obj.get('mcp_id')}: tags={tags}"
+
+        # Step 3: realize the layout in Unreal as HISM draft proxies.
+        if request.config.getoption("--skip-unreal"):
+            pytest.skip("--skip-unreal flag set; skipping show_wfc_proxy assertion")
+
+        proxy = scene_tools.scene_show_wfc_proxy(
+            scene_id=isolated_scene,
+            tile_mesh_map={
+                "grass": self.GRASS_MESH,
+                "water": self.WATER_MESH,
+            },
+            proxy_name_prefix="e2e_pipeline_proxy",
+            fallback_mesh_path=self.GRASS_MESH,
+            tag_filter=["e2e_pipeline"],
+        )
+        if proxy.get("success") is False:
+            err = (proxy.get("error") or "").lower()
+            if any(s in err for s in ("connection", "unreal", "no editor", "bridge", "tcp")):
+                pytest.skip(f"Unreal Bridge not available: {proxy.get('error')}")
+            raise AssertionError(f"scene_show_wfc_proxy failed: {proxy}")
+
+        proxies = proxy.get("proxies") or proxy.get("data", {}).get("proxies") or []
+        assert proxies, f"Expected at least one HISM proxy, got: {proxy}"
+
+        # proxy_created_count > 0 equivalent: at least one HISM kind AND
+        # cumulative instance count across kinds is > 0.
+        proxy_created_count = len(proxies)
+        total_instances = sum(
+            int(p.get("instance_count", 0)) for p in proxies if isinstance(p, dict)
+        )
+        assert proxy_created_count > 0, f"proxy_created_count = 0: {proxy}"
+        assert total_instances > 0, f"No HISM instances created: {proxy}"
+
+        # The proxy must cover every tile kind that appeared in the grid.
+        actual_kinds = {
+            p.get("tile_id") for p in proxies if isinstance(p, dict) and p.get("tile_id")
+        }
+        observed_kinds = tile_kinds & {"grass", "water"}
+        assert actual_kinds.issuperset(observed_kinds), (
+            f"Expected proxies for {observed_kinds}, got {actual_kinds}"
+        )

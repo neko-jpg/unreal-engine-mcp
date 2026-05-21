@@ -40,7 +40,7 @@ impl ValidationRule for WallSpanValid {
                 );
                 continue;
             }
-            let (length, thickness) = if sx >= sy { (sx, sy) } else { (sy, sx) };
+            let (_length, thickness) = if sx >= sy { (sx, sy) } else { (sy, sx) };
             if thickness < MIN_WALL_THICKNESS {
                 results.push(
                     Diagnostic::warning(

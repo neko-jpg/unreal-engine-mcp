@@ -21,7 +21,7 @@ pub struct CompileResult {
     pub render_plan: Option<crate::ir::render_plan::RenderPlan>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CompileSummary {
     pub errors: usize,
     pub warnings: usize,
@@ -31,17 +31,4 @@ pub struct CompileSummary {
     pub instance_sets: usize,
     #[serde(default)]
     pub world_cells: usize,
-}
-
-impl Default for CompileSummary {
-    fn default() -> Self {
-        Self {
-            errors: 0,
-            warnings: 0,
-            infos: 0,
-            objects: 0,
-            instance_sets: 0,
-            world_cells: 0,
-        }
-    }
 }

@@ -19,7 +19,10 @@ dev = [
   "pytest>=8.0",
   "pytest-mock>=3.14",
   "pytest-cov>=5.0",
-  "pytest-asyncio>=0.23"
+  "pytest-asyncio>=0.23",
+  "mypy>=1.10",
+  "types-PyYAML",
+  "types-requests",
 ]
 
 [build-system]
@@ -57,6 +60,24 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError"
 ]
+
+[tool.mypy]
+# Light-touch mypy configuration for the server package.
+# The codebase is heavily duck-typed against MCP/FastMCP, so strict mode is
+# intentionally not enabled yet; this configuration catches concrete bugs.
+python_version = "3.10"
+files = ["server", "helpers"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+follow_imports = "silent"
+no_implicit_optional = true
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+ignore_errors = true
 
 [dependency-groups]
 dev = [

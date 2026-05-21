@@ -45,7 +45,7 @@ impl Serialize for ProceduralMeshHeader {
         s.serialize_field("reserved", &self.reserved)?;
         s.serialize_field("request_id", &self.request_id)?;
         let mcp_str = std::ffi::CStr::from_bytes_until_nul(&self.mcp_id)
-            .unwrap_or(std::ffi::CStr::from_bytes_with_nul(b"\0").unwrap())
+            .unwrap_or(c"")
             .to_str()
             .unwrap_or("")
             .to_string();

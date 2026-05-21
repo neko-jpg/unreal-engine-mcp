@@ -64,6 +64,10 @@ pub struct ProgressTracker {
     /// Optional explicit fraction in [0,1] times 1_000_000 (for sub-step granularity).
     /// Set to u64::MAX when unset.
     fraction_micro: std::sync::atomic::AtomicU64,
+    /// Optional human-readable progress message (e.g. "collapsed 13/64 cells",
+    /// "iteration 4/10"). Generators should throttle writes to avoid lock
+    /// contention; the job-registry watchdog snapshots this every 200ms.
+    message: std::sync::Mutex<Option<String>>,
 }
 
 impl ProgressTracker {
@@ -72,23 +76,45 @@ impl ProgressTracker {
             current: std::sync::atomic::AtomicU64::new(0),
             total: std::sync::atomic::AtomicU64::new(0),
             fraction_micro: std::sync::atomic::AtomicU64::new(u64::MAX),
+            message: std::sync::Mutex::new(None),
         }
     }
 
     pub fn set(&self, current: u64, total: u64) {
-        self.current.store(current, std::sync::atomic::Ordering::Relaxed);
-        self.total.store(total, std::sync::atomic::Ordering::Relaxed);
+        self.current
+            .store(current, std::sync::atomic::Ordering::Relaxed);
+        self.total
+            .store(total, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn set_fraction(&self, fraction: f32) {
         let clamped = fraction.clamp(0.0, 1.0);
         let micro = (clamped * 1_000_000.0) as u64;
-        self.fraction_micro.store(micro, std::sync::atomic::Ordering::Relaxed);
+        self.fraction_micro
+            .store(micro, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Replace the human-readable progress message.
+    /// Call this from generator hot loops AT MOST every few hundred ms to
+    /// avoid lock contention - typically when a meaningful step boundary is
+    /// crossed (e.g. WFC collapsed-count high-water mark advances, L-System
+    /// iteration completes).
+    pub fn set_message(&self, msg: impl Into<String>) {
+        if let Ok(mut guard) = self.message.lock() {
+            *guard = Some(msg.into());
+        }
+    }
+
+    /// Snapshot the current human-readable message, if any.
+    pub fn read_message(&self) -> Option<String> {
+        self.message.lock().ok().and_then(|g| g.clone())
     }
 
     /// Returns a fraction in [0,1] if any progress is known, otherwise None.
     pub fn read(&self) -> Option<f32> {
-        let micro = self.fraction_micro.load(std::sync::atomic::Ordering::Relaxed);
+        let micro = self
+            .fraction_micro
+            .load(std::sync::atomic::Ordering::Relaxed);
         if micro != u64::MAX {
             return Some((micro as f32 / 1_000_000.0).clamp(0.0, 1.0));
         }
@@ -247,6 +273,11 @@ pub enum ProceduralError {
 ///
 /// The framework uses this to dispatch the correct Unreal C++ command
 /// or Scene DB persistence path.
+///
+/// `large_enum_variant` is allowed because the Mesh variant intentionally
+/// owns a `ProceduralMeshPayload` to avoid heap copies of the vertex /
+/// index buffers between generator output and the Unreal TCP send.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "variant")]
 pub enum ProceduralResultVariant {
@@ -404,20 +435,26 @@ mod tests {
 
     #[test]
     fn test_generate_context_check_timeout() {
-        let ctx = GenerateContext::new(None, Some(GenerationLimits {
-            max_execution_ms: 0,
-            ..Default::default()
-        }));
+        let ctx = GenerateContext::new(
+            None,
+            Some(GenerationLimits {
+                max_execution_ms: 0,
+                ..Default::default()
+            }),
+        );
         // Should immediately exceed 0ms limit
         assert!(ctx.check_timeout().is_err());
     }
 
     #[test]
     fn test_generate_context_no_timeout() {
-        let ctx = GenerateContext::new(None, Some(GenerationLimits {
-            max_execution_ms: 1_000_000,
-            ..Default::default()
-        }));
+        let ctx = GenerateContext::new(
+            None,
+            Some(GenerationLimits {
+                max_execution_ms: 1_000_000,
+                ..Default::default()
+            }),
+        );
         assert!(ctx.check_timeout().is_ok());
     }
 

@@ -1,0 +1,21 @@
+name: cargo-deny
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --version ^0.18
+      - name: Run cargo-deny
+        run: cargo deny --all-features check
+
+

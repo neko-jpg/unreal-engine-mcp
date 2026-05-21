@@ -10,6 +10,12 @@ pub struct SourceMap {
     pub part_to_entity: HashMap<String, String>,
 }
 
+impl Default for SourceMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SourceMap {
     pub fn new() -> Self {
         Self {

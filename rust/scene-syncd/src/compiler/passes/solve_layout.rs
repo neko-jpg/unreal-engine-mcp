@@ -3,7 +3,7 @@ use crate::compiler::passes::Pass;
 use crate::error::AppError;
 use crate::layout::constraint::{evaluate_hard_constraints, evaluate_soft_score};
 use crate::layout::constraint_extract::extract_constraints;
-use crate::validation::diagnostic::{Diagnostic, Severity};
+use crate::validation::diagnostic::Diagnostic;
 
 /// Constraint Solve Pass (Phase 5).
 /// Extracts constraints from context, evaluates hard constraints (emitting Error
@@ -48,6 +48,7 @@ impl Pass for ConstraintSolvePass {
 mod tests {
     use super::*;
     use crate::domain::{Rotator, SceneObject, Transform, Vec3};
+    use crate::validation::diagnostic::Severity;
     use serde_json::json;
 
     fn make_obj(mcp_id: &str, kind: &str) -> SceneObject {

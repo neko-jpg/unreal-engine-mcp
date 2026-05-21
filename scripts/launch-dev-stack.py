@@ -28,7 +28,18 @@ from typing import List, Optional
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_ROOT = REPO_ROOT / "Python"
 RUST_ROOT = REPO_ROOT / "rust" / "scene-syncd"
-UPROJECT_PATH = REPO_ROOT / "FlopperamUnrealMCP" / "FlopperamUnrealMCP.uproject"
+# Prefer the launcher-installed UE 5.7 project (EngineAssociation="5.7"). The
+# source-built variant at FlopperamUnrealMCP/ requires a from-source engine.
+# Override via UNREAL_MCP_UPROJECT env var to use a different .uproject.
+_UPROJECT_57 = REPO_ROOT / "FlopperamUnrealMCP 5.7" / "FlopperamUnrealMCP.uproject"
+_UPROJECT_SRC = REPO_ROOT / "FlopperamUnrealMCP" / "FlopperamUnrealMCP.uproject"
+_UPROJECT_OVERRIDE = os.getenv("UNREAL_MCP_UPROJECT")
+if _UPROJECT_OVERRIDE:
+    UPROJECT_PATH = Path(_UPROJECT_OVERRIDE)
+elif _UPROJECT_57.exists():
+    UPROJECT_PATH = _UPROJECT_57
+else:
+    UPROJECT_PATH = _UPROJECT_SRC
 
 DEFAULT_SURREAL_BIND = "127.0.0.1:8000"
 DEFAULT_SCENE_SYNCD_URL = "http://127.0.0.1:8787"

@@ -118,10 +118,14 @@ impl Generator for LSystemGenerator {
 
         // Initial bookkeeping for progress: derive=0..0.7, interpret=0.7..1.0
         ctx.progress.set_fraction(0.0);
+        ctx.progress.set_message("L-System: deriving symbol string");
         let derived = derive_with_progress(params, effective_iterations, &ctx.progress);
         ctx.progress.set_fraction(0.7);
+        ctx.progress
+            .set_message("L-System: interpreting turtle segments");
         let segments = interpret(&derived, params);
         ctx.progress.set_fraction(1.0);
+        ctx.progress.set_message("L-System: finalizing output");
 
         if segments.is_empty() {
             return Err(ProceduralError::EmptyResult);
@@ -218,11 +222,16 @@ fn derive_with_progress(
         if iterations > 0 {
             let frac = ((i + 1) as f32 / iterations as f32) * 0.7;
             progress.set_fraction(frac);
+            progress.set_message(format!(
+                "L-System: iteration {}/{} (string len {})",
+                i + 1,
+                iterations,
+                current.len()
+            ));
         }
     }
     current
 }
-
 
 /// Turtle state for 3D L-System interpretation.
 #[derive(Debug, Clone)]

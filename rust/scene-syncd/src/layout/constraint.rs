@@ -69,7 +69,7 @@ pub fn evaluate_hard_constraints(
         .map(|fp| (fp.mcp_id.as_str(), fp))
         .collect();
 
-    let object_by_id: std::collections::HashMap<&str, &SceneObject> =
+    let _object_by_id: std::collections::HashMap<&str, &SceneObject> =
         objects.iter().map(|o| (o.mcp_id.as_str(), o)).collect();
 
     for c in constraints {

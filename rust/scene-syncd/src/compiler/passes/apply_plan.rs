@@ -1,7 +1,6 @@
 use crate::compiler::context::CompilerContext;
 use crate::compiler::passes::Pass;
 use crate::error::AppError;
-use crate::ir::world_cell::WorldCell;
 use crate::sync::cell_aware::split_by_cell_availability;
 use crate::sync::{SyncPlan, SyncPlanSummary};
 

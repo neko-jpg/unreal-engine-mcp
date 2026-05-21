@@ -1,0 +1,22 @@
+name: Route contract audit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run route contract audit (strict)
+        run: python scripts/audit_route_contracts.py --strict --output artifacts/route_contracts.csv
+      - name: Upload route contract CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route_contracts
+          path: artifacts/route_contracts.csv

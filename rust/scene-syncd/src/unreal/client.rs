@@ -109,6 +109,7 @@ impl UnrealClient {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn clone_actor(
         &self,
         source_actor_name: &str,
@@ -421,6 +422,7 @@ impl UnrealClient {
         Ok(normalize_response(response))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_procedural_mesh(
         &self,
         mcp_id: &str,
