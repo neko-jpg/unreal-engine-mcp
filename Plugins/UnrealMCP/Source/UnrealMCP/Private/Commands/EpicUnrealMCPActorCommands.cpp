@@ -95,6 +95,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleCommand(const FString
         {TEXT("set_actor_net_dormancy"),         &FEpicUnrealMCPActorCommands::HandleSetActorNetDormancy},        // W1-E
         {TEXT("set_actor_net_cull_distance"),    &FEpicUnrealMCPActorCommands::HandleSetActorNetCullDistance},    // W1-E
         {TEXT("set_actor_owner_only_relevant"),  &FEpicUnrealMCPActorCommands::HandleSetActorOwnerOnlyRelevant},  // W1-E
+        {TEXT("set_component_replicates"),       &FEpicUnrealMCPActorCommands::HandleSetComponentReplicates},      // W1-H
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -1467,5 +1468,65 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorOwnerOnlyRele
     Result->SetBoolField(TEXT("success"), true);
     Result->SetStringField(TEXT("actor_name"), ActorName);
     Result->SetBoolField(TEXT("owner_only"), Actor->bOnlyRelevantToOwner);
+    return Result;
+}
+
+// W1-H_COMP_REPLICATES_BEGIN
+// W1-H Component Replicates (UE 5.7)
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetComponentReplicates(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    FString ComponentName;
+    if (!Params->TryGetStringField(TEXT("component_name"), ComponentName) || ComponentName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'component_name' parameter (component instance name or class name)"));
+    bool bReplicates = true;
+    Params->TryGetBoolField(TEXT("replicates"), bReplicates);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+
+    AActor* Actor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName() == ActorName || It->GetActorLabel() == ActorName)
+        {
+            Actor = *It;
+            break;
+        }
+    }
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    // Match component by instance name, then by class name (FName).
+    UActorComponent* TargetComponent = nullptr;
+    TArray<UActorComponent*> Components;
+    Actor->GetComponents(Components);
+    for (UActorComponent* Comp : Components)
+    {
+        if (!Comp) continue;
+        if (Comp->GetName() == ComponentName || Comp->GetClass()->GetName() == ComponentName)
+        {
+            TargetComponent = Comp;
+            break;
+        }
+    }
+    if (!TargetComponent)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Component not found on '%s': %s"), *ActorName, *ComponentName));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Component Replicates")));
+    TargetComponent->Modify();
+    TargetComponent->SetIsReplicated(bReplicates);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("component_name"), TargetComponent->GetName());
+    Result->SetStringField(TEXT("component_class"), TargetComponent->GetClass()->GetName());
+    Result->SetBoolField(TEXT("replicates"), TargetComponent->GetIsReplicated());
     return Result;
 }

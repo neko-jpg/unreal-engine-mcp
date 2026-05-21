@@ -22,4 +22,6 @@ private:
     TSharedPtr<FJsonObject> HandleCreateSoundMix(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSpawnAmbientSound(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleCreateSoundSubmix(const TSharedPtr<FJsonObject>& Params);  // W1-C
+    TSharedPtr<FJsonObject> HandleSpawnAudioVolume(const TSharedPtr<FJsonObject>& Params);   // W1-H
+    TSharedPtr<FJsonObject> HandleCreateDialogueWave(const TSharedPtr<FJsonObject>& Params); // W1-H
 };

@@ -36,6 +36,8 @@
 #include "Misc/App.h"
 #include "AssetRegistry/AssetData.h"
 #include "ProfilingDebugging/TraceAuxiliary.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
 
 FEpicUnrealMCPValidationCommands::FEpicUnrealMCPValidationCommands()
 {
@@ -62,6 +64,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleCommand(const FS
         {TEXT("start_unreal_insights_trace"), &FEpicUnrealMCPValidationCommands::HandleStartUnrealInsightsTrace},  // W1-B
         {TEXT("stop_unreal_insights_trace"), &FEpicUnrealMCPValidationCommands::HandleStopUnrealInsightsTrace},  // W1-B
         {TEXT("validate_assets"), &FEpicUnrealMCPValidationCommands::HandleValidateAssets},  // W1-B
+        {TEXT("get_source_control_status"), &FEpicUnrealMCPValidationCommands::HandleGetSourceControlStatus},  // W1-H
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -426,5 +429,39 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleValidateAssets(c
     Result->SetNumberField(TEXT("num_skipped"), VResults.NumSkipped);
     Result->SetNumberField(TEXT("num_warnings"), VResults.NumWarnings);
     Result->SetNumberField(TEXT("num_unable_to_validate"), VResults.NumUnableToValidate);
+    return Result;
+}
+
+// W1-H_SCC_BEGIN
+// W1-H Source Control status query (UE 5.7)
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleGetSourceControlStatus(const TSharedPtr<FJsonObject>& Params)
+{
+    ISourceControlModule& SCC = ISourceControlModule::Get();
+    const bool bEnabled = SCC.IsEnabled();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetBoolField(TEXT("enabled"), bEnabled);
+
+    if (bEnabled)
+    {
+        ISourceControlProvider& Provider = SCC.GetProvider();
+        Result->SetStringField(TEXT("provider_name"), Provider.GetName().ToString());
+        Result->SetStringField(TEXT("status_text"), Provider.GetStatusText().ToString());
+        Result->SetBoolField(TEXT("available"), Provider.IsAvailable());
+    }
+    else
+    {
+        // Even when disabled, list the available providers so callers know
+        // what to SetProvider() with.
+        TArray<FName> ProviderNames;
+        SCC.GetProviderNames(ProviderNames);
+        TArray<TSharedPtr<FJsonValue>> ProvidersJson;
+        for (const FName& Name : ProviderNames)
+        {
+            ProvidersJson.Add(MakeShared<FJsonValueString>(Name.ToString()));
+        }
+        Result->SetArrayField(TEXT("available_providers"), ProvidersJson);
+    }
     return Result;
 }

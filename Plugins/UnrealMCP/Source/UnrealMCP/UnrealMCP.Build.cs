@@ -111,7 +111,8 @@ public class UnrealMCP : ModuleRules
 					"EditorWidgets",        // For editor widget utilities
 					"ApplicationCore",      // For SlateApplication window management
 					"WorkspaceMenuStructure", // For editor workspace access
-					"DataLayerEditor"      // For UE5.7 Data Layer editor operations
+					"DataLayerEditor",     // For UE5.7 Data Layer editor operations
+                    "SourceControl"        // W1-H: ISourceControlModule for status queries
 				}
 			);
 		}

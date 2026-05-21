@@ -20,6 +20,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("set_actor_net_dormancy"), 1},        // W1-E
         {TEXT("set_actor_net_cull_distance"), 1},   // W1-E
         {TEXT("set_actor_owner_only_relevant"), 1}, // W1-E
+        {TEXT("set_component_replicates"), 1},      // W1-H
         {TEXT("create_nav_mesh_volume"), 20},
         {TEXT("create_patrol_route"), 20},
         {TEXT("create_spline_from_points"), 20},
@@ -52,6 +53,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("start_unreal_insights_trace"), 23},  // W1-B
         {TEXT("stop_unreal_insights_trace"), 23},  // W1-B
         {TEXT("validate_assets"), 23},  // W1-B
+        {TEXT("get_source_control_status"), 23},  // W1-H
         {TEXT("create_draft_proxy"), 24},
         {TEXT("update_draft_proxy"), 24},
         {TEXT("delete_draft_proxy"), 24},
@@ -456,6 +458,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_sound_mix"), 15},
         {TEXT("spawn_ambient_sound"), 15},
         {TEXT("create_sound_submix"), 15},  // W1-C
+        {TEXT("spawn_audio_volume"), 15},   // W1-H
+        {TEXT("create_dialogue_wave"), 15}, // W1-H
 
         // Sequencer Commands (16)
         {TEXT("create_level_sequence"), 16},

@@ -30,4 +30,5 @@ private:
     TSharedPtr<FJsonObject> HandleStartUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleStopUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleValidateAssets(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleGetSourceControlStatus(const TSharedPtr<FJsonObject>& Params); // W1-H
 };

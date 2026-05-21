@@ -473,3 +473,40 @@ def set_actor_owner_only_relevant(actor_name: str, owner_only: bool = True) -> D
     except Exception as exc:
         logger.error(f"set_actor_owner_only_relevant error: {exc}")
         return make_error_response(str(exc))
+
+# W1-H Component Replicates (UE 5.7)
+
+
+@mcp.tool()
+def set_component_replicates(
+    actor_name: str,
+    component_name: str,
+    replicates: bool = True,
+) -> Dict[str, Any]:
+    """Toggle UActorComponent::SetIsReplicated on a component owned by an actor.
+
+    actor_name: Editor-world actor name or label
+    component_name: Component instance name (e.g. "StaticMeshComponent0") or
+                    class name (e.g. "StaticMeshComponent"). First match wins.
+    replicates: True (default) to enable component replication
+    """
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    if not isinstance(component_name, str) or not component_name:
+        return make_error_response("component_name must be a non-empty string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_component_replicates",
+            {
+                "actor_name": actor_name,
+                "component_name": component_name,
+                "replicates": replicates,
+            },
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_component_replicates error: {exc}")
+        return make_error_response(str(exc))

@@ -86,6 +86,8 @@ private:
     TSharedPtr<FJsonObject> HandleSetActorNetDormancy(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetActorNetCullDistance(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetActorOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-H Component Replicates --
+    TSharedPtr<FJsonObject> HandleSetComponentReplicates(const TSharedPtr<FJsonObject>& Params);
 
     // Template clone (fast duplication of identical-mesh actors)
     TSharedPtr<FJsonObject> HandleCloneActor(const TSharedPtr<FJsonObject>& Params);

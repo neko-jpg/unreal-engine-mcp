@@ -192,3 +192,82 @@ def validate_assets(content_path: str = "/Game", max_assets: int = 0) -> Dict[st
     except Exception as exc:
         logger.error(f"validate_assets error: {exc}")
         return make_error_response(str(exc))
+
+# W1-H Source Control status + Stat convenience wrappers (UE 5.7)
+
+
+@mcp.tool()
+def get_source_control_status() -> Dict[str, Any]:
+    """Query ISourceControlModule for the active provider, availability, and status text.
+
+    Returns a dict with `enabled`, and (when enabled) `provider_name`,
+    `status_text`, `available`. When disabled, returns `available_providers`
+    (list of provider names that can be activated via the Source Control UI).
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command("get_source_control_status", {})
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"get_source_control_status error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def get_fps() -> Dict[str, Any]:
+    """Return current editor FPS + delta seconds (UE 5.7).
+
+    Thin wrapper around `get_editor_stats` returning only the FPS-relevant fields.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command("get_editor_stats", {})
+        if not response:
+            return make_error_response("No response from Unreal")
+        return {
+            "success": response.get("success", True),
+            "fps": response.get("fps"),
+            "delta_seconds": response.get("delta_seconds"),
+        }
+    except Exception as exc:
+        logger.error(f"get_fps error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def get_stat_unit() -> Dict[str, Any]:
+    """Issue `stat unit` console command on the editor world (UE 5.7).
+
+    The stat overlay is rendered in the viewport; this returns confirmation.
+    Use `get_fps` for programmatic FPS sampling.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command("get_editor_stats", {"stat_command": "stat unit"})
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"get_stat_unit error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def get_stat_gpu() -> Dict[str, Any]:
+    """Issue `stat gpu` console command on the editor world (UE 5.7).
+
+    The stat overlay is rendered in the viewport; this returns confirmation.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command("get_editor_stats", {"stat_command": "stat gpu"})
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"get_stat_gpu error: {exc}")
+        return make_error_response(str(exc))

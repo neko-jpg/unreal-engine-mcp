@@ -1,7 +1,7 @@
 """Audio tools for the Unreal MCP server."""
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from server.core import mcp, get_unreal_connection
 from server.validation import validate_string, ValidationError, make_validation_error_response_from_exception
@@ -261,4 +261,76 @@ def create_sound_submix(
         return response or make_error_response("No response from Unreal")
     except Exception as exc:
         logger.error(f"create_sound_submix error: {exc}")
+        return make_error_response(str(exc))
+
+# W1-H AudioVolume + DialogueWave (UE 5.7)
+
+
+@mcp.tool()
+def spawn_audio_volume(
+    name: str,
+    location: Optional[List[float]] = None,
+    scale: Optional[List[float]] = None,
+    priority: float = 0.0,
+    enabled: bool = True,
+) -> Dict[str, Any]:
+    """Spawn an AAudioVolume in the editor world.
+
+    name: Unique actor name
+    location: [x, y, z] world location
+    scale: [x, y, z] relative scale (default 1,1,1)
+    priority: Overlap priority when multiple volumes overlap
+    enabled: Whether the volume is enabled at spawn time
+    """
+    try:
+        validate_string(name, "name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "name": name,
+        "priority": priority,
+        "enabled": enabled,
+    }
+    if location is not None:
+        payload["location"] = location
+    if scale is not None:
+        payload["scale"] = scale
+    try:
+        response = unreal.send_command("spawn_audio_volume", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"spawn_audio_volume error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_dialogue_wave(
+    asset_path: str,
+    spoken_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a UDialogueWave asset.
+
+    asset_path: /Game path for the new DialogueWave
+    spoken_text: Optional reference text for the dialogue line
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if spoken_text is not None and not isinstance(spoken_text, str):
+        return make_error_response("spoken_text must be a string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {"asset_path": asset_path}
+    if spoken_text:
+        payload["spoken_text"] = spoken_text
+    try:
+        response = unreal.send_command("create_dialogue_wave", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_dialogue_wave error: {exc}")
         return make_error_response(str(exc))

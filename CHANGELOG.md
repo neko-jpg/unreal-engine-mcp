@@ -4,6 +4,83 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batch H: Component Replicates + AudioVolume + DialogueWave + SourceControl + Stat wrappers
+
+Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+through 4 new C++ handlers + 4 Python convenience wrappers.
+
+### Added
+
+**Actor module (id 1, 1 item):**
+- `set_component_replicates` -- finds a `UActorComponent` on an actor by
+  instance or class name and calls `SetIsReplicated`. First match wins for
+  ambiguous names.
+
+**Audio module (id 15, 2 items):**
+- `spawn_audio_volume` -- spawns an `AAudioVolume` with optional priority,
+  enabled flag, and brush scale.
+- `create_dialogue_wave` -- creates a `UDialogueWave` asset with optional
+  `SpokenText` initial value.
+
+**Validation module (id 23, 1 item):**
+- `get_source_control_status` -- queries `ISourceControlModule` for the
+  active provider name, availability, status text. When SCC is disabled,
+  returns the list of `available_providers` that can be activated via the
+  Source Control UI.
+
+**Python convenience wrappers (3 items, reuse existing get_editor_stats):**
+- `get_fps` -- returns only `fps` + `delta_seconds` from `get_editor_stats`.
+- `get_stat_unit` -- routes to `get_editor_stats(stat_command="stat unit")`.
+- `get_stat_gpu` -- routes to `get_editor_stats(stat_command="stat gpu")`.
+
+**Trivial-flip task (1 item):**
+- `Sound Wave Import` -- already covered by the existing `import_audio` C++
+  handler (id 7, WAV/OGG factory pipeline). No new code, just task accounting.
+
+### Changed
+
+- `UnrealMCP.Build.cs`: added `SourceControl` to the Editor-only
+  `PrivateDependencyModuleNames` (required for `ISourceControlModule::Get()`).
+- Router (`EpicUnrealMCPRouter.cpp`): added 4 routes
+  (`set_component_replicates` -> id 1; `spawn_audio_volume` /
+  `create_dialogue_wave` -> id 15; `get_source_control_status` -> id 23).
+- `docs/superpowers/plans/tasks.md`: flipped 8 entries to `[x]`.
+- Sync'd canonical plugin to source-built project (8 files updated).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **763 passed** (was 749; +14
+  new W1-H tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 441` (was 437; +4 new C++ handlers wired 3-layer; the 3
+  stat wrappers all route to the pre-existing `get_editor_stats` command which
+  is already counted). No drift detected.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/Engine/Classes/Components/ActorComponent.h`
+    (`SetIsReplicated`, `GetIsReplicated`)
+  - `Runtime/Engine/Classes/Sound/AudioVolume.h`
+    (`SetPriority`, `SetEnabled`, `GetPriority`, `GetEnabled`)
+  - `Runtime/Engine/Classes/Sound/DialogueWave.h` (`SpokenText`)
+  - `Developer/SourceControl/Public/ISourceControlModule.h`
+    (`IsEnabled`, `GetProvider`, `GetProviderNames`)
+  - `Developer/SourceControl/Public/ISourceControlProvider.h`
+    (`GetName`, `GetStatusText`, `IsAvailable`)
+- `get_fps` deliberately filters out memory fields so callers can sample FPS
+  cheaply without serialising the large memory snapshot.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> 452 (D+E+F) -> 457 (G) -> **465** (H)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> 303 -> 298 -> **290**
+
+Total this branch: **63 items implemented + 13 router fixes** across
+8 sub-batches.
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batch G: Animation residue + EQS + Crowd Following
 
 Implements 5 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
