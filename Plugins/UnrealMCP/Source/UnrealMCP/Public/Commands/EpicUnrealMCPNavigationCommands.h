@@ -41,6 +41,13 @@ private:
     TSharedPtr<FJsonObject> HandleCreateBehaviorTree(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleCreateBlackboard(const TSharedPtr<FJsonObject>& Params);
 
+    // -- W1-D AI / Behavior Tree expansion (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleAddBlackboardKey(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleRemoveBlackboardKey(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddAIPerception(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleConfigureAISenseSight(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetRecastNavMeshAgent(const TSharedPtr<FJsonObject>& Params);
+
     // Spline
     TSharedPtr<FJsonObject> HandleCreateSplineFromPoints(const TSharedPtr<FJsonObject>& Params);
 };

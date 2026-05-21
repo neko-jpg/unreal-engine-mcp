@@ -90,6 +90,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleCommand(const FString
         {TEXT("delete_actor_by_mcp_id"),         &FEpicUnrealMCPActorCommands::HandleDeleteActorByMcpId},
         {TEXT("apply_scene_delta"),              &FEpicUnrealMCPActorCommands::HandleApplySceneDelta},
         {TEXT("clone_actor"),                    &FEpicUnrealMCPActorCommands::HandleCloneActor},
+        {TEXT("set_actor_replicates"),           &FEpicUnrealMCPActorCommands::HandleSetActorReplicates},          // W1-E
+        {TEXT("set_actor_replicate_movement"),   &FEpicUnrealMCPActorCommands::HandleSetActorReplicateMovement},  // W1-E
+        {TEXT("set_actor_net_dormancy"),         &FEpicUnrealMCPActorCommands::HandleSetActorNetDormancy},        // W1-E
+        {TEXT("set_actor_net_cull_distance"),    &FEpicUnrealMCPActorCommands::HandleSetActorNetCullDistance},    // W1-E
+        {TEXT("set_actor_owner_only_relevant"),  &FEpicUnrealMCPActorCommands::HandleSetActorOwnerOnlyRelevant},  // W1-E
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -1314,4 +1319,153 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleApplySceneDelta(const
     ResultObj->SetArrayField(TEXT("deleted"), DeletedActors);
     ResultObj->SetArrayField(TEXT("errors"), Errors);
     return ResultObj;
+}
+
+// W1-E_NETWORK_BEGIN
+// W1-E Networking minimal (UE 5.7)
+
+namespace
+{
+    static AActor* FindActorByNameOrLabel(UWorld* World, const FString& Name)
+    {
+        if (!World) return nullptr;
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetName() == Name || It->GetActorLabel() == Name)
+                return *It;
+        }
+        return nullptr;
+    }
+
+    static ENetDormancy ParseNetDormancy(const FString& Name)
+    {
+        if (Name.Equals(TEXT("Never"), ESearchCase::IgnoreCase)) return DORM_Never;
+        if (Name.Equals(TEXT("Awake"), ESearchCase::IgnoreCase)) return DORM_Awake;
+        if (Name.Equals(TEXT("DormantAll"), ESearchCase::IgnoreCase)) return DORM_DormantAll;
+        if (Name.Equals(TEXT("DormantPartial"), ESearchCase::IgnoreCase)) return DORM_DormantPartial;
+        if (Name.Equals(TEXT("Initial"), ESearchCase::IgnoreCase)) return DORM_Initial;
+        return DORM_MAX;
+    }
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorReplicates(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    bool bReplicates = true;
+    Params->TryGetBoolField(TEXT("replicates"), bReplicates);
+
+    AActor* Actor = FindActorByNameOrLabel(GetEditorWorld(), ActorName);
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Actor Replicates")));
+    Actor->Modify();
+    Actor->SetReplicates(bReplicates);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetBoolField(TEXT("replicates"), Actor->GetIsReplicated());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorReplicateMovement(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    bool bReplicateMovement = true;
+    Params->TryGetBoolField(TEXT("replicate_movement"), bReplicateMovement);
+
+    AActor* Actor = FindActorByNameOrLabel(GetEditorWorld(), ActorName);
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Replicate Movement")));
+    Actor->Modify();
+    Actor->SetReplicateMovement(bReplicateMovement);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetBoolField(TEXT("replicate_movement"), Actor->IsReplicatingMovement());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorNetDormancy(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName, Dormancy;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    if (!Params->TryGetStringField(TEXT("dormancy"), Dormancy) || Dormancy.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'dormancy' parameter (Never/Awake/DormantAll/DormantPartial/Initial)"));
+
+    AActor* Actor = FindActorByNameOrLabel(GetEditorWorld(), ActorName);
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    ENetDormancy NewDormancy = ParseNetDormancy(Dormancy);
+    if (NewDormancy == DORM_MAX)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Unknown dormancy: %s"), *Dormancy));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Net Dormancy")));
+    Actor->Modify();
+    Actor->SetNetDormancy(NewDormancy);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("dormancy"), Dormancy);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorNetCullDistance(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    double Distance = -1.0;
+    if (!Params->TryGetNumberField(TEXT("distance"), Distance) || Distance < 0.0)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or negative 'distance' parameter (cm)"));
+
+    AActor* Actor = FindActorByNameOrLabel(GetEditorWorld(), ActorName);
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Net Cull Distance")));
+    Actor->Modify();
+    Actor->SetNetCullDistanceSquared(static_cast<float>(Distance * Distance));
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetNumberField(TEXT("distance"), Distance);
+    Result->SetNumberField(TEXT("distance_squared"), Distance * Distance);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPActorCommands::HandleSetActorOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    bool bOwnerOnly = true;
+    Params->TryGetBoolField(TEXT("owner_only"), bOwnerOnly);
+
+    AActor* Actor = FindActorByNameOrLabel(GetEditorWorld(), ActorName);
+    if (!Actor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Owner Only Relevant")));
+    Actor->Modify();
+    Actor->bOnlyRelevantToOwner = bOwnerOnly;
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetBoolField(TEXT("owner_only"), Actor->bOnlyRelevantToOwner);
+    return Result;
 }

@@ -4,6 +4,103 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batches D + E + F: AI / Networking / Skeletal Mesh + Animation assets
+
+Implements 13 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+in three thematically grouped sub-batches.
+
+### Added
+
+**Sub-batch D (AI / Behavior Tree expansion, Navigation module id 20, 5 items):**
+- `add_blackboard_key` -- `FBlackboardEntry` + `UBlackboardKeyType_{Bool,Int,
+  Float,String,Name,Vector,Rotator,Object,Class}` resolved by string
+- `remove_blackboard_key` -- `Keys.RemoveAll` by `EntryName`
+- `add_ai_perception` -- `UAIPerceptionComponent` `NewObject + RegisterComponent
+  + AddInstanceComponent` with `already_existed` short-circuit
+- `configure_ai_sense_sight` -- `UAISenseConfig_Sight` (`SightRadius`,
+  `LoseSightRadius`, `PeripheralVisionAngleDegrees`,
+  `AutoSuccessRangeFromLastSeenLocation`, `DetectionByAffiliation`) +
+  `ConfigureSense` + sets Sight as dominant when none configured
+- `set_recast_navmesh_agent` -- per-instance `ARecastNavMesh` agent radius /
+  height / max step / tile size / max simplification error. Avoids the UE 5.7
+  deprecated `CellSize`/`CellHeight` direct fields (they now live in
+  `NavMeshResolutionParams`).
+
+**Sub-batch E (Networking minimal, Actor module id 1, 5 items):**
+- `set_actor_replicates` -- `AActor::SetReplicates`
+- `set_actor_replicate_movement` -- `AActor::SetReplicateMovement`
+- `set_actor_net_dormancy` -- `AActor::SetNetDormancy` with string enum
+  (Never / Awake / DormantAll / DormantPartial / Initial)
+- `set_actor_net_cull_distance` -- writes `NetCullDistanceSquared` from a
+  human-friendly cm distance (`distance * distance`)
+- `set_actor_owner_only_relevant` -- `bOnlyRelevantToOwner` toggle
+
+**Sub-batch F (Asset Import / Animation, AssetImport id 7 + Blueprint id 2, 3 items):**
+- `import_skeletal_mesh_fbx` -- `UFbxImportUI.MeshTypeToImport=FBXIT_SkeletalMesh`
+  with optional `skeleton_path` to bind to an existing `USkeleton`, morph
+  target / material / texture toggles. Re-uses the existing
+  `CreateImportTask` / `ProcessImportTask` pipeline.
+- `create_anim_montage` -- `UAnimMontageFactory` + `IAssetTools::CreateAsset`
+  with optional `SourceAnimation` (UAnimSequence) seed.
+- `create_anim_composite` -- `UAnimCompositeFactory` with the same shape.
+
+Python FastMCP wrappers added to:
+- `server/ai_navigation_tools.py` (5 W1-D tools)
+- `server/actor_tools.py` (5 W1-E tools)
+- `server/asset_import_tools.py` (1 W1-F tool: `skeletal_mesh_fbx_import_tool`)
+- `server/blueprint_tools.py` (2 W1-F tools: `create_anim_montage`,
+  `create_anim_composite`)
+
+L1 unit tests:
+- `tests/unit/test_ai_tools_w1d.py` (15 tests)
+- `tests/unit/test_actor_tools_w1e.py` (10 tests)
+- `tests/unit/test_w1f_anim_skelmesh.py` (7 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 13 routes
+  (5 W1-D ids 20, 5 W1-E id 1, 1 W1-F id 7, 2 W1-F id 2).
+- `docs/superpowers/plans/tasks.md`: flipped 13 entries to `[x]` covering
+  Blackboard / AI Perception / Recast NavMesh agent / 5 networking items /
+  Skeletal Mesh / Animation Sequence / Animation Montage.
+- Sync'd canonical plugin to source-built project
+  (9 files updated, 107 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **736 passed** (was 704; +32 new
+  W1-D/E/F tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 432` (was 419; +13 new C++ handlers with Python wrappers),
+  `cpp_only: 16`, `rust_only: 53`, no drift.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/AIModule/Classes/BehaviorTree/BlackboardData.h` (FBlackboardEntry +
+    EntryName + KeyType + bInstanceSynced bitfield)
+  - `Runtime/AIModule/Classes/Perception/{AIPerceptionComponent,
+    AISenseConfig_Sight,AISense_Sight}.h`
+  - `Runtime/NavigationSystem/Public/NavMesh/RecastNavMesh.h`
+    (avoids deprecated `CellSize` / `CellHeight` direct fields)
+  - `Runtime/Engine/Classes/GameFramework/Actor.h`
+    (SetReplicates, SetReplicateMovement, SetNetDormancy,
+     NetCullDistanceSquared, bOnlyRelevantToOwner)
+  - `Editor/UnrealEd/Classes/Factories/{AnimMontageFactory,AnimCompositeFactory}.h`
+- Used a templated `CreateAnimAssetCommon<FactoryT, AssetT>` helper to share
+  the AnimMontage / AnimComposite asset-creation pipeline since both factories
+  expose `TargetSkeleton` + `SourceAnimation` with the same shape.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> **452** (D+E+F)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> **303**
+
+Total this branch: **50 items implemented + 13 router fixes** across
+6 sub-batches.
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batch C: AnimBP / BlendSpace / SoundSubmix + Material domain wrappers
 
 Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`.

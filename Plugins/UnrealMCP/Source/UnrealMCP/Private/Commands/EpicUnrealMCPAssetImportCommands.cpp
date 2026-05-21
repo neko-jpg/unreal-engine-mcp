@@ -112,6 +112,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAssetImportCommands::HandleCommand(
 		{TEXT("import_datasmith"), &FEpicUnrealMCPAssetImportCommands::HandleImportGeneric},
 		{TEXT("reimport_asset"), &FEpicUnrealMCPAssetImportCommands::HandleReimportAsset},
         {TEXT("import_animation_fbx"), &FEpicUnrealMCPAssetImportCommands::HandleImportAnimationFbx},
+        {TEXT("import_skeletal_mesh_fbx"), &FEpicUnrealMCPAssetImportCommands::HandleImportSkeletalMeshFbx},  // W1-F
 		{TEXT("save_import_preset"), &FEpicUnrealMCPAssetImportCommands::HandleSaveImportPreset},
 		{TEXT("load_import_preset"), &FEpicUnrealMCPAssetImportCommands::HandleLoadImportPreset},
 		{TEXT("export_asset"), &FEpicUnrealMCPAssetImportCommands::HandleExportAsset},
@@ -1803,5 +1804,114 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAssetImportCommands::HandleImportAnimation
     Result->SetStringField(TEXT("source_path"), SourcePath);
     Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
     Result->SetStringField(TEXT("destination_path"), DestinationPath + TEXT("/") + AssetName);
+    return Result;
+}
+
+// W1-F_SKELMESH_BEGIN
+// W1-F Skeletal Mesh FBX import (UE 5.7)
+TSharedPtr<FJsonObject> FEpicUnrealMCPAssetImportCommands::HandleImportSkeletalMeshFbx(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SourcePath;
+    if (!Params->TryGetStringField(TEXT("source_path"), SourcePath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("source_path is required"));
+    FString DestinationPath;
+    if (!Params->TryGetStringField(TEXT("destination_path"), DestinationPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("destination_path is required"));
+
+    FString Error;
+    if (!ValidateSourceFile(SourcePath, Error))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(Error);
+    if (!ValidateDestinationPath(DestinationPath, Error))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(Error);
+
+    FString AssetName;
+    if (!Params->TryGetStringField(TEXT("asset_name"), AssetName) || AssetName.IsEmpty())
+        AssetName = FPaths::GetBaseFilename(SourcePath);
+
+    UFbxFactory* Factory = NewObject<UFbxFactory>();
+    if (!Factory)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create FBX factory"));
+    Factory->AddToRoot();
+
+    UFbxImportUI* Options = NewObject<UFbxImportUI>(
+        GetTransientPackage(), UFbxImportUI::StaticClass(), NAME_None, RF_NoFlags,
+        GetMutableDefault<UFbxImportUI>());
+    if (!Options)
+    {
+        Factory->RemoveFromRoot();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UFbxImportUI"));
+    }
+    Options->AddToRoot();
+
+    Options->MeshTypeToImport = FBXIT_SkeletalMesh;
+    Options->bImportAsSkeletal = true;
+    Options->bImportMesh = true;
+    Options->bImportAnimations = false;
+
+    bool bImportMorphTargets = false;
+    Params->TryGetBoolField(TEXT("import_morph_targets"), bImportMorphTargets);
+    bool bImportMaterials = true;
+    Params->TryGetBoolField(TEXT("import_materials"), bImportMaterials);
+    bool bImportTextures = false;
+    Params->TryGetBoolField(TEXT("import_textures"), bImportTextures);
+    Options->bImportMaterials = bImportMaterials;
+    Options->bImportTextures = bImportTextures;
+
+    if (!Options->SkeletalMeshImportData)
+        Options->SkeletalMeshImportData = NewObject<UFbxSkeletalMeshImportData>(Options);
+    Options->SkeletalMeshImportData->bImportMorphTargets = bImportMorphTargets;
+
+    double Scale = 1.0;
+    if (Params->TryGetNumberField(TEXT("scale"), Scale))
+        Options->SkeletalMeshImportData->ImportUniformScale = static_cast<float>(Scale);
+
+    bool bConvertSceneUnit = false;
+    if (Params->TryGetBoolField(TEXT("convert_scene_unit"), bConvertSceneUnit))
+        Options->SkeletalMeshImportData->bConvertSceneUnit = bConvertSceneUnit;
+
+    // Optional skeleton override (re-use existing skeleton instead of creating new).
+    FString SkeletonPath;
+    if (Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath) && !SkeletonPath.IsEmpty())
+    {
+        USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+        if (!Skeleton)
+        {
+            Factory->RemoveFromRoot();
+            Options->RemoveFromRoot();
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+        }
+        Options->Skeleton = Skeleton;
+    }
+
+    UAssetImportTask* Task = CreateImportTask(SourcePath, DestinationPath, AssetName, Factory, Options);
+    if (!Task)
+    {
+        Factory->RemoveFromRoot();
+        Options->RemoveFromRoot();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create import task"));
+    }
+    TArray<UObject*> ImportedObjects = ProcessImportTask(Task, Error);
+    Factory->RemoveFromRoot();
+    Options->RemoveFromRoot();
+    if (ImportedObjects.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            Error.IsEmpty() ? TEXT("No skeletal mesh was imported") : Error);
+    MarkPackagesDirty(ImportedObjects);
+
+    TArray<TSharedPtr<FJsonValue>> ImportedAssets;
+    for (UObject* Obj : ImportedObjects)
+    {
+        if (Obj && IsValid(Obj))
+            ImportedAssets.Add(MakeShared<FJsonValueString>(Obj->GetPathName()));
+    }
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetArrayField(TEXT("imported_assets"), ImportedAssets);
+    Result->SetNumberField(TEXT("count"), ImportedAssets.Num());
+    Result->SetStringField(TEXT("source_path"), SourcePath);
+    Result->SetStringField(TEXT("destination_path"), DestinationPath + TEXT("/") + AssetName);
+    if (!SkeletonPath.IsEmpty())
+        Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
     return Result;
 }

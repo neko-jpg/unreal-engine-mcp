@@ -1004,3 +1004,73 @@ def create_blend_space(asset_path: str, skeleton_path: str) -> Dict[str, Any]:
     except Exception as exc:
         logger.error(f"create_blend_space error: {exc}")
         return make_error_response(str(exc))
+
+# W1-F Animation Montage / Composite (UE 5.7)
+
+
+@mcp.tool()
+def create_anim_montage(
+    asset_path: str,
+    skeleton_path: str,
+    source_anim_sequence_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a new UAnimMontage bound to a USkeleton.
+
+    asset_path: /Game path for the new AnimMontage
+    skeleton_path: /Game path to a USkeleton asset
+    source_anim_sequence_path: Optional /Game path to a UAnimSequence to seed the montage
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "asset_path": asset_path,
+        "skeleton_path": skeleton_path,
+    }
+    if source_anim_sequence_path:
+        payload["source_anim_sequence_path"] = source_anim_sequence_path
+    try:
+        response = unreal.send_command("create_anim_montage", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_anim_montage error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_anim_composite(
+    asset_path: str,
+    skeleton_path: str,
+    source_anim_sequence_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a new UAnimComposite bound to a USkeleton.
+
+    asset_path: /Game path for the new AnimComposite
+    skeleton_path: /Game path to a USkeleton asset
+    source_anim_sequence_path: Optional /Game path to a UAnimSequence to seed the composite
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "asset_path": asset_path,
+        "skeleton_path": skeleton_path,
+    }
+    if source_anim_sequence_path:
+        payload["source_anim_sequence_path"] = source_anim_sequence_path
+    try:
+        response = unreal.send_command("create_anim_composite", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_anim_composite error: {exc}")
+        return make_error_response(str(exc))

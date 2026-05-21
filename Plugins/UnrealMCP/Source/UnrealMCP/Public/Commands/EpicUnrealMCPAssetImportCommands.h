@@ -45,6 +45,9 @@ private:
 	// W1-1 Animation FBX (skeleton-required animation-only import)
 	TSharedPtr<FJsonObject> HandleImportAnimationFbx(const TSharedPtr<FJsonObject>& Params);
 
+	// W1-F Skeletal Mesh FBX import
+	TSharedPtr<FJsonObject> HandleImportSkeletalMeshFbx(const TSharedPtr<FJsonObject>& Params);
+
 	// Import Preset save/load
 	TSharedPtr<FJsonObject> HandleSaveImportPreset(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleLoadImportPreset(const TSharedPtr<FJsonObject>& Params);

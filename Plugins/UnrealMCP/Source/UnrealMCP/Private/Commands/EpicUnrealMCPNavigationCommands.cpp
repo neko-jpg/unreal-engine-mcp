@@ -42,6 +42,22 @@
 #include "Navigation/NavLinkProxy.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/Blackboard/BlackboardKey.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Int.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Float.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_String.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Name.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Vector.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Rotator.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Class.h"
+#include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISenseConfig_Sight.h"
+#include "Perception/AISense_Sight.h"
+#include "AIController.h"
+#include "NavMesh/RecastNavMesh.h"
 
 #include "EditorAssetLibrary.h"
 
@@ -82,6 +98,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleCommand(const FS
         {TEXT("set_ai_behavior"),            &FEpicUnrealMCPNavigationCommands::HandleSetAIBehavior},
         {TEXT("create_behavior_tree"),       &FEpicUnrealMCPNavigationCommands::HandleCreateBehaviorTree},
         {TEXT("create_blackboard"),          &FEpicUnrealMCPNavigationCommands::HandleCreateBlackboard},
+        {TEXT("add_blackboard_key"),         &FEpicUnrealMCPNavigationCommands::HandleAddBlackboardKey},     // W1-D
+        {TEXT("remove_blackboard_key"),      &FEpicUnrealMCPNavigationCommands::HandleRemoveBlackboardKey},  // W1-D
+        {TEXT("add_ai_perception"),          &FEpicUnrealMCPNavigationCommands::HandleAddAIPerception},      // W1-D
+        {TEXT("configure_ai_sense_sight"),   &FEpicUnrealMCPNavigationCommands::HandleConfigureAISenseSight},// W1-D
+        {TEXT("set_recast_navmesh_agent"),   &FEpicUnrealMCPNavigationCommands::HandleSetRecastNavMeshAgent},// W1-D
 
         // Spline
         {TEXT("create_spline_from_points"),  &FEpicUnrealMCPNavigationCommands::HandleCreateSplineFromPoints},
@@ -831,3 +852,290 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleCreateSplineFrom
     return ResultObj;
 }
 
+// W1-D_AI_BEGIN
+// W1-D AI / Behavior Tree expansion (UE 5.7)
+
+namespace
+{
+    static UClass* ResolveBlackboardKeyTypeClass(const FString& KeyType)
+    {
+        if (KeyType.Equals(TEXT("Bool"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Bool::StaticClass();
+        if (KeyType.Equals(TEXT("Int"), ESearchCase::IgnoreCase) || KeyType.Equals(TEXT("Integer"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Int::StaticClass();
+        if (KeyType.Equals(TEXT("Float"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Float::StaticClass();
+        if (KeyType.Equals(TEXT("String"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_String::StaticClass();
+        if (KeyType.Equals(TEXT("Name"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Name::StaticClass();
+        if (KeyType.Equals(TEXT("Vector"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Vector::StaticClass();
+        if (KeyType.Equals(TEXT("Rotator"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Rotator::StaticClass();
+        if (KeyType.Equals(TEXT("Object"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Object::StaticClass();
+        if (KeyType.Equals(TEXT("Class"), ESearchCase::IgnoreCase)) return UBlackboardKeyType_Class::StaticClass();
+        return nullptr;
+    }
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleAddBlackboardKey(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlackboardPath, KeyName, KeyType;
+    if (!Params->TryGetStringField(TEXT("blackboard_path"), BlackboardPath) || BlackboardPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blackboard_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("key_name"), KeyName) || KeyName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'key_name' parameter"));
+    if (!Params->TryGetStringField(TEXT("key_type"), KeyType) || KeyType.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'key_type' parameter (Bool/Int/Float/String/Name/Vector/Rotator/Object/Class)"));
+    bool bInstanceSynced = false;
+    Params->TryGetBoolField(TEXT("instance_synced"), bInstanceSynced);
+
+    UBlackboardData* Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+    if (!Blackboard)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+
+    UClass* KeyTypeClass = ResolveBlackboardKeyTypeClass(KeyType);
+    if (!KeyTypeClass)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Unknown blackboard key type: %s"), *KeyType));
+
+    // Reject duplicate names within this BB (parent chain not checked).
+    const FName KeyFName(*KeyName);
+    for (const FBlackboardEntry& Existing : Blackboard->Keys)
+    {
+        if (Existing.EntryName == KeyFName)
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Blackboard key already exists: %s"), *KeyName));
+        }
+    }
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Add Blackboard Key")));
+    Blackboard->Modify();
+
+    FBlackboardEntry Entry;
+    Entry.EntryName = KeyFName;
+    Entry.bInstanceSynced = bInstanceSynced ? 1 : 0;
+    Entry.KeyType = NewObject<UBlackboardKeyType>(Blackboard, KeyTypeClass);
+    Blackboard->Keys.Add(MoveTemp(Entry));
+    Blackboard->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("blackboard_path"), BlackboardPath);
+    Result->SetStringField(TEXT("key_name"), KeyName);
+    Result->SetStringField(TEXT("key_type"), KeyType);
+    Result->SetBoolField(TEXT("instance_synced"), bInstanceSynced);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleRemoveBlackboardKey(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlackboardPath, KeyName;
+    if (!Params->TryGetStringField(TEXT("blackboard_path"), BlackboardPath) || BlackboardPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blackboard_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("key_name"), KeyName) || KeyName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'key_name' parameter"));
+
+    UBlackboardData* Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+    if (!Blackboard)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Remove Blackboard Key")));
+    Blackboard->Modify();
+
+    const FName KeyFName(*KeyName);
+    const int32 Removed = Blackboard->Keys.RemoveAll([&KeyFName](const FBlackboardEntry& Entry)
+    {
+        return Entry.EntryName == KeyFName;
+    });
+
+    if (Removed == 0)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blackboard key not found: %s"), *KeyName));
+    }
+
+    Blackboard->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("blackboard_path"), BlackboardPath);
+    Result->SetStringField(TEXT("key_name"), KeyName);
+    Result->SetNumberField(TEXT("removed"), Removed);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleAddAIPerception(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter (AIController or owner actor)"));
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName() == ActorName || It->GetActorLabel() == ActorName)
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+    if (!TargetActor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    // Check for existing component
+    UAIPerceptionComponent* Existing = TargetActor->FindComponentByClass<UAIPerceptionComponent>();
+    if (Existing)
+    {
+        TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+        R->SetBoolField(TEXT("success"), true);
+        R->SetStringField(TEXT("actor_name"), ActorName);
+        R->SetBoolField(TEXT("already_existed"), true);
+        R->SetStringField(TEXT("component_name"), Existing->GetName());
+        return R;
+    }
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Add AI Perception")));
+    TargetActor->Modify();
+
+    UAIPerceptionComponent* Perception = NewObject<UAIPerceptionComponent>(TargetActor, UAIPerceptionComponent::StaticClass(), TEXT("AIPerception"));
+    if (!Perception)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UAIPerceptionComponent"));
+
+    Perception->RegisterComponent();
+    TargetActor->AddInstanceComponent(Perception);
+    TargetActor->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("component_name"), Perception->GetName());
+    Result->SetBoolField(TEXT("already_existed"), false);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleConfigureAISenseSight(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName() == ActorName || It->GetActorLabel() == ActorName)
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+    if (!TargetActor)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+
+    UAIPerceptionComponent* Perception = TargetActor->FindComponentByClass<UAIPerceptionComponent>();
+    if (!Perception)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            TEXT("Actor has no UAIPerceptionComponent. Call add_ai_perception first."));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Configure AI Sight")));
+    Perception->Modify();
+
+    UAISenseConfig_Sight* SightConfig = NewObject<UAISenseConfig_Sight>(Perception);
+    double SightRadius = -1.0;
+    double LoseSightRadius = -1.0;
+    double PeripheralVisionAngle = -1.0;
+    double AutoSuccessRangeFromLastSeen = -1.0;
+    Params->TryGetNumberField(TEXT("sight_radius"), SightRadius);
+    Params->TryGetNumberField(TEXT("lose_sight_radius"), LoseSightRadius);
+    Params->TryGetNumberField(TEXT("peripheral_vision_angle_degrees"), PeripheralVisionAngle);
+    Params->TryGetNumberField(TEXT("auto_success_range_from_last_seen"), AutoSuccessRangeFromLastSeen);
+
+    if (SightRadius >= 0.0) SightConfig->SightRadius = static_cast<float>(SightRadius);
+    if (LoseSightRadius >= 0.0) SightConfig->LoseSightRadius = static_cast<float>(LoseSightRadius);
+    if (PeripheralVisionAngle >= 0.0) SightConfig->PeripheralVisionAngleDegrees = static_cast<float>(PeripheralVisionAngle);
+    if (AutoSuccessRangeFromLastSeen >= 0.0) SightConfig->AutoSuccessRangeFromLastSeenLocation = static_cast<float>(AutoSuccessRangeFromLastSeen);
+
+    bool bDetectNeutrals = true, bDetectFriendlies = true, bDetectEnemies = true;
+    Params->TryGetBoolField(TEXT("detect_neutrals"), bDetectNeutrals);
+    Params->TryGetBoolField(TEXT("detect_friendlies"), bDetectFriendlies);
+    Params->TryGetBoolField(TEXT("detect_enemies"), bDetectEnemies);
+    SightConfig->DetectionByAffiliation.bDetectNeutrals = bDetectNeutrals;
+    SightConfig->DetectionByAffiliation.bDetectFriendlies = bDetectFriendlies;
+    SightConfig->DetectionByAffiliation.bDetectEnemies = bDetectEnemies;
+
+    Perception->ConfigureSense(*SightConfig);
+    // Make Sight the dominant sense when none is set yet.
+    if (!Perception->GetDominantSense())
+    {
+        Perception->SetDominantSense(UAISense_Sight::StaticClass());
+    }
+
+    TargetActor->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetNumberField(TEXT("sight_radius"), SightConfig->SightRadius);
+    Result->SetNumberField(TEXT("lose_sight_radius"), SightConfig->LoseSightRadius);
+    Result->SetNumberField(TEXT("peripheral_vision_angle_degrees"), SightConfig->PeripheralVisionAngleDegrees);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleSetRecastNavMeshAgent(const TSharedPtr<FJsonObject>& Params)
+{
+    UWorld* World = GetEditorWorld();
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+
+    ARecastNavMesh* NavMesh = nullptr;
+    for (TActorIterator<ARecastNavMesh> It(World); It; ++It)
+    {
+        NavMesh = *It;
+        break;
+    }
+    if (!NavMesh)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            TEXT("No ARecastNavMesh in the editor world. Drop a NavMeshBoundsVolume or create_nav_mesh_volume first."));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Recast Agent")));
+    NavMesh->Modify();
+
+    bool bChanged = false;
+    double AgentRadius = -1.0, AgentHeight = -1.0, AgentMaxStepHeight = -1.0;
+    double TileSizeUU = -1.0, MaxSimplificationError = -1.0;
+
+    if (Params->TryGetNumberField(TEXT("agent_radius"), AgentRadius) && AgentRadius > 0.0)
+    { NavMesh->AgentRadius = static_cast<float>(AgentRadius); bChanged = true; }
+    if (Params->TryGetNumberField(TEXT("agent_height"), AgentHeight) && AgentHeight > 0.0)
+    { NavMesh->AgentHeight = static_cast<float>(AgentHeight); bChanged = true; }
+    if (Params->TryGetNumberField(TEXT("agent_max_step_height"), AgentMaxStepHeight) && AgentMaxStepHeight > 0.0)
+    { NavMesh->AgentMaxStepHeight = static_cast<float>(AgentMaxStepHeight); bChanged = true; }
+    if (Params->TryGetNumberField(TEXT("tile_size_uu"), TileSizeUU) && TileSizeUU > 0.0)
+    { NavMesh->TileSizeUU = static_cast<float>(TileSizeUU); bChanged = true; }
+    if (Params->TryGetNumberField(TEXT("max_simplification_error"), MaxSimplificationError) && MaxSimplificationError >= 0.0)
+    { NavMesh->MaxSimplificationError = static_cast<float>(MaxSimplificationError); bChanged = true; }
+
+    if (!bChanged)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            TEXT("Provide at least one agent_radius/agent_height/agent_max_step_height/tile_size_uu/max_simplification_error"));
+
+    // UE 5.7: per-instance changes don't auto-rebuild; mark dirty so user can RebuildAll.
+    NavMesh->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetNumberField(TEXT("agent_radius"), NavMesh->AgentRadius);
+    Result->SetNumberField(TEXT("agent_height"), NavMesh->AgentHeight);
+    Result->SetNumberField(TEXT("agent_max_step_height"), NavMesh->AgentMaxStepHeight);
+    Result->SetNumberField(TEXT("tile_size_uu"), NavMesh->TileSizeUU);
+    Result->SetNumberField(TEXT("max_simplification_error"), NavMesh->MaxSimplificationError);
+    Result->SetStringField(TEXT("note"), TEXT("Per-instance change; re-run NavMesh build to apply to tiles."));
+    return Result;
+}

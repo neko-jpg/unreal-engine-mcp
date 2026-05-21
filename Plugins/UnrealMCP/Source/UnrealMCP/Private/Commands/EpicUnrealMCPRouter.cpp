@@ -15,12 +15,22 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("delete_actor_by_mcp_id"), 1},
         {TEXT("apply_scene_delta"), 1},
         {TEXT("clone_actor"), 1},
+        {TEXT("set_actor_replicates"), 1},          // W1-E
+        {TEXT("set_actor_replicate_movement"), 1},  // W1-E
+        {TEXT("set_actor_net_dormancy"), 1},        // W1-E
+        {TEXT("set_actor_net_cull_distance"), 1},   // W1-E
+        {TEXT("set_actor_owner_only_relevant"), 1}, // W1-E
         {TEXT("create_nav_mesh_volume"), 20},
         {TEXT("create_patrol_route"), 20},
         {TEXT("create_spline_from_points"), 20},
         {TEXT("set_ai_behavior"), 20},
         {TEXT("create_behavior_tree"), 20},
         {TEXT("create_blackboard"), 20},
+        {TEXT("add_blackboard_key"), 20},          // W1-D
+        {TEXT("remove_blackboard_key"), 20},       // W1-D
+        {TEXT("add_ai_perception"), 20},           // W1-D
+        {TEXT("configure_ai_sense_sight"), 20},    // W1-D
+        {TEXT("set_recast_navmesh_agent"), 20},    // W1-D
         {TEXT("create_nav_modifier_volume"), 20},
         {TEXT("create_nav_link_proxy"), 20},
         {TEXT("set_actor_collision_preset"), 22},
@@ -96,6 +106,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("add_latent_node"), 2},  // W1-1 (W1-B router fix)
         {TEXT("create_animation_blueprint"), 2},  // W1-C
         {TEXT("create_blend_space"), 2},  // W1-C
+        {TEXT("create_anim_montage"), 2},  // W1-F
+        {TEXT("create_anim_composite"), 2},  // W1-F
         {TEXT("add_blueprint_node"), 3},
         {TEXT("connect_nodes"), 3},
         {TEXT("create_variable"), 3},
@@ -238,6 +250,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("import_datasmith"), 7},
         {TEXT("reimport_asset"), 7},
         {TEXT("import_animation_fbx"), 7},  // W1-1 (W1-B router fix)
+        {TEXT("import_skeletal_mesh_fbx"), 7},  // W1-F
         {TEXT("save_import_preset"), 7},
         {TEXT("load_import_preset"), 7},
         {TEXT("export_asset"), 7},

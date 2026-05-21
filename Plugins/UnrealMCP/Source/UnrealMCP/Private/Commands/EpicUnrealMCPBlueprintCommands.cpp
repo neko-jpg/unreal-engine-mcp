@@ -10,6 +10,11 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Factories/AnimBlueprintFactory.h"
 #include "Factories/BlendSpaceFactoryNew.h"
+#include "Factories/AnimMontageFactory.h"
+#include "Factories/AnimCompositeFactory.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimComposite.h"
+#include "Animation/AnimSequence.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/BlendSpace.h"
@@ -395,6 +400,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FSt
         {TEXT("add_latent_node"), &FEpicUnrealMCPBlueprintCommands::HandleAddLatentNode},
         {TEXT("create_animation_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimationBlueprint},  // W1-C
         {TEXT("create_blend_space"), &FEpicUnrealMCPBlueprintCommands::HandleCreateBlendSpace},  // W1-C
+        {TEXT("create_anim_montage"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimMontage},      // W1-F
+        {TEXT("create_anim_composite"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimComposite},  // W1-F
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -3720,4 +3727,74 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateBlendSpace(
     Result->SetStringField(TEXT("asset_path"), BlendSpace->GetPathName());
     Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
     return Result;
+}
+
+// W1-F_MONTAGE_BEGIN
+// W1-F Animation Montage + Composite (UE 5.7)
+
+namespace
+{
+    template <typename FactoryT, typename AssetT>
+    static TSharedPtr<FJsonObject> CreateAnimAssetCommon(const TSharedPtr<FJsonObject>& Params, const FString& Label)
+    {
+        FString AssetPath;
+        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+        FString SkeletonPath;
+        if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath) || SkeletonPath.IsEmpty())
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'skeleton_path' parameter"));
+
+        USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+        if (!Skeleton)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+        if (LoadObject<UObject>(nullptr, *AssetPath))
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Asset already exists: %s"), *AssetPath));
+
+        FString AssetName = FPaths::GetBaseFilename(AssetPath);
+        FString PackagePath = FPaths::GetPath(AssetPath);
+        if (!PackagePath.EndsWith(TEXT("/"))) PackagePath += TEXT("/");
+
+        FactoryT* Factory = NewObject<FactoryT>();
+        Factory->TargetSkeleton = Skeleton;
+
+        FString SourceAnimPath;
+        if (Params->TryGetStringField(TEXT("source_anim_sequence_path"), SourceAnimPath) && !SourceAnimPath.IsEmpty())
+        {
+            if (UAnimSequence* SourceAnim = LoadObject<UAnimSequence>(nullptr, *SourceAnimPath))
+            {
+                Factory->SourceAnimation = SourceAnim;
+            }
+        }
+
+        IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+        UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, AssetT::StaticClass(), Factory);
+        AssetT* Created = Cast<AssetT>(NewAsset);
+        if (!Created)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Failed to create %s asset"), *Label));
+
+        Created->MarkPackageDirty();
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetBoolField(TEXT("success"), true);
+        Result->SetStringField(TEXT("asset_path"), Created->GetPathName());
+        Result->SetStringField(TEXT("asset_kind"), Label);
+        Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
+        if (!SourceAnimPath.IsEmpty())
+            Result->SetStringField(TEXT("source_anim_sequence_path"), SourceAnimPath);
+        return Result;
+    }
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateAnimMontage(const TSharedPtr<FJsonObject>& Params)
+{
+    return CreateAnimAssetCommon<UAnimMontageFactory, UAnimMontage>(Params, TEXT("AnimMontage"));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateAnimComposite(const TSharedPtr<FJsonObject>& Params)
+{
+    return CreateAnimAssetCommon<UAnimCompositeFactory, UAnimComposite>(Params, TEXT("AnimComposite"));
 }

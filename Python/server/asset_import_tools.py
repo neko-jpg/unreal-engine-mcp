@@ -687,3 +687,58 @@ def animation_fbx_import_tool(
     except Exception as e:
         logger.error(f"animation_fbx_import_tool error: {e}")
         return make_error_response(str(e))
+
+# W1-F Skeletal Mesh FBX import (UE 5.7)
+
+
+@mcp.tool()
+def skeletal_mesh_fbx_import_tool(
+    source_path: str,
+    destination_path: str,
+    asset_name: Optional[str] = None,
+    skeleton_path: Optional[str] = None,
+    scale: float = 1.0,
+    convert_scene_unit: bool = False,
+    import_morph_targets: bool = False,
+    import_materials: bool = True,
+    import_textures: bool = False,
+) -> Dict[str, Any]:
+    """Import a Skeletal Mesh FBX (geometry + rig) into Unreal Engine 5.7.
+
+    source_path: Absolute disk path to the FBX file
+    destination_path: /Game package path for the imported mesh
+    asset_name: Optional name override (defaults to FBX filename)
+    skeleton_path: Optional /Game path to an existing USkeleton to bind to.
+                   When omitted, a new skeleton is created alongside the mesh.
+    scale: Uniform import scale
+    convert_scene_unit: Convert FBX scene units to Unreal units
+    import_morph_targets: Import FBX blend shapes as morph targets
+    import_materials / import_textures: Standard FBX material options
+    """
+    try:
+        validate_string(source_path, "source_path")
+        validate_string(destination_path, "destination_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "source_path": source_path,
+        "destination_path": destination_path,
+        "scale": scale,
+        "convert_scene_unit": convert_scene_unit,
+        "import_morph_targets": import_morph_targets,
+        "import_materials": import_materials,
+        "import_textures": import_textures,
+    }
+    if asset_name:
+        payload["asset_name"] = asset_name
+    if skeleton_path:
+        payload["skeleton_path"] = skeleton_path
+    try:
+        response = unreal.send_command("import_skeletal_mesh_fbx", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"skeletal_mesh_fbx_import_tool error: {exc}")
+        return make_error_response(str(exc))
