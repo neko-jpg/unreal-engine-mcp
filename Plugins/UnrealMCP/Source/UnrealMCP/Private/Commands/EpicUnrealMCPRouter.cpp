@@ -31,6 +31,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("add_ai_perception"), 20},           // W1-D
         {TEXT("configure_ai_sense_sight"), 20},    // W1-D
         {TEXT("set_recast_navmesh_agent"), 20},    // W1-D
+        {TEXT("create_eqs_query"), 20},            // W1-G
+        {TEXT("set_crowd_following_enable"), 20},  // W1-G
         {TEXT("create_nav_modifier_volume"), 20},
         {TEXT("create_nav_link_proxy"), 20},
         {TEXT("set_actor_collision_preset"), 22},
@@ -108,6 +110,9 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_blend_space"), 2},  // W1-C
         {TEXT("create_anim_montage"), 2},  // W1-F
         {TEXT("create_anim_composite"), 2},  // W1-F
+        {TEXT("set_anim_root_motion"), 2},  // W1-G
+        {TEXT("add_anim_notify"), 2},      // W1-G
+        {TEXT("create_pose_asset"), 2},    // W1-G
         {TEXT("add_blueprint_node"), 3},
         {TEXT("connect_nodes"), 3},
         {TEXT("create_variable"), 3},

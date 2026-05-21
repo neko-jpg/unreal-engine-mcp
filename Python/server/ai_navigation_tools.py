@@ -342,3 +342,58 @@ def set_recast_navmesh_agent(
     except Exception as exc:
         logger.error(f"set_recast_navmesh_agent error: {exc}")
         return make_error_response(str(exc))
+
+# W1-G EQS + Crowd Following (UE 5.7)
+
+
+@mcp.tool()
+def create_eqs_query(
+    asset_path: str,
+    query_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create an empty UEnvQuery (EQS Query) DataAsset.
+
+    asset_path: /Game path for the new UEnvQuery asset
+    query_name: Optional UEnvQuery::QueryName (defaults to asset_name)
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {"asset_path": asset_path}
+    if query_name:
+        payload["query_name"] = query_name
+    try:
+        response = unreal.send_command("create_eqs_query", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_eqs_query error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def set_crowd_following_enable(actor_name: str, enable: bool = True) -> Dict[str, Any]:
+    """Attach or remove a UCrowdFollowingComponent on an AAIController.
+
+    actor_name: Editor-world AAIController actor name or label
+    enable: True (default) adds the component, False removes it
+    """
+    try:
+        validate_string(actor_name, "actor_name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_crowd_following_enable",
+            {"actor_name": actor_name, "enable": enable},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_crowd_following_enable error: {exc}")
+        return make_error_response(str(exc))

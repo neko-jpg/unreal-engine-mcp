@@ -4,6 +4,87 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batch G: Animation residue + EQS + Crowd Following
+
+Implements 5 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+covering animation editing primitives and AI module extensions that round out
+the remaining `[ ]` items in §18 (AI) and §19 (Animation).
+
+### Added
+
+**Blueprint module (id 2, 3 items):**
+- `set_anim_root_motion` -- `UAnimSequence::bEnableRootMotion` toggle +
+  `RootMotionRootLock` (RefPose | AnimFirstFrame | Zero)
+- `add_anim_notify` -- appends a `FAnimNotifyEvent` (with optional
+  `UAnimNotify` subclass via `notify_class_path`) to
+  `UAnimSequenceBase::Notifies` and sorts via `SortNotifies()`. Uses
+  `FAnimLinkableElement::Link()` (the UE 5.7 replacement for the
+  5.1-deprecated `LinkSequence` API).
+- `create_pose_asset` -- creates a `UPoseAsset` via `NewObject` +
+  `SetSkeleton` + optional `CreatePoseFromAnimation(UAnimSequence*)` to
+  seed poses from an animation sequence.
+
+**Navigation module (id 20, 2 items):**
+- `create_eqs_query` -- creates an empty `UEnvQuery` (EQS) `UDataAsset` with
+  optional `QueryName`. Note: empty queries; generators/tests must be added
+  via the EQS editor.
+- `set_crowd_following_enable` -- attach or detach `UCrowdFollowingComponent`
+  on an `AAIController`. Idempotent on the attach side
+  (`already_existed: true`).
+
+### Python tool surface
+
+- `server/blueprint_tools.py`: `set_anim_root_motion`, `add_anim_notify`,
+  `create_pose_asset`
+- `server/ai_navigation_tools.py`: `create_eqs_query`, `set_crowd_following_enable`
+
+### L1 unit tests
+
+- `Python/tests/unit/test_w1g_anim_eqs_crowd.py` (13 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 5 routes (3 to id 2, 2 to id 20).
+- `docs/superpowers/plans/tasks.md`: flipped 5 entries to `[x]` covering
+  Animation Notify / Root Motion / Pose Asset / EQS Query / Crowd Following.
+- Sync'd canonical plugin to source-built project (5 files updated).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **749 passed** (was 736; +13
+  new W1-G tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 437` (was 432; +5 new C++ handlers wired 3-layer),
+  no drift detected.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/Engine/Classes/Animation/AnimSequence.h`
+    (`bEnableRootMotion`, `RootMotionRootLock` enum)
+  - `Runtime/Engine/Public/Animation/AnimTypes.h` (`FAnimNotifyEvent` struct)
+  - `Runtime/Engine/Classes/Animation/AnimLinkableElement.h`
+    (`Link()` -- 5.1+ replacement for `LinkSequence`)
+  - `Runtime/Engine/Classes/Animation/PoseAsset.h`
+    (`CreatePoseFromAnimation(UAnimSequence*)`)
+  - `Runtime/AIModule/Classes/EnvironmentQuery/EnvQuery.h`
+    (`QueryName`, `Options`)
+  - `Runtime/AIModule/Classes/Navigation/CrowdFollowingComponent.h`
+- A templated `CreateAnimAssetCommon<FactoryT, AssetT>` helper from W1-F is
+  shared between AnimMontage/AnimComposite; W1-G does *not* extend that
+  helper because PoseAsset uses `NewObject` + `SetSkeleton` rather than the
+  factory pattern.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> 452 (D+E+F) -> **457** (G)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> 303 -> **298**
+
+Total this branch: **55 items implemented + 13 router fixes** across
+7 sub-batches.
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batches D + E + F: AI / Networking / Skeletal Mesh + Animation assets
 
 Implements 13 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`

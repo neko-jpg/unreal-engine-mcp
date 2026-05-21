@@ -1074,3 +1074,117 @@ def create_anim_composite(
     except Exception as exc:
         logger.error(f"create_anim_composite error: {exc}")
         return make_error_response(str(exc))
+
+# W1-G Animation residue (UE 5.7)
+
+
+@mcp.tool()
+def set_anim_root_motion(
+    anim_sequence_path: str,
+    enable_root_motion: bool = True,
+    root_motion_root_lock: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Toggle root motion on a UAnimSequence.
+
+    anim_sequence_path: /Game path to UAnimSequence
+    enable_root_motion: True (default) enables root motion extraction
+    root_motion_root_lock: Optional ERootMotionRootLock value:
+                           RefPose | AnimFirstFrame | Zero
+    """
+    try:
+        validate_string(anim_sequence_path, "anim_sequence_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if root_motion_root_lock is not None and root_motion_root_lock not in {"RefPose", "AnimFirstFrame", "Zero"}:
+        return make_error_response("root_motion_root_lock must be RefPose, AnimFirstFrame, or Zero")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "anim_sequence_path": anim_sequence_path,
+        "enable_root_motion": enable_root_motion,
+    }
+    if root_motion_root_lock is not None:
+        payload["root_motion_root_lock"] = root_motion_root_lock
+    try:
+        response = unreal.send_command("set_anim_root_motion", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_anim_root_motion error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def add_anim_notify(
+    anim_sequence_path: str,
+    notify_name: str,
+    time_seconds: float,
+    notify_class_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Append a FAnimNotifyEvent to a UAnimSequenceBase.
+
+    anim_sequence_path: /Game path to UAnimSequenceBase
+    notify_name: Notify identifier
+    time_seconds: Absolute time in seconds (must be >= 0)
+    notify_class_path: Optional /Script or /Game path to a UAnimNotify subclass.
+                       When omitted, creates a "name-only" custom notify event.
+    """
+    try:
+        validate_string(anim_sequence_path, "anim_sequence_path")
+        validate_string(notify_name, "notify_name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if time_seconds < 0:
+        return make_error_response("time_seconds must be >= 0")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "anim_sequence_path": anim_sequence_path,
+        "notify_name": notify_name,
+        "time_seconds": time_seconds,
+    }
+    if notify_class_path:
+        payload["notify_class_path"] = notify_class_path
+    try:
+        response = unreal.send_command("add_anim_notify", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"add_anim_notify error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_pose_asset(
+    asset_path: str,
+    skeleton_path: str,
+    source_anim_sequence_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a UPoseAsset bound to a USkeleton.
+
+    asset_path: /Game path for the new PoseAsset
+    skeleton_path: /Game path to a USkeleton
+    source_anim_sequence_path: Optional /Game path to a UAnimSequence; when
+                               provided, seeds the pose asset via
+                               UPoseAsset::CreatePoseFromAnimation.
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "asset_path": asset_path,
+        "skeleton_path": skeleton_path,
+    }
+    if source_anim_sequence_path:
+        payload["source_anim_sequence_path"] = source_anim_sequence_path
+    try:
+        response = unreal.send_command("create_pose_asset", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_pose_asset error: {exc}")
+        return make_error_response(str(exc))

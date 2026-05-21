@@ -92,5 +92,9 @@ private:
     // -- W1-F Animation asset creators 2 (UE 5.7) --
     TSharedPtr<FJsonObject> HandleCreateAnimMontage(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleCreateAnimComposite(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-G Animation residue (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleSetAnimRootMotion(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddAnimNotify(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreatePoseAsset(const TSharedPtr<FJsonObject>& Params);
 
 };

@@ -58,6 +58,8 @@
 #include "Perception/AISense_Sight.h"
 #include "AIController.h"
 #include "NavMesh/RecastNavMesh.h"
+#include "EnvironmentQuery/EnvQuery.h"
+#include "Navigation/CrowdFollowingComponent.h"
 
 #include "EditorAssetLibrary.h"
 
@@ -103,6 +105,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleCommand(const FS
         {TEXT("add_ai_perception"),          &FEpicUnrealMCPNavigationCommands::HandleAddAIPerception},      // W1-D
         {TEXT("configure_ai_sense_sight"),   &FEpicUnrealMCPNavigationCommands::HandleConfigureAISenseSight},// W1-D
         {TEXT("set_recast_navmesh_agent"),   &FEpicUnrealMCPNavigationCommands::HandleSetRecastNavMeshAgent},// W1-D
+        {TEXT("create_eqs_query"),           &FEpicUnrealMCPNavigationCommands::HandleCreateEQSQuery},          // W1-G
+        {TEXT("set_crowd_following_enable"), &FEpicUnrealMCPNavigationCommands::HandleSetCrowdFollowingEnable}, // W1-G
 
         // Spline
         {TEXT("create_spline_from_points"),  &FEpicUnrealMCPNavigationCommands::HandleCreateSplineFromPoints},
@@ -1137,5 +1141,108 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleSetRecastNavMesh
     Result->SetNumberField(TEXT("tile_size_uu"), NavMesh->TileSizeUU);
     Result->SetNumberField(TEXT("max_simplification_error"), NavMesh->MaxSimplificationError);
     Result->SetStringField(TEXT("note"), TEXT("Per-instance change; re-run NavMesh build to apply to tiles."));
+    return Result;
+}
+
+// W1-G_EQS_BEGIN
+// W1-G EQS Query asset + Crowd Following component (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleCreateEQSQuery(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for EQS Query"));
+
+    UEnvQuery* Query = NewObject<UEnvQuery>(Package, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!Query)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UEnvQuery asset"));
+
+    FString QueryName;
+    if (Params->TryGetStringField(TEXT("query_name"), QueryName) && !QueryName.IsEmpty())
+    {
+        Query->QueryName = FName(*QueryName);
+    }
+
+    FAssetRegistryModule::AssetCreated(Query);
+    Package->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), Query->GetPathName());
+    Result->SetStringField(TEXT("note"), TEXT("Empty UEnvQuery. Add UEnvQueryGenerator/Test in the EQS editor."));
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleSetCrowdFollowingEnable(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter (typically an AAIController)"));
+    bool bEnable = true;
+    Params->TryGetBoolField(TEXT("enable"), bEnable);
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+
+    AAIController* Controller = nullptr;
+    for (TActorIterator<AAIController> It(World); It; ++It)
+    {
+        if (It->GetName() == ActorName || It->GetActorLabel() == ActorName)
+        {
+            Controller = *It;
+            break;
+        }
+    }
+    if (!Controller)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("AAIController not found: %s"), *ActorName));
+    }
+
+    UCrowdFollowingComponent* Existing = Controller->FindComponentByClass<UCrowdFollowingComponent>();
+    bool bAlreadyExisted = (Existing != nullptr);
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Crowd Following")));
+    Controller->Modify();
+
+    if (bEnable)
+    {
+        if (!Existing)
+        {
+            UCrowdFollowingComponent* Crowd = NewObject<UCrowdFollowingComponent>(Controller, UCrowdFollowingComponent::StaticClass(), TEXT("CrowdFollowing"));
+            if (!Crowd)
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UCrowdFollowingComponent"));
+            Crowd->RegisterComponent();
+            Controller->AddInstanceComponent(Crowd);
+            Existing = Crowd;
+        }
+    }
+    else
+    {
+        if (Existing)
+        {
+            Controller->RemoveInstanceComponent(Existing);
+            Existing->DestroyComponent();
+            Existing = nullptr;
+        }
+    }
+
+    Controller->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetBoolField(TEXT("enabled"), Existing != nullptr);
+    Result->SetBoolField(TEXT("already_existed"), bAlreadyExisted);
     return Result;
 }

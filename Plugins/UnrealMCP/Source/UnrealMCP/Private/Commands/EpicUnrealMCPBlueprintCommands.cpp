@@ -15,6 +15,10 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimComposite.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
+#include "Animation/PoseAsset.h"
+#include "Animation/AnimTypes.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/BlendSpace.h"
@@ -402,6 +406,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FSt
         {TEXT("create_blend_space"), &FEpicUnrealMCPBlueprintCommands::HandleCreateBlendSpace},  // W1-C
         {TEXT("create_anim_montage"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimMontage},      // W1-F
         {TEXT("create_anim_composite"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimComposite},  // W1-F
+        {TEXT("set_anim_root_motion"), &FEpicUnrealMCPBlueprintCommands::HandleSetAnimRootMotion},  // W1-G
+        {TEXT("add_anim_notify"), &FEpicUnrealMCPBlueprintCommands::HandleAddAnimNotify},          // W1-G
+        {TEXT("create_pose_asset"), &FEpicUnrealMCPBlueprintCommands::HandleCreatePoseAsset},      // W1-G
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -3797,4 +3804,161 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateAnimMontage
 TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateAnimComposite(const TSharedPtr<FJsonObject>& Params)
 {
     return CreateAnimAssetCommon<UAnimCompositeFactory, UAnimComposite>(Params, TEXT("AnimComposite"));
+}
+
+// W1-G_ANIMRES_BEGIN
+// W1-G Animation residue (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleSetAnimRootMotion(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AnimPath;
+    if (!Params->TryGetStringField(TEXT("anim_sequence_path"), AnimPath) || AnimPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'anim_sequence_path' parameter"));
+
+    UAnimSequence* Anim = LoadObject<UAnimSequence>(nullptr, *AnimPath);
+    if (!Anim)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("AnimSequence not found: %s"), *AnimPath));
+
+    bool bEnable = true;
+    Params->TryGetBoolField(TEXT("enable_root_motion"), bEnable);
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Set Root Motion")));
+    Anim->Modify();
+    Anim->bEnableRootMotion = bEnable;
+
+    FString RootLockStr;
+    if (Params->TryGetStringField(TEXT("root_motion_root_lock"), RootLockStr) && !RootLockStr.IsEmpty())
+    {
+        ERootMotionRootLock::Type Lock = ERootMotionRootLock::RefPose;
+        if (RootLockStr.Equals(TEXT("RefPose"), ESearchCase::IgnoreCase)) Lock = ERootMotionRootLock::RefPose;
+        else if (RootLockStr.Equals(TEXT("AnimFirstFrame"), ESearchCase::IgnoreCase)) Lock = ERootMotionRootLock::AnimFirstFrame;
+        else if (RootLockStr.Equals(TEXT("Zero"), ESearchCase::IgnoreCase)) Lock = ERootMotionRootLock::Zero;
+        else
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Unknown root_motion_root_lock: %s (use RefPose|AnimFirstFrame|Zero)"), *RootLockStr));
+        Anim->RootMotionRootLock = Lock;
+    }
+
+    Anim->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("anim_sequence_path"), AnimPath);
+    Result->SetBoolField(TEXT("enable_root_motion"), Anim->bEnableRootMotion);
+    if (!RootLockStr.IsEmpty())
+        Result->SetStringField(TEXT("root_motion_root_lock"), RootLockStr);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddAnimNotify(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AnimPath;
+    if (!Params->TryGetStringField(TEXT("anim_sequence_path"), AnimPath) || AnimPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'anim_sequence_path' parameter"));
+    FString NotifyName;
+    if (!Params->TryGetStringField(TEXT("notify_name"), NotifyName) || NotifyName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'notify_name' parameter"));
+    double TimeSeconds = -1.0;
+    if (!Params->TryGetNumberField(TEXT("time_seconds"), TimeSeconds) || TimeSeconds < 0.0)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or negative 'time_seconds' parameter"));
+
+    UAnimSequenceBase* Anim = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
+    if (!Anim)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("AnimSequenceBase not found: %s"), *AnimPath));
+
+    // Optional UAnimNotify subclass (Blueprint or native). When omitted we
+    // create a name-only notify event (Notify pointer remains null, which the
+    // engine treats as a custom event with the notify name).
+    UClass* NotifyClass = nullptr;
+    FString NotifyClassPath;
+    if (Params->TryGetStringField(TEXT("notify_class_path"), NotifyClassPath) && !NotifyClassPath.IsEmpty())
+    {
+        NotifyClass = LoadObject<UClass>(nullptr, *NotifyClassPath);
+        if (!NotifyClass || !NotifyClass->IsChildOf(UAnimNotify::StaticClass()))
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("notify_class_path is not a UAnimNotify subclass: %s"), *NotifyClassPath));
+    }
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("UnrealMCP: Add Anim Notify")));
+    Anim->Modify();
+
+    FAnimNotifyEvent Event;
+    Event.NotifyName = FName(*NotifyName);
+    Event.Link(Anim, static_cast<float>(TimeSeconds));
+    if (NotifyClass)
+    {
+        Event.Notify = NewObject<UAnimNotify>(Anim, NotifyClass, NAME_None, RF_Transactional);
+    }
+
+    Anim->Notifies.Add(Event);
+    Anim->SortNotifies();
+    Anim->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("anim_sequence_path"), AnimPath);
+    Result->SetStringField(TEXT("notify_name"), NotifyName);
+    Result->SetNumberField(TEXT("time_seconds"), TimeSeconds);
+    Result->SetNumberField(TEXT("notify_count"), Anim->Notifies.Num());
+    if (!NotifyClassPath.IsEmpty())
+        Result->SetStringField(TEXT("notify_class_path"), NotifyClassPath);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreatePoseAsset(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+    FString SkeletonPath;
+    if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath) || SkeletonPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'skeleton_path' parameter"));
+
+    USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+    if (!Skeleton)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for PoseAsset"));
+
+    UPoseAsset* PoseAsset = NewObject<UPoseAsset>(Package, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!PoseAsset)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create PoseAsset"));
+
+    PoseAsset->SetSkeleton(Skeleton);
+
+    // Optional source anim sequence to seed poses from
+    FString SourceAnimPath;
+    bool bSeededFromAnim = false;
+    if (Params->TryGetStringField(TEXT("source_anim_sequence_path"), SourceAnimPath) && !SourceAnimPath.IsEmpty())
+    {
+        UAnimSequence* SourceAnim = LoadObject<UAnimSequence>(nullptr, *SourceAnimPath);
+        if (SourceAnim)
+        {
+            // UE 5.7 BP-callable API: CreatePoseFromAnimation(UAnimSequence*).
+            PoseAsset->CreatePoseFromAnimation(SourceAnim);
+            bSeededFromAnim = true;
+        }
+    }
+
+    FAssetRegistryModule::AssetCreated(PoseAsset);
+    Package->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), PoseAsset->GetPathName());
+    Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
+    Result->SetBoolField(TEXT("seeded_from_anim"), bSeededFromAnim);
+    if (!SourceAnimPath.IsEmpty())
+        Result->SetStringField(TEXT("source_anim_sequence_path"), SourceAnimPath);
+    return Result;
 }

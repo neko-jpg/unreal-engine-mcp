@@ -47,6 +47,9 @@ private:
     TSharedPtr<FJsonObject> HandleAddAIPerception(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleConfigureAISenseSight(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetRecastNavMeshAgent(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-G EQS + Crowd Following (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleCreateEQSQuery(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetCrowdFollowingEnable(const TSharedPtr<FJsonObject>& Params);
 
     // Spline
     TSharedPtr<FJsonObject> HandleCreateSplineFromPoints(const TSharedPtr<FJsonObject>& Params);
