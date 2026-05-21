@@ -94,6 +94,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("get_blueprint_debug_info"), 2},
         {TEXT("blueprint_diff"), 2},
         {TEXT("add_latent_node"), 2},  // W1-1 (W1-B router fix)
+        {TEXT("create_animation_blueprint"), 2},  // W1-C
+        {TEXT("create_blend_space"), 2},  // W1-C
         {TEXT("add_blueprint_node"), 3},
         {TEXT("connect_nodes"), 3},
         {TEXT("create_variable"), 3},
@@ -435,6 +437,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_sound_class"), 15},
         {TEXT("create_sound_mix"), 15},
         {TEXT("spawn_ambient_sound"), 15},
+        {TEXT("create_sound_submix"), 15},  // W1-C
 
         // Sequencer Commands (16)
         {TEXT("create_level_sequence"), 16},

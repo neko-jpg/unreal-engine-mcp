@@ -86,5 +86,8 @@ private:
 
     // -- W1-1 Blueprint residue (UE 5.7) --
     TSharedPtr<FJsonObject> HandleAddLatentNode(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-C Animation asset creators (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleCreateAnimationBlueprint(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreateBlendSpace(const TSharedPtr<FJsonObject>& Params);
 
 };

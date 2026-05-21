@@ -9,6 +9,7 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
+#include "Sound/SoundSubmix.h"
 #include "Sound/AmbientSound.h"
 #include "Components/AudioComponent.h"
 #include "UObject/Package.h"
@@ -34,6 +35,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleCommand(const FString
         {TEXT("create_sound_class"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundClass},
         {TEXT("create_sound_mix"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundMix},
         {TEXT("spawn_ambient_sound"), &FEpicUnrealMCPAudioCommands::HandleSpawnAmbientSound},
+        {TEXT("create_sound_submix"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundSubmix},  // W1-C
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -399,4 +401,60 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleSpawnAmbientSound(con
     ResultObj->SetStringField(TEXT("actor_name"), AmbientSound->GetName());
     ResultObj->SetStringField(TEXT("sound_path"), SoundPath);
     return ResultObj;
+}
+
+// W1-C_SUBMIX_BEGIN
+// W1-C SoundSubmix asset creation (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleCreateSoundSubmix(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for SoundSubmix"));
+
+    USoundSubmix* Submix = NewObject<USoundSubmix>(Package, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!Submix)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create SoundSubmix object"));
+
+    // Optional parent submix linkage.
+    FString ParentSubmixPath;
+    if (Params->TryGetStringField(TEXT("parent_submix_path"), ParentSubmixPath) && !ParentSubmixPath.IsEmpty())
+    {
+        if (USoundSubmix* Parent = LoadObject<USoundSubmix>(nullptr, *ParentSubmixPath))
+        {
+            Submix->ParentSubmix = Parent;
+        }
+    }
+
+    // Optional output / gain config.
+    double OutputVolume = -1.0;
+    if (Params->TryGetNumberField(TEXT("output_volume_db"), OutputVolume))
+    {
+        Submix->OutputVolumeModulation.Value = static_cast<float>(OutputVolume);
+    }
+    bool bAutoDisable = false;
+    if (Params->TryGetBoolField(TEXT("auto_disable"), bAutoDisable))
+    {
+        Submix->bAutoDisable = bAutoDisable;
+    }
+    double AutoDisableTime = -1.0;
+    if (Params->TryGetNumberField(TEXT("auto_disable_time"), AutoDisableTime) && AutoDisableTime >= 0.0)
+    {
+        Submix->AutoDisableTime = static_cast<float>(AutoDisableTime);
+    }
+
+    Package->MarkPackageDirty();
+    FAssetRegistryModule::AssetCreated(static_cast<UObject*>(Submix));
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), Submix->GetPathName());
+    if (!ParentSubmixPath.IsEmpty())
+        Result->SetStringField(TEXT("parent_submix_path"), ParentSubmixPath);
+    return Result;
 }

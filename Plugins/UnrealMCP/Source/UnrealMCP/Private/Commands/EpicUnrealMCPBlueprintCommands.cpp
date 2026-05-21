@@ -8,6 +8,14 @@
 #include "K2Node_Event.h"
 #include "K2Node_CallFunction.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Factories/AnimBlueprintFactory.h"
+#include "Factories/BlendSpaceFactoryNew.h"
+#include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/BlendSpace.h"
+#include "Animation/Skeleton.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_Knot.h"
@@ -385,6 +393,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCommand(const FSt
         {TEXT("get_blueprint_debug_info"), &FEpicUnrealMCPBlueprintCommands::HandleGetBlueprintDebugInfo},
         {TEXT("blueprint_diff"), &FEpicUnrealMCPBlueprintCommands::HandleBlueprintDiff},
         {TEXT("add_latent_node"), &FEpicUnrealMCPBlueprintCommands::HandleAddLatentNode},
+        {TEXT("create_animation_blueprint"), &FEpicUnrealMCPBlueprintCommands::HandleCreateAnimationBlueprint},  // W1-C
+        {TEXT("create_blend_space"), &FEpicUnrealMCPBlueprintCommands::HandleCreateBlendSpace},  // W1-C
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -3599,5 +3609,115 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleAddLatentNode(con
     Result->SetNumberField(TEXT("pos_y"), PosY);
     const bool bIsLatent = Function->HasAnyFunctionFlags(FUNC_BlueprintAuthorityOnly) || Function->HasMetaData(TEXT("Latent"));
     Result->SetBoolField(TEXT("is_latent"), bIsLatent);
+    return Result;
+}
+
+// W1-C_ANIM_BEGIN
+// W1-C Animation Blueprint + Blend Space asset creation (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateAnimationBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+    FString SkeletonPath;
+    if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath) || SkeletonPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'skeleton_path' parameter"));
+
+    USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+    if (!Skeleton)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+    // Optional parent class override - defaults to UAnimInstance.
+    UClass* ParentClass = UAnimInstance::StaticClass();
+    FString ParentClassPath;
+    if (Params->TryGetStringField(TEXT("parent_class_path"), ParentClassPath) && !ParentClassPath.IsEmpty())
+    {
+        if (UClass* Candidate = LoadObject<UClass>(nullptr, *ParentClassPath))
+        {
+            if (Candidate->IsChildOf(UAnimInstance::StaticClass()))
+            {
+                ParentClass = Candidate;
+            }
+            else
+            {
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                    FString::Printf(TEXT("parent_class_path is not a UAnimInstance subclass: %s"), *ParentClassPath));
+            }
+        }
+        else
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Parent class not found: %s"), *ParentClassPath));
+        }
+    }
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists at path: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    FString PackagePath = FPaths::GetPath(AssetPath);
+    if (!PackagePath.EndsWith(TEXT("/"))) PackagePath += TEXT("/");
+
+    UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
+    Factory->TargetSkeleton = Skeleton;
+    Factory->ParentClass = ParentClass;
+    Factory->BlueprintType = BPTYPE_Normal;
+
+    IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+    UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UAnimBlueprint::StaticClass(), Factory);
+    UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(NewAsset);
+    if (!AnimBP)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create AnimBlueprint asset"));
+
+    AnimBP->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), AnimBP->GetPathName());
+    Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
+    Result->SetStringField(TEXT("parent_class"), ParentClass->GetPathName());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleCreateBlendSpace(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+    FString SkeletonPath;
+    if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath) || SkeletonPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'skeleton_path' parameter"));
+
+    USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+    if (!Skeleton)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists at path: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    FString PackagePath = FPaths::GetPath(AssetPath);
+    if (!PackagePath.EndsWith(TEXT("/"))) PackagePath += TEXT("/");
+
+    UBlendSpaceFactoryNew* Factory = NewObject<UBlendSpaceFactoryNew>();
+    Factory->TargetSkeleton = Skeleton;
+
+    IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+    UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UBlendSpace::StaticClass(), Factory);
+    UBlendSpace* BlendSpace = Cast<UBlendSpace>(NewAsset);
+    if (!BlendSpace)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create BlendSpace asset"));
+
+    BlendSpace->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), BlendSpace->GetPathName());
+    Result->SetStringField(TEXT("skeleton_path"), SkeletonPath);
     return Result;
 }

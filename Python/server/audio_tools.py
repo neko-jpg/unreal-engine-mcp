@@ -218,3 +218,47 @@ def spawn_ambient_sound(
     except Exception as e:
         logger.error(f"spawn_ambient_sound error: {e}")
         return make_error_response(str(e))
+
+# W1-C SoundSubmix asset creation (UE 5.7)
+
+
+@mcp.tool()
+def create_sound_submix(
+    asset_path: str,
+    parent_submix_path: Optional[str] = None,
+    output_volume_db: Optional[float] = None,
+    auto_disable: Optional[bool] = None,
+    auto_disable_time: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Create a new USoundSubmix asset with optional parent submix and gain.
+
+    asset_path: /Game path for the new SoundSubmix asset
+    parent_submix_path: Optional parent USoundSubmix path
+    output_volume_db: Optional output volume modulation default (1.0 = unity)
+    auto_disable: Optional auto-disable flag (default UE 5.7 = true)
+    auto_disable_time: Optional auto-disable time in seconds (>= 0)
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if auto_disable_time is not None and auto_disable_time < 0:
+        return make_error_response("auto_disable_time must be >= 0")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {"asset_path": asset_path}
+    if parent_submix_path:
+        payload["parent_submix_path"] = parent_submix_path
+    if output_volume_db is not None:
+        payload["output_volume_db"] = output_volume_db
+    if auto_disable is not None:
+        payload["auto_disable"] = auto_disable
+    if auto_disable_time is not None:
+        payload["auto_disable_time"] = auto_disable_time
+    try:
+        response = unreal.send_command("create_sound_submix", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_sound_submix error: {exc}")
+        return make_error_response(str(exc))

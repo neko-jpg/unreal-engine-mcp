@@ -4,6 +4,89 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-21] - Wave 1 sub-batch C: AnimBP / BlendSpace / SoundSubmix + Material domain wrappers
+
+Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`.
+3 new C++ handlers + 8 new Python tools (5 of which reuse the existing
+`create_advanced_material` C++ handler with typed entry points).
+
+### Added
+
+- Animation asset creators (`EpicUnrealMCPBlueprintCommands.{h,cpp}`, router id 2):
+  - `create_animation_blueprint` -- `UAnimBlueprintFactory` + `AssetTools::CreateAsset`
+    with `TargetSkeleton`, `ParentClass` (defaults to `UAnimInstance`), and
+    `BlueprintType = BPTYPE_Normal`.
+  - `create_blend_space` -- `UBlendSpaceFactoryNew` + `AssetTools::CreateAsset`
+    bound to a `USkeleton`.
+- Audio asset creator (`EpicUnrealMCPAudioCommands.{h,cpp}`, router id 15):
+  - `create_sound_submix` -- `USoundSubmix` via `NewObject` + optional parent
+    submix linkage, output volume modulation
+    (`FSoundModulationDestinationSettings::Value`), and auto-disable
+    (`bAutoDisable` / `AutoDisableTime`).
+- Material domain Python wrappers (`material_graph_tools.py`):
+  - `create_decal_material` -- `MaterialDomain = MD_DeferredDecal`
+  - `create_light_function_material` -- `MaterialDomain = MD_LightFunction`
+  - `create_post_process_material` -- `MaterialDomain = MD_PostProcess` +
+    `BlendableLocation = BL_SceneColorAfterTonemapping`
+  - `create_landscape_material` -- Surface-domain material (landscape layer
+    nodes added separately via `add_material_node`)
+  - `create_runtime_virtual_texture_material` -- `MaterialDomain =
+    MD_RuntimeVirtualTexture`
+  These all route to the existing `create_advanced_material` C++ handler with
+  a typed `material_domain` constant -- no new C++ required.
+- Python FastMCP wrappers:
+  - `server/blueprint_tools.py`: `create_animation_blueprint`, `create_blend_space`
+  - `server/audio_tools.py`: `create_sound_submix`
+  - `server/material_graph_tools.py`: 5 typed domain wrappers
+- L1 unit tests:
+  - `Python/tests/unit/test_blueprint_tools_w1c.py` (5 tests)
+  - `Python/tests/unit/test_audio_tools_w1c.py` (4 tests)
+  - `Python/tests/unit/test_material_tools_w1c.py` (6 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 3 routes
+  (`create_animation_blueprint`, `create_blend_space` -> id 2;
+   `create_sound_submix` -> id 15).
+- `docs/superpowers/plans/tasks.md`: flipped 8 entries to `[x]`
+  (5 Material domains + Animation BP + BlendSpace + Submix).
+- Sync'd canonical plugin to source-built project
+  (5 files updated, 111 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **704 passed** (was 689; +15
+  new W1-C tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 419` (was 416; +3 new C++ handlers; the 5 material domain
+  wrappers all route to the pre-existing `create_advanced_material` command
+  which is already counted), `cpp_only: 16`, `rust_only: 53`, no drift.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Editor/UnrealEd/Classes/Factories/AnimBlueprintFactory.h`
+  - `Editor/UnrealEd/Classes/Factories/BlendSpaceFactoryNew.h`
+  - `Editor/AudioEditor/Classes/Factories/SoundSubmixFactory.h`
+  - `Runtime/Engine/Classes/Sound/SoundSubmix.h`
+    (`bAutoDisable=true`, `AutoDisableTime=0.01f`, `ParentSubmix`,
+     `OutputVolumeModulation.Value`)
+  - `Runtime/Engine/Classes/Sound/SoundModulationDestination.h`
+    (`FSoundModulationDestinationSettings::Value`)
+- The Animation BP / BlendSpace creators use `IAssetTools::CreateAsset` rather
+  than direct `NewObject` because the factory paths handle proper Blueprint
+  initialization (`UAnimBlueprintGeneratedClass`, default AnimGraph page setup).
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> **439** (C)
+- `[ ]` 353 -> 338 -> 324 -> **316**
+
+Total this branch: **37 items implemented** (15 + 14 + 8), plus 13 critical
+router fixes in sub-batch B.
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batch B: Router fix + Data Tables / Validation / Profiling / Physics residue
 
 Implements 14 unimplemented items from `docs/superpowers/plans/tasks.md` covering

@@ -941,3 +941,66 @@ def add_latent_node(
     except Exception as e:
         logger.error(f"add_latent_node error: {e}")
         return make_error_response(str(e))
+
+# W1-C Animation asset creators (UE 5.7)
+
+
+@mcp.tool()
+def create_animation_blueprint(
+    asset_path: str,
+    skeleton_path: str,
+    parent_class_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a new UAnimBlueprint bound to a USkeleton.
+
+    asset_path: /Game path for the new AnimBlueprint asset
+    skeleton_path: /Game path to a USkeleton asset
+    parent_class_path: Optional /Script or /Game path to a UAnimInstance-derived class
+                       (defaults to UAnimInstance)
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "asset_path": asset_path,
+        "skeleton_path": skeleton_path,
+    }
+    if parent_class_path:
+        payload["parent_class_path"] = parent_class_path
+    try:
+        response = unreal.send_command("create_animation_blueprint", payload)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_animation_blueprint error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_blend_space(asset_path: str, skeleton_path: str) -> Dict[str, Any]:
+    """Create a new UBlendSpace bound to a USkeleton.
+
+    asset_path: /Game path for the new BlendSpace asset
+    skeleton_path: /Game path to a USkeleton asset
+    """
+    try:
+        validate_string(asset_path, "asset_path")
+        validate_string(skeleton_path, "skeleton_path")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_blend_space",
+            {"asset_path": asset_path, "skeleton_path": skeleton_path},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_blend_space error: {exc}")
+        return make_error_response(str(exc))
