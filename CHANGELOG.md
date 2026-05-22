@@ -4,6 +4,35 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Issue sweep: procedural docs + UE 5.7 build toolchain docs
+
+### Added
+
+- `docs/procedural-generation.md` documents the new Cesium, WFC / semantic layout,
+  and async procedural job tool surfaces from issue #29. It includes one-line
+  descriptions for each tool, the Rust -> Python -> Unreal pipeline, a minimal
+  WFC-to-HISM example, an async submit/status/result workflow, and `WITH_CESIUM`
+  / `CesiumRuntime` build notes.
+- `docs/build/BuildConfiguration.xml` provides a copy-ready UnrealBuildTool
+  template for pinning the UE 5.7 Windows compiler and SDK.
+
+### Changed
+
+- `Python/README_advanced.md` now links to the procedural/Cesium guide and lists
+  the 13 documented issue #29 / WFC tools with a minimal async job snippet.
+- `README.md` now links the procedural/Cesium guide from the setup help callouts.
+- `docs/build-environment.md` is aligned with Epic's public UE 5.7 Visual Studio
+  setup guidance: VS 2022 17.14, MSVC 14.44.35214, Windows SDK 10.0.22621.0+,
+  and .NET 8.0, while preserving a note that local UBT may request a nearby
+  14.44 patch version.
+
+### Verification
+
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0.
+- Ran targeted Python unit docs/contract checks: `python -m pytest Python/tests/unit/test_route_contracts_audit.py Python/tests/unit/test_procedural_realization_wrappers.py -q`; all selected tests passed.
+
+---
+
 ## [2026-05-21] - Wave 1 sub-batch H: Component Replicates + AudioVolume + DialogueWave + SourceControl + Stat wrappers
 
 Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`

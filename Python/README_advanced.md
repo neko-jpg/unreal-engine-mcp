@@ -4,7 +4,7 @@ A streamlined MCP server for Unreal Engine composition and Blueprint workflows. 
 
 ## What's Included
 
-This server exposes **46 tools** across five categories.
+This server exposes MCP tools across actor, Blueprint, material, world-building, scene-sync, procedural generation, Cesium, validation, and editor utility categories.
 
 ### Actor Management (6 tools)
 
@@ -76,6 +76,44 @@ This server exposes **46 tools** across five categories.
 | `create_suspension_bridge(span_length, deck_width, ..., dry_run)` | Build a suspension bridge |
 | `create_aqueduct(arches, arch_radius, tiers, ..., dry_run)` | Build a multi-tier aqueduct |
 | `spawn_physics_blueprint_actor(name, mesh_path, location, mass, ...)` | Spawn a physics-enabled actor |
+
+## Procedural Generation, Cesium, and Async Jobs
+
+The advanced server also registers the procedural and geospatial tool families
+documented in [`../docs/procedural-generation.md`](../docs/procedural-generation.md).
+
+| Tool | One-line purpose |
+|---|---|
+| `cesium_check_plugin` | Inspect `CesiumForUnreal` descriptor/module availability before using geospatial tools. |
+| `cesium_setup_georeference` | Spawn/reuse a Cesium georeference actor and set origin lon/lat/height. |
+| `cesium_add_tileset` | Add a Cesium ion or URL-backed 3D Tileset actor without logging token values. |
+| `cesium_place_actor_at_geolocation` | Attach a globe anchor and move an MCP actor to lon/lat/height. |
+| `scene_create_wfc_grid` | Generate a pure WFC grid without mutating Scene DB or Unreal state. |
+| `scene_create_wfc_grid_unreal` | Generate a WFC grid and realize the result through Unreal-facing tooling. |
+| `scene_wfc_to_semantic_layout` | Persist WFC tiles as tagged Scene DB actors for review and later compilation. |
+| `scene_show_wfc_proxy` | Preview WFC-generated actors as grouped HISM draft proxies in Unreal. |
+| `scene_procedural_job_submit` | Start a long-running WFC/L-System job in `scene-syncd`. |
+| `scene_procedural_job_status` | Poll job status, normalized progress, and optional generator progress text. |
+| `scene_procedural_job_result` | Wait for or fetch a completed procedural job result. |
+| `scene_procedural_job_cancel` | Cancel a queued or running procedural job. |
+| `scene_procedural_job_list` | List retained procedural job records. |
+
+Minimal async flow:
+
+```python
+submit = scene_procedural_job_submit(
+    generator="wfc",
+    params={"width": 16, "height": 16, "tiles": tiles, "constraints": constraints},
+    seed=42,
+)
+job_id = submit["job_id"]
+status = scene_procedural_job_status(job_id)
+result = scene_procedural_job_result(job_id, wait_seconds=30)
+```
+
+Cesium commands compile with `WITH_CESIUM=0` when the plugin is absent and
+return actionable hints instead of breaking the server. Install `CesiumForUnreal`
+and rebuild UnrealMCP to enable `WITH_CESIUM=1` / `CesiumRuntime` behavior.
 
 ## Batch Spawning
 

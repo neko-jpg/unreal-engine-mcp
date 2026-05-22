@@ -340,7 +340,9 @@ Note that on Mac, and sometimes on Windows, you may have to replace the "uv" str
 >
 > **Want to program Blueprints with AI?** Check our [Blueprint Graph Programming Guide](Guides/blueprint-graph-guide.md) to learn how to create nodes, connections, and variables programmatically.
 >
-> **Building the C++ plugin against UE 5.7?** See the [UE 5.7 Build Environment Guide](docs/build-environment.md) for the required Visual Studio 2022 17.14 / MSVC 14.44.35207 / Windows SDK 10.0.22621.0 toolchain matrix and a `BuildConfiguration.xml` snippet to silence compiler-version warnings.
+> **Building the C++ plugin against UE 5.7?** See the [UE 5.7 Build Environment Guide](docs/build-environment.md) for the required Visual Studio 2022 17.14 / MSVC 14.44.35214 / Windows SDK 10.0.22621.0+ toolchain matrix and a `BuildConfiguration.xml` snippet to silence compiler-version warnings.
+>
+> **Using procedural generation, async WFC/L-System jobs, or Cesium geospatial tools?** See the [Procedural Generation, Cesium, and Async Job Tools](docs/procedural-generation.md) guide for the Rust -> Python -> Unreal pipeline, one-line tool reference, async polling example, and `WITH_CESIUM` notes.
 >
 > **Adding a C++ command or wondering which file owns one?** See the [UnrealMCP Handler Split Architecture](docs/architecture/handler-split.md) for the route-id → handler-class table, the recipe for adding a new handler, and the Phase 1/2/3/4 refactor history.
 
