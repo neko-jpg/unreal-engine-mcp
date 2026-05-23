@@ -45,16 +45,38 @@ def create_landscape(actor_name: str = "Landscape", sections_per_component: int 
 
 
 @mcp.tool()
-def set_landscape_size(actor_name: str, width_quads: int, height_quads: int) -> Dict[str, Any]:
-    """Queue a Landscape resize (LandscapeEditMode is interactive in 5.7)."""
-    try:
-        validate_string(actor_name, "actor_name")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def set_landscape_size(
+    actor_name: str = "",
+    width_quads: int = 0,
+    height_quads: int = 0,
+    sections_per_component=None,
+    quads_per_section=None,
+    component_size_quads=None,
+    mcp_id: str = "",
+) -> Dict[str, Any]:
+    """Persist a requested Landscape size on the resolved ALandscape actor.
+
+    234-stubs W1 (#80) Part 1: the C++ handler now wraps the change in
+    FMCPScopedTransaction and writes MCP-namespaced UPackage::SetMetaData
+    keys so the requested size survives editor restart.
+    """
+    payload: Dict[str, Any] = {}
+    if actor_name:
+        try:
+            validate_string(actor_name, "actor_name")
+        except ValidationError as e:
+            return make_validation_error_response_from_exception(e)
+        payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
+    if sections_per_component is not None: payload["sections_per_component"] = int(sections_per_component)
+    if quads_per_section is not None: payload["quads_per_section"] = int(quads_per_section)
+    if component_size_quads is not None: payload["component_size_quads"] = int(component_size_quads)
+    if width_quads: payload.setdefault("width_quads", int(width_quads))
+    if height_quads: payload.setdefault("height_quads", int(height_quads))
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_landscape_size", {"actor_name": actor_name, "width_quads": int(width_quads), "height_quads": int(height_quads)})
+        r = u.send_command("set_landscape_size", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_landscape_size': {e}")
     return _envelope("set_landscape_size", r)
@@ -252,65 +274,113 @@ def set_landscape_layer_blend(actor_name: str, layer_name: str, weight: float = 
 
 
 @mcp.tool()
-def apply_landscape_material(actor_name: str, material_path: str) -> Dict[str, Any]:
-    """Queue UMaterialInterface assignment to ALandscape::LandscapeMaterial."""
+def apply_landscape_material(
+    actor_name: str = "",
+    material_path: str = "",
+    *,
+    mcp_id: str = "",
+) -> Dict[str, Any]:
+    """Set ALandscape::LandscapeMaterial on the resolved actor.
+
+    234-stubs W1 (#80) Part 1: the C++ handler loads the UMaterialInterface
+    and assigns it inside FMCPScopedTransaction.
+    """
+    if not material_path:
+        return make_error_response("apply_landscape_material: material_path is required")
     try:
-        validate_string(actor_name, "actor_name")
         validate_string(material_path, "material_path")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
+    payload: Dict[str, Any] = {"material_path": material_path}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("apply_landscape_material", {"actor_name": actor_name, "material_path": material_path})
+        r = u.send_command("apply_landscape_material", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'apply_landscape_material': {e}")
     return _envelope("apply_landscape_material", r)
 
 
 @mcp.tool()
-def set_landscape_grass_output(actor_name: str, grass_type_path: str = "", density: float = 1.0) -> Dict[str, Any]:
-    """Queue Landscape Grass Output configuration."""
+def set_landscape_grass_output(
+    actor_name: str = "",
+    *,
+    grass_type_path: str = "",
+    mcp_id: str = "",
+    layer_name: str = "",
+    density: float = 1.0,
+) -> Dict[str, Any]:
+    """Attach a ULandscapeGrassType to the resolved ALandscape."""
+    if not grass_type_path:
+        return make_error_response("set_landscape_grass_output: grass_type_path is required")
     try:
-        validate_string(actor_name, "actor_name")
+        validate_string(grass_type_path, "grass_type_path")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
+    payload: Dict[str, Any] = {"grass_type_path": grass_type_path, "density": float(density)}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
+    if layer_name: payload["layer_name"] = layer_name
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_landscape_grass_output", {"actor_name": actor_name, "grass_type_path": grass_type_path, "density": float(density)})
+        r = u.send_command("set_landscape_grass_output", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_landscape_grass_output': {e}")
     return _envelope("set_landscape_grass_output", r)
 
 
 @mcp.tool()
-def set_landscape_collision(actor_name: str, enable: bool = True) -> Dict[str, Any]:
-    """Toggle Landscape collision."""
-    try:
-        validate_string(actor_name, "actor_name")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def set_landscape_collision(
+    actor_name: str = "",
+    enable: bool = True,
+    mcp_id: str = "",
+    collision_mip_level=None,
+    simple_collision_mip_level=None,
+    generate_overlap_events=None,
+) -> Dict[str, Any]:
+    """Apply collision settings on the resolved ALandscape."""
+    payload: Dict[str, Any] = {"enable": bool(enable)}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
+    if collision_mip_level is not None: payload["collision_mip_level"] = int(collision_mip_level)
+    if simple_collision_mip_level is not None: payload["simple_collision_mip_level"] = int(simple_collision_mip_level)
+    if generate_overlap_events is not None: payload["generate_overlap_events"] = bool(generate_overlap_events)
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_landscape_collision", {"actor_name": actor_name, "enable": bool(enable)})
+        r = u.send_command("set_landscape_collision", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_landscape_collision': {e}")
     return _envelope("set_landscape_collision", r)
 
 
 @mcp.tool()
-def add_landscape_hole(actor_name: str, location_xy: list, radius: float = 100.0) -> Dict[str, Any]:
-    """Queue a hole / cave opening on the Landscape."""
-    try:
-        validate_string(actor_name, "actor_name")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def add_landscape_hole(
+    actor_name: str = "",
+    location_xy: Optional[list] = None,
+    radius: float = 100.0,
+    mcp_id: str = "",
+    shape: str = "circle",
+    x=None, y=None, width=None, height=None,
+) -> Dict[str, Any]:
+    """Record a landscape hole shape on the resolved ALandscape."""
+    payload: Dict[str, Any] = {"shape": shape, "radius": float(radius)}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
+    if location_xy and len(location_xy) >= 2:
+        payload.setdefault("x", float(location_xy[0]))
+        payload.setdefault("y", float(location_xy[1]))
+    if x is not None: payload["x"] = float(x)
+    if y is not None: payload["y"] = float(y)
+    if width is not None: payload["width"] = float(width)
+    if height is not None: payload["height"] = float(height)
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("add_landscape_hole", {"actor_name": actor_name, "location_xy": location_xy, "radius": float(radius)})
+        r = u.send_command("add_landscape_hole", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'add_landscape_hole': {e}")
     return _envelope("add_landscape_hole", r)
@@ -365,49 +435,80 @@ def carve_river_terrain(actor_name: str, water_body_actor: str = "", carve_depth
 
 
 @mcp.tool()
-def attach_landscape_rvt(actor_name: str, rvt_asset_path: str) -> Dict[str, Any]:
-    """Queue an RVT asset attach (ALandscape::RuntimeVirtualTextures)."""
+def attach_landscape_rvt(
+    actor_name: str = "",
+    rvt_asset_path: str = "",
+    *,
+    rvt_path: str = "",
+    mcp_id: str = "",
+) -> Dict[str, Any]:
+    """Attach a URuntimeVirtualTexture to ALandscape::RuntimeVirtualTextures.
+
+    Accepts either `rvt_path` (new) or `rvt_asset_path` (legacy).
+    """
+    effective = rvt_path or rvt_asset_path
+    if not effective:
+        return make_error_response("attach_landscape_rvt: rvt_path is required")
     try:
-        validate_string(actor_name, "actor_name")
-        validate_string(rvt_asset_path, "rvt_asset_path")
+        validate_string(effective, "rvt_path")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
+    payload: Dict[str, Any] = {"rvt_path": effective, "rvt_asset_path": effective}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("attach_landscape_rvt", {"actor_name": actor_name, "rvt_asset_path": rvt_asset_path})
+        r = u.send_command("attach_landscape_rvt", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'attach_landscape_rvt': {e}")
     return _envelope("attach_landscape_rvt", r)
 
 
 @mcp.tool()
-def set_landscape_nanite(actor_name: str, enable: bool = True) -> Dict[str, Any]:
-    """Toggle ALandscape::bEnableNanite."""
-    try:
-        validate_string(actor_name, "actor_name")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def set_landscape_nanite(
+    actor_name: str = "",
+    enable: bool = True,
+    *,
+    mcp_id: str = "",
+) -> Dict[str, Any]:
+    """Toggle ALandscape::bEnableNanite on the resolved actor."""
+    payload: Dict[str, Any] = {"enable_nanite": bool(enable), "enable": bool(enable)}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_landscape_nanite", {"actor_name": actor_name, "enable": bool(enable)})
+        r = u.send_command("set_landscape_nanite", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_landscape_nanite': {e}")
     return _envelope("set_landscape_nanite", r)
 
 
 @mcp.tool()
-def set_landscape_world_partition(actor_name: str, grid_size: int = 4) -> Dict[str, Any]:
-    """Queue World Partition landscape splitting."""
-    try:
-        validate_string(actor_name, "actor_name")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def set_landscape_world_partition(
+    actor_name: str = "",
+    grid_size: int = 4,
+    *,
+    mcp_id: str = "",
+    include_grid_size_in_name=None,
+) -> Dict[str, Any]:
+    """Configure World Partition flags on the resolved ALandscape.
+
+    234-stubs W1 (#80) Part 1: the C++ handler writes
+    bIncludeGridSizeInNameForLandscapeActors directly on the actor and
+    persists the requested grid_size in MCP metadata for the wave-close
+    replay.
+    """
+    payload = {"wp_grid_size": float(grid_size), "grid_size": int(grid_size)}
+    if actor_name: payload["actor_name"] = actor_name
+    if mcp_id: payload["mcp_id"] = mcp_id
+    if include_grid_size_in_name is not None:
+        payload["include_grid_size_in_name"] = bool(include_grid_size_in_name)
     u = get_unreal_connection()
     if u is None: return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_landscape_world_partition", {"actor_name": actor_name, "grid_size": int(grid_size)})
+        r = u.send_command("set_landscape_world_partition", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_landscape_world_partition': {e}")
     return _envelope("set_landscape_world_partition", r)
