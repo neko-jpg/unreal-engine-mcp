@@ -100,6 +100,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgGraph(const TS
 
     // Create PCG graph asset
     UPackage* Pkg = CreatePackage(*FString::Printf(TEXT("%s/%s"), *AssetPath, *AssetName));
+    if (!Pkg) return PCGErr(TEXT("Failed to create package for PCG graph"));
     UPCGGraph* Graph = NewObject<UPCGGraph>(Pkg, *AssetName, RF_Public | RF_Standalone);
     Graph->MarkPackageDirty();
 
