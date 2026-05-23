@@ -264,6 +264,28 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("get_mrq_render_progress"), 26},
         {TEXT("verify_mrq_render_result"), 26},
         {TEXT("create_movie_render_graph"), 26},
+        // ---- Foliage / Vegetation (Sub-batch N, route 27, issue #44) ----
+        {TEXT("create_foliage_type"), 27},
+        {TEXT("register_static_mesh_foliage"), 27},
+        {TEXT("register_actor_foliage"), 27},
+        {TEXT("foliage_paint"), 27},
+        {TEXT("foliage_erase"), 27},
+        {TEXT("set_foliage_density"), 27},
+        {TEXT("set_foliage_scale_range"), 27},
+        {TEXT("set_foliage_random_yaw"), 27},
+        {TEXT("set_foliage_align_to_normal"), 27},
+        {TEXT("set_foliage_cull_distance"), 27},
+        {TEXT("set_foliage_lod"), 27},
+        {TEXT("create_procedural_foliage_spawner"), 27},
+        {TEXT("create_procedural_foliage_volume"), 27},
+        {TEXT("set_procedural_foliage_seed"), 27},
+        {TEXT("spawn_biome_foliage"), 27},
+        {TEXT("create_grass_type"), 27},
+        {TEXT("bind_landscape_grass"), 27},
+        {TEXT("set_foliage_nanite"), 27},
+        {TEXT("set_foliage_wind"), 27},
+        {TEXT("configure_pivot_painter"), 27},
+
 
 
         // Project / Editor Commands (5)

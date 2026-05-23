@@ -55,6 +55,7 @@ def bootstrap():
     from server import anim_rigging_tools         # noqa: F401  Sub-batch K
     from server import ai_nav_extension_tools     # noqa: F401  Sub-batch L
     from server import movie_render_queue_tools   # noqa: F401  Sub-batch M
+    from server import foliage_tools                # noqa: F401  Sub-batch N
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

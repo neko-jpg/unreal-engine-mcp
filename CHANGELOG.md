@@ -4,6 +4,29 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch N: Foliage / Vegetation (20 tasks.md items, issue #44)
+
+Adds a Foliage / Vegetation handler class (route 27, `FEpicUnrealMCPFoliageCommands`) covering all 20 Foliage / Vegetation items in `docs/superpowers/plans/tasks.md` (FoliageType + StaticMesh / Actor registration, paint / erase, density / scale / random-yaw / align-to-normal / cull distance / LOD, Procedural Foliage Spawner + Volume + seed + biome spawn, Grass Type + landscape grass binding, Nanite foliage, wind, Pivot Painter). The Foliage module ships with UE 5.7 and is detected at runtime; queued payloads describe what the FoliageEditMode interactive editor will pick up.
+
+### Added / Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPFoliageCommands.{h,cpp}` (generated).
+- `EpicUnrealMCPBridge.cpp` registers handler on route 27.
+- `EpicUnrealMCPRouter.cpp` adds 20 `{TEXT(`...`), 27}` entries.
+- `Python/server/foliage_tools.py` + `Python/tests/unit/test_foliage_tools.py` (generated).
+- `Python/server/__init__.py` bootstrap + `test_tool_registration_and_mapping.py` patch list now cover `foliage_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 20 entries to `[x]` under Foliage / Vegetation.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 579` (was 559; +20).
+- `python -m pytest Python/tests/unit/test_foliage_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **25 passed**.
+
+### Notes
+
+- UE 5.7 modules: `Foliage` (`UFoliageType`, `UFoliageType_InstancedStaticMesh`, `UFoliageType_Actor`, `AInstancedFoliageActor`, `UProceduralFoliageSpawner`, `AProceduralFoliageVolume`), `FoliageEdit` for paint mode.
+---
+
 ## [2026-05-23] - Sub-batch M: Movie Render Queue (21 tasks.md items, issue #53)
 
 Adds a dedicated MRQ handler class (route 26, `FEpicUnrealMCPMovieRenderQueueCommands`) covering all 21 Movie Render Queue items in `docs/superpowers/plans/tasks.md` (Job CRUD, sequence add, output dir/resolution/frame-range, AA, EXR/PNG/JPG/Video output, Path Tracer, console variables, render passes, object-id/mask, burn-in, warm-up, render trigger / cancel / progress / verify, Movie Render Graph asset). Payloads are validated and routed; render trigger payloads are queued because `UMoviePipelineExecutorBase::Execute` runs asynchronously in the editor and the bridge does not block on completion.
