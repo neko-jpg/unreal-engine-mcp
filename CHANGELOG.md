@@ -4,6 +4,34 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch M: Movie Render Queue (21 tasks.md items, issue #53)
+
+Adds a dedicated MRQ handler class (route 26, `FEpicUnrealMCPMovieRenderQueueCommands`) covering all 21 Movie Render Queue items in `docs/superpowers/plans/tasks.md` (Job CRUD, sequence add, output dir/resolution/frame-range, AA, EXR/PNG/JPG/Video output, Path Tracer, console variables, render passes, object-id/mask, burn-in, warm-up, render trigger / cancel / progress / verify, Movie Render Graph asset). Payloads are validated and routed; render trigger payloads are queued because `UMoviePipelineExecutorBase::Execute` runs asynchronously in the editor and the bridge does not block on completion.
+
+### Added
+
+21 new `@mcp.tool()` wrappers + 21 C++ handlers + 21 router entries on route 26.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPMovieRenderQueueCommands.{h,cpp}` add the handler class.
+- `EpicUnrealMCPBridge.cpp` registers it on route 26.
+- `EpicUnrealMCPRouter.cpp` adds 21 `{TEXT(`...`), 26}` entries.
+- `Python/server/movie_render_queue_tools.py` + `Python/tests/unit/test_movie_render_queue_tools.py` (generated via `scripts/generate_subbatch.py`).
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patches now cover `movie_render_queue_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 21 entries to `[x]` under Movie Render Queue.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 559` (was 538; +21).
+- `python -m pytest Python/tests/unit/test_movie_render_queue_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **26 passed**.
+
+### Notes
+
+- UE 5.7 modules: `MovieRenderPipelineCore` (`UMoviePipelineQueue`, `UMoviePipelineMasterConfig`, `UMoviePipelineOutputSettings`, `UMoviePipelineAntiAliasingSetting`, `UMoviePipelineImageSequenceOutput_PNG/JPG/EXR`, `UMoviePipelineWidgetRenderer`, `UMoviePipelineConsoleVariableSetting`, `UMoviePipelineDeferredPassBase`, `UMoviePipelineHighResSetting`), `MovieRenderPipelineEditor` for the queue dock.
+- Movie Render Graph (5.4+) is exposed via `UMovieGraphConfig`; queued for now while UE 5.7 stabilises its editor API surface.
+---
+
 ## [2026-05-23] - Sub-batch L: AI / Navigation extensions (23 tasks.md items, issue #47)
 
 Adds a dedicated extension handler class (route 36, `FEpicUnrealMCPAiNavExtensionCommands`) covering the remaining 21 `[ ]` + 2 `[~]` AI / Navigation items in `docs/superpowers/plans/tasks.md` (Behavior Tree node CRUD, Task/Service/Decorator factories, AI Perception hearing/damage/team senses, EQS generator/test/debug, SmartNavLink, NavArea, RecastNavMesh details, MassEntity bridge, StateTree, `set_ai_behavior_tag`, `configure_cognitive_ai_controller`). All handlers route through the AI module and accept JSON payloads; the BehaviorTreeEditor / EQSEditor / StateTreeEditor private editor APIs in UE 5.7 require interactive context so the handlers return a structured `queued` envelope for asset graph edits while keeping the 3-layer audit contract intact.
