@@ -1,15 +1,13 @@
 {
   "schema": 1,
-  "generated_utc": "2026-05-23T11:21:01Z",
-  "total": 226,
+  "generated_utc": "2026-05-23T13:21:37Z",
+  "total": 224,
   "per_file": {
     "EpicUnrealMCPAiNavExtensionCommands.cpp": 23,
-    "EpicUnrealMCPAnimationRiggingCommands.cpp": 1,
     "EpicUnrealMCPChaosCommands.cpp": 19,
     "EpicUnrealMCPDataTableExtensionCommands.cpp": 9,
     "EpicUnrealMCPFoliageCommands.cpp": 20,
     "EpicUnrealMCPGASCommands.cpp": 16,
-    "EpicUnrealMCPLandscapeCommands.cpp": 1,
     "EpicUnrealMCPLocalizationCommands.cpp": 10,
     "EpicUnrealMCPMetaSoundCommands.cpp": 7,
     "EpicUnrealMCPMobileXrCommands.cpp": 14,
