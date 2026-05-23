@@ -4,9 +4,17 @@
 #include "Modules/ModuleManager.h"
 #include "Interfaces/IPluginManager.h"
 
+#if WITH_CHAOS_MCP
+#include "PhysicsEngine/PhysicsSettings.h"
+#include "Engine/EngineTypes.h"
+#include "Engine/World.h"
+#include "Editor.h"
+#include "UObject/Package.h"
+#endif
+
 bool FEpicUnrealMCPChaosCommands::IsModuleAvailable()
 {
-#if 1
+#if WITH_CHAOS_MCP
     return true;
 #else
     return false;
@@ -24,6 +32,26 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::MakeUnavailable(const FStri
 
 FEpicUnrealMCPChaosCommands::FEpicUnrealMCPChaosCommands() {}
 FEpicUnrealMCPChaosCommands::~FEpicUnrealMCPChaosCommands() {}
+
+// ---------------------------------------------------------------------------
+// 234-stubs W3 (#89): Chaos executed-envelope helpers.
+// ---------------------------------------------------------------------------
+
+static TSharedPtr<FJsonObject> ChaosOk(TSharedPtr<FJsonObject> Data)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), true);
+    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
+    return Out;
+}
+
+static TSharedPtr<FJsonObject> ChaosErr(const FString& Msg)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), false);
+    Out->SetStringField(TEXT("error"), Msg);
+    return Out;
+}
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
@@ -62,15 +90,69 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCommand(const FString
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateCollisionChannel(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_collision_channel"));
+
+#if WITH_CHAOS_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_collision_channel"));
+
+    FString ChannelName = TEXT("MCP_Channel");
+    FString DefaultResponse = TEXT("Block");
+
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("channel_name"), ChannelName);
+        Params->TryGetStringField(TEXT("default_response"), DefaultResponse);
+    }
+
+    // Get physics settings CDO
+    UPhysicsSettings* PhysSettings = GetMutableDefault<UPhysicsSettings>();
+    if (!PhysSettings) return ChaosErr(TEXT("Failed to get physics settings"));
+
+    // Build a new custom collision channel entry and append it.
+    FCustomChannelSetup NewChannel;
+    NewChannel.Channel = ECC_GameTraceChannel1;
+    NewChannel.DefaultResponse = DefaultResponse == TEXT("Ignore") ? ECR_Ignore
+        : DefaultResponse == TEXT("Overlap") ? ECR_Overlap
+        : ECR_Block;
+    NewChannel.bTraceType = false;
+    NewChannel.Name = FName(*ChannelName);
+    NewChannel.bStaticObject = false;
+
+    // Find the next available game trace channel slot.
+    int32 SlotIndex = -1;
+    for (int32 Idx = 0; Idx < PhysSettings->DefaultChannelResponses.Num(); ++Idx)
+    {
+        if (PhysSettings->DefaultChannelResponses[Idx].Name == FName(*ChannelName))
+        {
+            // Channel already exists -- return the existing slot.
+            SlotIndex = Idx;
+            break;
+        }
+    }
+    if (SlotIndex < 0)
+    {
+        // Map the next free ECC_GameTraceChannel enum value.
+        int32 FreeSlot = PhysSettings->DefaultChannelResponses.Num();
+        if (FreeSlot >= 18) return ChaosErr(TEXT("All 18 game trace channels are in use"));
+
+        ECollisionChannel NewECC = static_cast<ECollisionChannel>(
+            static_cast<int32>(ECC_GameTraceChannel1) + FreeSlot);
+        NewChannel.Channel = NewECC;
+        PhysSettings->DefaultChannelResponses.Add(NewChannel);
+        SlotIndex = PhysSettings->DefaultChannelResponses.Num() - 1;
+    }
+
+    PhysSettings->TryUpdateDefaultConfigFile();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_collision_channel"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("channel_name"), ChannelName);
+    Data->SetStringField(TEXT("default_response"), DefaultResponse);
+    Data->SetNumberField(TEXT("slot_index"), SlotIndex);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_collision_channel"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateObjectChannel(const TSharedPtr<FJsonObject>& Params)
