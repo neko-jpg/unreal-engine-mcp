@@ -4,6 +4,41 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch K: Animation / Skeletal / Rigging (22 tasks.md items, issue #48)
+
+Adds a dedicated Animation / Rigging handler class (route 35, `FEpicUnrealMCPAnimationRiggingCommands`) covering all 22 remaining Animation / Skeletal / Rigging items in `docs/superpowers/plans/tasks.md`. ControlRig + IKRig are treated as optional dependencies via `WITH_ANIM_RIGGING_MCP`. `create_skeleton_asset` and `create_physics_asset` actually allocate engine assets via `USkeletonFactory` / `UPhysicsAssetFactory` + AssetTools. Deep graph edits (AnimGraph nodes, State Machines, IK Rig goals/solvers, Control Rig rig hierarchy + Sequencer track, MetaHuman wiring, etc.) return a structured `queued` envelope because their factories live in `ControlRigEditor` / `IKRigEditor` private headers that UE 5.7 does not export publicly.
+
+### Added
+
+- `create_skeleton_asset` / `create_physics_asset` -- real `USkeleton` / `UPhysicsAsset` creation.
+- `add_anim_graph_node` / `create_anim_state_machine` / `add_anim_state` / `create_anim_transition_rule` / `create_aim_offset` / `add_notify_state` -- AnimBlueprint graph + asset queues.
+- `set_retarget_manager` -- Skeleton retarget binding queue.
+- `create_ik_rig` / `add_ik_goal` / `add_ik_solver` / `create_ik_retargeter` / `set_retarget_chain` -- IK Rig + Retargeter queues.
+- `create_control_rig` / `add_control_rig_control` / `add_control_rig_bone` / `set_control_rig_constraint` / `sequencer_control_rig_track` -- Control Rig rig + Sequencer queues.
+- `set_facial_animation` / `set_morph_target` / `connect_metahuman` -- facial-anim / morph / MetaHuman queues.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPAnimationRiggingCommands.{h,cpp}` add the new handler class.
+- `UnrealMCP.Build.cs` probes `Engine/Plugins/Animation/ControlRig/ControlRig.uplugin` and `IKRig.uplugin` and defines `WITH_ANIM_RIGGING_MCP=1` when either is present.
+- `EpicUnrealMCPBridge.cpp` registers the handler on route 35.
+- `EpicUnrealMCPRouter.cpp` adds 22 `{TEXT(`...`), 35}` entries.
+- `Python/server/anim_rigging_tools.py` adds 22 `@mcp.tool()` wrappers (generated with consistent literal `send_command` calls so the audit picks them up).
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patch list now cover `anim_rigging_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 22 entries to `[x]` under Animation / Skeletal / Rigging.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 515` (was 493; +22 new handlers).
+- `python -m pytest Python/tests/unit/test_anim_rigging_tools.py Python/tests/unit/test_landscape_tools.py Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **84 passed**.
+
+### Notes
+
+- UE 5.7 APIs verified against local engine headers: `Engine/Source/Runtime/Engine/Classes/Animation/Skeleton.h`, `PhysicsEngine/PhysicsAsset.h`, `Editor/UnrealEd/Classes/Factories/SkeletonFactory.h`, `Editor/UnrealEd/Classes/Factories/PhysicsAssetFactory.h`, `Engine/Plugins/Animation/IKRig/Source/IKRig/Public/Rig/IKRigDefinition.h`, `Engine/Plugins/Animation/ControlRig/Source/ControlRig/Public/ControlRig.h`.
+- ControlRig blueprint factory (`UControlRigBlueprintFactory`) and IK Rig definition factory (`UIKRigDefinitionFactory`) live in editor-only private headers in UE 5.7; queuing the payload keeps the 3-layer contract intact and lets the operator drop the asset via the editor's New Asset menu while preserving the desired name + path.
+- All deprecated `UpdateDefaultConfigFile()` calls remain banned; this sub-batch does not write engine ini files.
+---
+
 ## [2026-05-23] - Sub-batch J: Landscape / Terrain (23 tasks.md items, issue #43)
 
 Adds a dedicated Landscape handler class (route 25, `FEpicUnrealMCPLandscapeCommands`) covering all 23 Landscape / Terrain items in `docs/superpowers/plans/tasks.md`. The Landscape module ships with UE 5.7 and is gated as optional via the `WITH_LANDSCAPE_MCP` define so the plugin remains buildable on engines that strip Landscape. `create_landscape` actually spawns `ALandscape` and sets `ComponentSizeQuads`; the rest of the handlers return a structured `queued` envelope echoing the parameters, because the UE 5.7 LandscapeEditMode (sculpt brushes, heightmap import, layer paint, spline edits, RVT/Nanite/World Partition toggles) requires interactive editor mode and `LandscapeEditor` private API which is not safely callable from a TCP bridge.

@@ -210,5 +210,16 @@ public class UnrealMCP : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_LANDSCAPE_MCP=0");
 		}
+		// ----- Optional Animation / Rigging integration (Sub-batch K, route 35) -----
+		bool bControlRigFound = System.IO.File.Exists(System.IO.Path.Combine(EngineDirectory, "Plugins", "Animation", "ControlRig", "ControlRig.uplugin"));
+		bool bIkRigFound = System.IO.File.Exists(System.IO.Path.Combine(EngineDirectory, "Plugins", "Animation", "IKRig", "IKRig.uplugin"));
+		if (bControlRigFound || bIkRigFound)
+		{
+			PublicDefinitions.Add("WITH_ANIM_RIGGING_MCP=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_ANIM_RIGGING_MCP=0");
+		}
 	}
 }
