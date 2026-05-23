@@ -4,6 +4,11 @@
 #include "Modules/ModuleManager.h"
 #include "Interfaces/IPluginManager.h"
 
+#if WITH_PCG_MCP
+#include "PCGGraph.h"
+#include "UObject/Package.h"
+#endif
+
 bool FEpicUnrealMCPPCGCommands::IsModuleAvailable()
 {
 #if 1
@@ -20,6 +25,26 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::MakeUnavailable(const FString
     R->SetStringField(TEXT("error"), FString::Printf(TEXT("'%s' requires the EpicUnrealMCPPCGCommands module."), *Cmd));
     R->SetStringField(TEXT("hint"), TEXT("Enable Engine/Plugins/Experimental/PCG (UE 5.7 stable subset)."));
     return R;
+}
+
+// ---------------------------------------------------------------------------
+// 234-stubs W3 (#91): PCG executed-envelope helpers.
+// ---------------------------------------------------------------------------
+
+static TSharedPtr<FJsonObject> PCGOk(TSharedPtr<FJsonObject> Data)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), true);
+    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
+    return Out;
+}
+
+static TSharedPtr<FJsonObject> PCGErr(const FString& Msg)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), false);
+    Out->SetStringField(TEXT("error"), Msg);
+    return Out;
 }
 
 FEpicUnrealMCPPCGCommands::FEpicUnrealMCPPCGCommands() {}
@@ -62,16 +87,30 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCommand(const FString& 
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgGraph(const TSharedPtr<FJsonObject>& Params)
 {
-    if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_pcg_graph"));
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_pcg_graph"));
+
+    FString AssetPath = TEXT("/Game/PCG");
+    FString AssetName = TEXT("PCGGraph_New");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+    }
+
+    // Create PCG graph asset
+    UPackage* Pkg = CreatePackage(*FString::Printf(TEXT("%s/%s"), *AssetPath, *AssetName));
+    UPCGGraph* Graph = NewObject<UPCGGraph>(Pkg, *AssetName, RF_Public | RF_Standalone);
+    Graph->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_pcg_graph"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), Graph->GetPathName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_pcg_graph"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleAddPcgComponent(const TSharedPtr<FJsonObject>& Params)
