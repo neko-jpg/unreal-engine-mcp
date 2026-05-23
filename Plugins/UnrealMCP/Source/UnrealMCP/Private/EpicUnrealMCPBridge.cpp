@@ -88,6 +88,7 @@
 #include "Commands/EpicUnrealMCPChaosCommands.h"
 #include "Commands/EpicUnrealMCPGASCommands.h"
 #include "Commands/EpicUnrealMCPWaterCommands.h"
+#include "Commands/EpicUnrealMCPMobileXrCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -358,6 +359,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPChaosCommands>(29); // Chaos / Physics extensions (Sub-batch Q, route 29, issue #51)
     RegisterHandler<FEpicUnrealMCPGASCommands>(30); // Gameplay Ability System (Sub-batch R, route 30, issue #55)
     RegisterHandler<FEpicUnrealMCPWaterCommands>(31); // Water System (Sub-batch S, route 31, issue #46)
+    RegisterHandler<FEpicUnrealMCPMobileXrCommands>(38); // Mobile / XR (Sub-batch T, route 38, issue #59)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

@@ -4,6 +4,21 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch T: Mobile / XR (14 tasks.md items, issue #59)
+
+Adds a Mobile / XR handler class (route 38, `FEpicUnrealMCPMobileXrCommands`) covering all 14 Platform / Mobile / XR items (Android / iOS settings, Mobile Rendering, Touch Input, Device + Scalability profiles, XR plugin enable, OpenXR config, VR Pawn spawn, Motion Controller / HMD camera setup, AR Session + Plane Detection, Platform-specific Packaging).
+
+### Notes
+
+- All config-saving handlers route through `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates the old `UpdateDefaultConfigFile()`).
+- The actual platform SDK install (Android Studio NDK, Xcode toolchain, OpenXR runtime, ARCore/ARKit) is out-of-scope and remains a manual prerequisite.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 684` (was 670; +14).
+- `python -m pytest Python/tests/unit/test_mobile_xr_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **19 passed**.
+---
+
 ## [2026-05-23] - Sub-batch S: Water System (15 tasks.md items, issue #46)
 
 Adds a Water handler class (route 31, `FEpicUnrealMCPWaterCommands`) covering 15 Water System items (plugin enable, ocean / lake / river / custom water bodies, river spline edit, water material, waves, flow, buoyancy, water mesh actor, underwater post process, shoreline smoothness, landscape carving, floating actor attach). All commands accept the desired-state payload; finishing the carve / mesh rebuild runs in the editor's Water Brush Manager.

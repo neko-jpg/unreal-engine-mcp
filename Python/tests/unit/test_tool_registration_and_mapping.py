@@ -28,7 +28,7 @@ from server import (
     material_graph_tools, material_tools, umg_tools, world_building_tools, lighting_tools,
     rendering_tools, data_table_tools, audio_tools, project_editor_tools,
     asset_management_tools, asset_import_tools, mesh_editing_tools, enhanced_input_tools,
-    scene_tools, vertical_test_tools, vroid_tools, niagara_tools, landscape_tools, anim_rigging_tools, ai_nav_extension_tools, movie_render_queue_tools, foliage_tools, pcg_tools, networking_tools, chaos_tools, gas_tools, water_tools,
+    scene_tools, vertical_test_tools, vroid_tools, niagara_tools, landscape_tools, anim_rigging_tools, ai_nav_extension_tools, movie_render_queue_tools, foliage_tools, pcg_tools, networking_tools, chaos_tools, gas_tools, water_tools, mobile_xr_tools,
 )
 
 
@@ -56,7 +56,7 @@ def _patch_tool_connections(fake_conn):
         material_graph_tools, material_tools, umg_tools, world_building_tools, lighting_tools,
         rendering_tools, data_table_tools, audio_tools, project_editor_tools,
         asset_management_tools, asset_import_tools, mesh_editing_tools, enhanced_input_tools,
-        scene_tools, vertical_test_tools, vroid_tools, niagara_tools, landscape_tools, anim_rigging_tools, ai_nav_extension_tools, movie_render_queue_tools, foliage_tools, pcg_tools, networking_tools, chaos_tools, gas_tools, water_tools,
+        scene_tools, vertical_test_tools, vroid_tools, niagara_tools, landscape_tools, anim_rigging_tools, ai_nav_extension_tools, movie_render_queue_tools, foliage_tools, pcg_tools, networking_tools, chaos_tools, gas_tools, water_tools, mobile_xr_tools,
     ]:
         stack.enter_context(patch.object(module, "get_unreal_connection", return_value=fake_conn, create=True))
     return stack

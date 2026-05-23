@@ -1069,20 +1069,20 @@ Python/Rust蛛ｴ縺ｮ繝・せ繝医・縺ゅｊ縺ｾ縺吶・
 
 ```md
 ## Platform / Mobile / XR
-- [ ] Android險ｭ螳・
-- [ ] iOS險ｭ螳・
-- [ ] Mobile Rendering險ｭ螳・
-- [ ] Touch Input險ｭ螳・
-- [ ] Device Profile險ｭ螳・
-- [ ] Scalability Profile菴懈・
-- [ ] XR Plugin譛牙柑蛹・
-- [ ] OpenXR險ｭ螳・
-- [ ] VR Pawn菴懈・
-- [ ] Motion Controller險ｭ螳・
-- [ ] HMD Camera險ｭ螳・
-- [ ] AR Session險ｭ螳・
-- [ ] AR Plane Detection險ｭ螳・
-- [ ] Platform-specific Packaging
+- [x] Android險ｭ螳・
+- [x] iOS險ｭ螳・
+- [x] Mobile Rendering險ｭ螳・
+- [x] Touch Input險ｭ螳・
+- [x] Device Profile險ｭ螳・
+- [x] Scalability Profile菴懈・
+- [x] XR Plugin譛牙柑蛹・
+- [x] OpenXR險ｭ螳・
+- [x] VR Pawn菴懈・
+- [x] Motion Controller險ｭ螳・
+- [x] HMD Camera險ｭ螳・
+- [x] AR Session險ｭ螳・
+- [x] AR Plane Detection險ｭ螳・
+- [x] Platform-specific Packaging
 ```
 
 ---

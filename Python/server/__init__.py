@@ -61,6 +61,7 @@ def bootstrap():
     from server import chaos_tools                  # noqa: F401  Sub-batch Q
     from server import gas_tools                    # noqa: F401  Sub-batch R
     from server import water_tools                  # noqa: F401  Sub-batch S
+    from server import mobile_xr_tools              # noqa: F401  Sub-batch T
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

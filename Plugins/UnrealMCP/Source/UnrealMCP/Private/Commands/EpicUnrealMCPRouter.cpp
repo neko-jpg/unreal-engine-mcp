@@ -381,6 +381,22 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("configure_shoreline"), 31},
         {TEXT("configure_water_landscape_carving"), 31},
         {TEXT("attach_floating_actor"), 31},
+        // ---- Mobile / XR (Sub-batch T, route 38, issue #59) ----
+        {TEXT("configure_android_settings"), 38},
+        {TEXT("configure_ios_settings"), 38},
+        {TEXT("configure_mobile_rendering"), 38},
+        {TEXT("configure_touch_input"), 38},
+        {TEXT("set_device_profile"), 38},
+        {TEXT("create_scalability_profile"), 38},
+        {TEXT("enable_xr_plugin"), 38},
+        {TEXT("configure_openxr"), 38},
+        {TEXT("spawn_vr_pawn"), 38},
+        {TEXT("configure_motion_controller"), 38},
+        {TEXT("configure_hmd_camera"), 38},
+        {TEXT("configure_ar_session"), 38},
+        {TEXT("configure_ar_plane_detection"), 38},
+        {TEXT("platform_specific_packaging"), 38},
+
 
 
 
