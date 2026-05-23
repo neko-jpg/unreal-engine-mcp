@@ -432,6 +432,17 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("run_gameplay_screenshot_test"), 39},
         {TEXT("run_python_unit_test"), 39},
         {TEXT("run_rust_test"), 39},
+        // ---- Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54) ----
+        {TEXT("create_row_struct"), 40},
+        {TEXT("edit_row_struct"), 40},
+        {TEXT("edit_data_asset_properties"), 40},
+        {TEXT("import_gameplay_tag_table"), 40},
+        {TEXT("generate_item_db_template"), 40},
+        {TEXT("generate_enemy_db_template"), 40},
+        {TEXT("generate_quest_db_template"), 40},
+        {TEXT("generate_dialogue_db_template"), 40},
+        {TEXT("create_blueprint_datatable_reference_node"), 40},
+
 
 
 

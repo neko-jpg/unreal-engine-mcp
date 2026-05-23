@@ -92,6 +92,7 @@
 #include "Commands/EpicUnrealMCPSourceControlCommands.h"
 #include "Commands/EpicUnrealMCPLocalizationCommands.h"
 #include "Commands/EpicUnrealMCPTestingValidationCommands.h"
+#include "Commands/EpicUnrealMCPDataTableExtensionCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -366,6 +367,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPSourceControlCommands>(32); // Source Control / Multi-User (Sub-batch U, route 32, issue #60)
     RegisterHandler<FEpicUnrealMCPLocalizationCommands>(33); // Localization (Sub-batch V, route 33, issue #58)
     RegisterHandler<FEpicUnrealMCPTestingValidationCommands>(39); // Testing / Validation extensions (Sub-batch W, route 39, issue #57)
+    RegisterHandler<FEpicUnrealMCPDataTableExtensionCommands>(40); // Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

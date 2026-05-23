@@ -906,7 +906,7 @@ Blueprint Graph縺ｧ`GetDataTableRow`縺ｮ繧医≧縺ｪ繝弱・繝峨・縺
 
 ```md
 ## Data Tables / Data Assets
-- [~] Blueprint Graph荳翫〒DataTable蜿ら・Node縺ｯ荳驛ｨ縺ゅｊ
+- [x] Blueprint Graph荳翫〒DataTable蜿ら・Node縺ｯ荳驛ｨ縺ゅｊ
 - [x] DataTable菴懈・
 - [x] CSV縺九ｉDataTable菴懈・
 - [x] JSON縺九ｉDataTable菴懈・
@@ -915,18 +915,18 @@ Blueprint Graph縺ｧ`GetDataTableRow`縺ｮ繧医≧縺ｪ繝弱・繝峨・縺
 - [x] DataTable Row譖ｴ譁ｰ
 - [x] DataTable Export CSV
 - [x] DataTable Export JSON
-- [ ] Row Struct菴懈・
-- [ ] Row Struct邱ｨ髮・
+- [x] Row Struct菴懈・
+- [x] Row Struct邱ｨ髮・
 - [x] Primary Data Asset菴懈・
 - [x] Data Asset菴懈・
-- [ ] Data Asset Property邱ｨ髮・
+- [x] Data Asset Property邱ｨ髮・
 - [x] Curve Table菴懈・
 - [x] String Table菴懈・
-- [ ] Gameplay Tag Table Import
-- [ ] Item DB逕滓・
-- [ ] Enemy DB逕滓・
-- [ ] Quest DB逕滓・
-- [ ] Dialogue DB逕滓・
+- [x] Gameplay Tag Table Import
+- [x] Item DB逕滓・
+- [x] Enemy DB逕滓・
+- [x] Quest DB逕滓・
+- [x] Dialogue DB逕滓・
 ```
 
 ---

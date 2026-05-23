@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch X: Data Tables / Data Assets extensions (9 tasks.md items, issue #54)
+
+Adds a Data Table extensions handler class (route 40, `FEpicUnrealMCPDataTableExtensionCommands`) covering 8 remaining `[ ]` + 1 `[~]` items (Row Struct CRUD via `UScriptStructFactory`, Data Asset property edit on `UPrimaryDataAsset`, Gameplay Tag Table CSV import via `UGameplayTagsManager`, Item / Enemy / Quest / Dialogue DB template generators, Blueprint Graph DataTable reference node).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 725` (was 716; +9).
+- `python -m pytest Python/tests/unit/test_data_table_extension_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **14 passed**.
+---
+
 ## [2026-05-23] - Sub-batch W: Testing / Validation extensions (10 tasks.md items, issue #57)
 
 Adds a Testing / Validation handler class (route 39, `FEpicUnrealMCPTestingValidationCommands`) covering 8 remaining `[ ]` + 2 `[~]` items (UE Automation Test asset, Functional Test Actor spawn, Automation Test run + result fetch, Collision / Navigation / Performance Budget validators, Gameplay Screenshot Test, Python unit-test runner, Rust test runner). The Python / Rust runners proxy to the CLI tools at the bridge level so the AI can audit + iterate on the live test sweep.
