@@ -85,4 +85,48 @@ public:
 
     // Bridge index accessor (used by command handlers for O(1) actor lookup)
     static FActorIndex& GetActorIndex();
+
+    // ---- 234-stubs Wave 0 (#71): UE 5.7 ini-persistence + executed envelope helpers ----
+    /**
+     * Persist any modifications on an editor-mutated UObject (typically a CDO)
+     * into its Default*.ini config file. UE 5.7 deprecates UpdateDefaultConfigFile();
+     * this is the only sanctioned path. Failures are downgraded to a structured
+     * warning written to *OutHint so command handlers never throw.
+     */
+    static bool TryUpdateDefaultConfigFileSafe(UObject* Object, FString* OutHint = nullptr);
+
+    /** Build a { success:true, data:{ executed:true, ...payload } } envelope. */
+    static TSharedPtr<FJsonObject> MakeExecutedEnvelope(const TSharedPtr<FJsonObject>& Payload = nullptr);
+
+    /** True when Response has success=true *and* data.executed=true. */
+    static bool ResponseIsExecuted(const TSharedPtr<FJsonObject>& Response);
+
+    /** Build an MCP-422 "queued regression" error wrapping the offending response. */
+    static TSharedPtr<FJsonObject> MakeQueuedRegressionError(const FString& CommandType, const TSharedPtr<FJsonObject>& OffendingResponse);
 }; 
+
+// ---- 234-stubs Wave 0 (#71): RAII wrapper around FScopedTransaction ----
+// Forward declared to avoid pulling ScopedTransaction.h into a public header.
+class FScopedTransaction;
+
+/**
+ * Minimal RAII wrapper around FScopedTransaction so MCP command handlers can
+ * write a single line at the top of any mutating block. In non-editor /
+ * commandlet contexts the wrapper is a no-op so it stays safe to use in
+ * shared command code.
+ */
+class UNREALMCP_API FMCPScopedTransaction
+{
+public:
+    explicit FMCPScopedTransaction(const FString& Context);
+    ~FMCPScopedTransaction();
+
+    FMCPScopedTransaction(const FMCPScopedTransaction&) = delete;
+    FMCPScopedTransaction& operator=(const FMCPScopedTransaction&) = delete;
+
+    /** Cancel the transaction before its scope ends. */
+    void Cancel();
+
+private:
+    FScopedTransaction* Inner = nullptr;
+};

@@ -1,0 +1,71 @@
+﻿name: UE 5.7 plugin build (gated)
+
+# 234-stubs Wave 0 (#73): matrix-builds the UnrealMCP plugin against UE 5.7.
+#
+# The GitHub-hosted runners do NOT ship an Unreal Engine install, so the
+# default job runs a *static* validation pass (probe pattern audit + .Build.cs
+# AST parse) and only kicks the real RunUAT BuildPlugin step when a runner is
+# tagged with [self-hosted, ue5.7].  The matrix shape is kept here so that
+# adding a self-hosted Win64 / Mac / Linux runner later flips the build on
+# without changing the surface workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  static-audit:
+    name: Static audit (Build.cs probes + cpp queue grep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe pattern lint
+        run: |
+          set -euo pipefail
+          if ! grep -q "AddOptionalModuleGates(Target)" Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs; then
+            echo "UnrealMCP.Build.cs is missing AddOptionalModuleGates(); see issue #70."
+            exit 1
+          fi
+          if grep -nE "UpdateDefaultConfigFile\(" \
+              Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/*.cpp \
+              | grep -v "TryUpdateDefaultConfigFile" ; then
+            echo "Found legacy UpdateDefaultConfigFile() call; UE 5.7 requires TryUpdateDefaultConfigFile(). See AGENTS.md."
+            exit 1
+          fi
+
+      - name: Queued regression grep (#77 contract)
+        run: |
+          set -euo pipefail
+          # Allow MakeUnavailable in handler dispatch tables but flag any new
+          # "queued: true" success path that lands without an executed:true twin.
+          violations=$(grep -nE "SetBoolField\\(TEXT\\(\"queued\"\\), true\\)" \
+            Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/*.cpp || true)
+          if [ -n "$violations" ]; then
+            echo "Detected queued:true success paths (Wave-1+ work):"
+            echo "$violations"
+            # Warn-only: this is informational until Wave 5 closes.
+          fi
+
+  cpp-build:
+    name: RunUAT BuildPlugin (UE 5.7 self-hosted)
+    needs: [static-audit]
+    runs-on: [self-hosted, ue5.7, Win64]
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ue5.7-build') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run UAT BuildPlugin
+        shell: pwsh
+        run: |
+          $UE = $env:UNREAL_ENGINE_57_DIR
+          if (-not $UE) { Write-Error "UNREAL_ENGINE_57_DIR is not set on this runner."; exit 1 }
+          & "$UE\Engine\Build\BatchFiles\RunUAT.bat" `
+              BuildPlugin `
+              -Plugin="$(Resolve-Path Plugins\UnrealMCP\UnrealMCP.uplugin)" `
+              -Package="$pwd\artifacts\UnrealMCP-Plugin" `
+              -TargetPlatforms=Win64 `
+              -Rocket

@@ -1,4 +1,4 @@
-"""Live E2E smoke runner for the 13 commands in priority A-2.
+﻿"""Live E2E smoke runner for the 13 commands in priority A-2.
 
 Requires (any subset works; missing services degrade gracefully):
   - Unreal Editor with UnrealMCP plugin bridge on 127.0.0.1:55557
@@ -506,12 +506,93 @@ def run(selected: Optional[List[str]] = None) -> int:
     return 0 if failed == 0 else 1
 
 
+# ----- Wave grouping (Wave 0 #75) -------------------------------------------
+# Case-name -> wave key.  Wave 1+ implementations should extend this table when
+# new live cases land.  Cases not listed here default to the "core" group so the
+# baseline always remains discoverable.
+WAVE_GROUPS: Dict[str, str] = {
+    # Core / Wave 0 baseline (live bridge sanity, scene-syncd, data-layer, etc.)
+    "ping":                              "core",
+    "spawn_actor":                       "core",
+    "set_actor_transform_by_mcp_id":     "core",
+    "delete_actor_by_mcp_id":            "core",
+    "scene_create":                      "core",
+    "scene_upsert_actor":                "core",
+    "scene_plan_sync":                   "core",
+    "scene_sync":                        "core",
+    "create_draft_proxy":                "core",
+    "spawn_instance_set":                "core",
+    "scene_create_wfc_grid_unreal":      "core",
+    "compile_all_blueprints":            "core",
+    "run_map_check":                     "core",
+    "create_data_layer_for_generation":  "core",
+    "material_instance_parameters":      "core",
+    "wfc_async_job_roundtrip":           "core",
+    "sublevel_restore_lifecycle":        "core",
+    # Wave 1 — Extend Existing
+    # (populated as Wave 1 PRs introduce live cases; keep this comment block
+    #  so grep tools find the wave name even before the first entry.)
+    # Wave 4 — Pipeline (Cesium lives here because it overlaps with georef/pipeline).
+    "cesium_check_plugin":               "wave4",
+    "cesium_setup_georeference":         "wave4",
+    "cesium_add_tileset":                "wave4",
+    "cesium_place_actor_at_geolocation": "wave4",
+}
+
+
+def wave_for(case_name: str) -> str:
+    """Return the wave group for a case name, defaulting to 'core'."""
+    return WAVE_GROUPS.get(case_name, "core")
+
+
+def list_groups() -> Dict[str, List[str]]:
+    """Return a dict of {group: [case_name, ...]} for both CASES and MANUAL_CASES."""
+    groups: Dict[str, List[str]] = {}
+    for name, _requires, _fn in (CASES + MANUAL_CASES):
+        groups.setdefault(wave_for(name), []).append(name)
+    return groups
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--case", nargs="*", default=None, help="case names to run")
+    parser = argparse.ArgumentParser(
+        description="Live E2E smoke runner. Use --group/--only/--skip to slice by 234-stubs wave.",
+    )
+    parser.add_argument("--case", nargs="*", default=None,
+                        help="explicit case names to run (legacy flag, equivalent to --only)")
+    parser.add_argument("--only", nargs="*", default=None,
+                        help="only run these case names (after --group filter)")
+    parser.add_argument("--skip", nargs="*", default=None,
+                        help="skip these case names")
+    parser.add_argument("--group", nargs="*", default=None,
+                        help="restrict to wave group(s): core, wave1..wave5")
+    parser.add_argument("--list-groups", action="store_true",
+                        help="print the wave grouping table and exit")
     args = parser.parse_args()
-    return run(args.case)
+
+    if args.list_groups:
+        groups = list_groups()
+        print(json.dumps(groups, indent=2, sort_keys=True))
+        return 0
+
+    selected: Optional[List[str]] = None
+    base = [name for name, _r, _f in (CASES + MANUAL_CASES)]
+    if args.group:
+        wanted = set(args.group)
+        base = [n for n in base if wave_for(n) in wanted]
+    if args.case:
+        base = [n for n in base if n in set(args.case)]
+    if args.only:
+        base = [n for n in base if n in set(args.only)]
+    if args.skip:
+        base = [n for n in base if n not in set(args.skip)]
+    # When *no* filter was supplied we keep selected=None so the existing
+    # default path (CASES only, MANUAL_CASES excluded) continues to apply.
+    if args.case or args.only or args.skip or args.group:
+        selected = base
+        print(f"[filter] {len(selected)} cases selected: {selected}")
+    return run(selected)
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
