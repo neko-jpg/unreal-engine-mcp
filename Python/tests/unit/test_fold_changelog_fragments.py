@@ -99,3 +99,24 @@ def test_ignores_readme_and_gitkeep(tmp_path, monkeypatch, fold_mod):
     rc = fold_mod.fold(1)
     assert rc == 0
     assert not changelog.exists()
+
+def test_all_waves_runs_every_wave(tmp_path, monkeypatch, fold_mod):
+    changelog, fragment_dir = _set_paths(monkeypatch, fold_mod, tmp_path)
+    (fragment_dir / "w1-foo.md").write_text("- w1", encoding="utf-8")
+    (fragment_dir / "w3-bar.md").write_text("- w3", encoding="utf-8")
+    (fragment_dir / "w5-baz.md").write_text("- w5", encoding="utf-8")
+
+    rc = fold_mod.main(["--all-waves"])
+    assert rc == 0
+
+    text = changelog.read_text(encoding="utf-8")
+    for heading in ("### 234-stubs Wave 1", "### 234-stubs Wave 3", "### 234-stubs Wave 5"):
+        assert heading in text
+    assert not list(fragment_dir.glob("w[1-5]-*.md"))
+
+
+def test_all_waves_and_wave_are_mutually_exclusive(fold_mod):
+    import pytest as _pt
+    with _pt.raises(SystemExit):
+        fold_mod.main(["--all-waves", "--wave", "1"])
+

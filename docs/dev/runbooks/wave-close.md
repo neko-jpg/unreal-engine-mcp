@@ -65,3 +65,42 @@ Close `#78 / #83 / #88 / #93 / #98` with a Done comment that lists:
 
 Edit the umbrella issue's body table to tick the wave. Do not close
 #69 until W5 is done.
+
+## 8. Sanity checks for label / CI recovery
+
+If the labeler workflow did not run on the PR (e.g. GitHub Actions queue
+delays), kick it manually after merging the wave-close PR:
+
+```pwsh
+gh workflow run "PR labeler (234-stubs)"
+gh workflow run "AGENTS.md PR body check (234-stubs)" -f pr_number=<PR>
+gh workflow run "queued:true regression audit (234-stubs)"
+```
+
+If the `ue5.7-build` label disappears from the repo settings, recreate
+it (it gates the self-hosted UE 5.7 RunUAT BuildPlugin job):
+
+```pwsh
+gh api -X POST 'repos/{owner}/{repo}/labels' `
+  -f name='ue5.7-build' `
+  -f color='1D76DB' `
+  -f description='Trigger the self-hosted UE 5.7 RunUAT BuildPlugin job'
+```
+
+## 9. Umbrella (#69) close (W5 only)
+
+After W5 is merged and `python scripts/audit_no_new_queued.py --print`
+reports the expected residual count (zero, or only handlers split out
+into follow-up issues), open `codex-umbrella-close-69`:
+
+```pwsh
+python scripts/fold_changelog_fragments.py --all-waves
+python scripts/audit_no_new_queued.py --update-baseline
+```
+
+Close #69 with a comment that:
+
+- links every wave roadmap close PR (#78, #83, #88, #93, #98)
+- summarises promoted handler totals
+- enumerates the follow-up issues created for residual shallow real-impl
+  polish (the 41 handlers outside the 234 headline)

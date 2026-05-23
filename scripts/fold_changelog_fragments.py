@@ -112,9 +112,24 @@ def fold(wave: int, *, dry_run: bool = False) -> int:
 
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--wave", type=int, required=True, choices=[1, 2, 3, 4, 5])
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--wave", type=int, choices=[1, 2, 3, 4, 5])
+    group.add_argument(
+        "--all-waves",
+        action="store_true",
+        help=(
+            "fold every wave (W1..W5) in order. Used by the umbrella-close "
+            "PR after #69 is ready to ship."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.all_waves:
+        rc = 0
+        for wave in (1, 2, 3, 4, 5):
+            rc = fold(wave, dry_run=args.dry_run) or rc
+        return rc
     return fold(args.wave, dry_run=args.dry_run)
 
 

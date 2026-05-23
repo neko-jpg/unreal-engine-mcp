@@ -1,4 +1,4 @@
-name: queued:true regression audit (234-stubs)
+﻿name: queued:true regression audit (234-stubs)
 
 # 234-stubs Wave 0.5 follow-up (umbrella: #69).
 #
@@ -14,9 +14,14 @@ name: queued:true regression audit (234-stubs)
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: queued-audit-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   audit:

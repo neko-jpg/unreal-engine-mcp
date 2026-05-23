@@ -313,3 +313,36 @@ Movie Render Queue and extend M8 / M9 / M10 due dates accordingly.
 
 A spike doc lives under `docs/spike/<category>-ue57.md` for each of
 these before the implementation PRs land.
+
+## 18. W0.5 refinements applied on top of #105
+
+These tightenings landed on the same `codex-w0-followup-issue-resolution-infra`
+branch as the original #105 commits, addressing review findings:
+
+- **`agents-md-pr-check.yml` now always runs.** The previous job-level
+  `if: contains(github.event.pull_request.labels.*.name, 'stub-impl')`
+  caused the check to be reported as *skipped*, which GitHub branch
+  protection treats as "no status reported" and therefore cannot be
+  required. The `stub-impl` guard is now evaluated inside the script
+  body via `actions/github-script@v7`, so the check is always present
+  on every PR and can be marked Required.
+- **`ue5.7-build` repository label created.** Without it, the gated
+  `RunUAT BuildPlugin` job in `ue57-build.yml` could never trigger
+  (and `actions/labeler@v5` would fail on first run trying to apply a
+  non-existent label). Colour `#1D76DB`, description "Trigger the
+  self-hosted UE 5.7 RunUAT BuildPlugin job in ue57-build.yml".
+- **`concurrency`/`workflow_dispatch` added to all three new
+  workflows** (`labeler.yml`, `agents-md-pr-check.yml`,
+  `queued-audit.yml`). The concurrency groups prevent stale runs from
+  blocking re-pushes; the dispatch trigger gives the reviewer a manual
+  recovery path when the GitHub Actions queue is backed up (this was
+  the situation observed on the original #105 push, where no run was
+  scheduled within 15 minutes).
+- **`scripts/fold_changelog_fragments.py --all-waves`** drives the
+  umbrella-close PR (#69 close) without five separate invocations.
+- **`Python/tests/unit/test_w0_followup_workflow_hardening.py`** locks
+  the above invariants in place so a future PR cannot silently revert
+  them (the test fails if the job-level skip returns, the concurrency
+  block disappears, or the labeler config drops a category).
+- **`docs/dev/runbooks/wave-close.md` §§8-9** documents the manual
+  `gh workflow run` recovery commands and the umbrella-close steps.
