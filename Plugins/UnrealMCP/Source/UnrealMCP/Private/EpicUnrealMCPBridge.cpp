@@ -83,6 +83,7 @@
 #include "Commands/EpicUnrealMCPAiNavExtensionCommands.h"
 #include "Commands/EpicUnrealMCPMovieRenderQueueCommands.h"
 #include "Commands/EpicUnrealMCPFoliageCommands.h"
+#include "Commands/EpicUnrealMCPPCGCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -348,6 +349,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPAiNavExtensionCommands>(36);   // AI / Navigation extensions (Sub-batch L)
     RegisterHandler<FEpicUnrealMCPMovieRenderQueueCommands>(26); // Movie Render Queue (Sub-batch M)
     RegisterHandler<FEpicUnrealMCPFoliageCommands>(27); // Foliage / Vegetation (Sub-batch N, route 27, issue #44)
+    RegisterHandler<FEpicUnrealMCPPCGCommands>(28); // PCG Framework (Sub-batch O, route 28, issue #45)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

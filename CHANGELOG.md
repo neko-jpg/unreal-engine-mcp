@@ -4,6 +4,20 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch O: PCG Framework (20 tasks.md items, issue #45)
+
+Adds a PCG handler class (route 28, `FEpicUnrealMCPPCGCommands`) covering all 19 `[ ]` + 1 `[~]` PCG Framework items (PCG Graph + Component + Volume, Node CRUD + connect, Parameters, Spline/Surface samplers, StaticMesh spawner, Rule, Biome Graph, Point Data + Attribute ops, Graph execute/regenerate, Runtime Generation, Editor Mode, Tool, Debug display, Self-Pruning). PCG ships under Engine/Plugins/Experimental/PCG in UE 5.7 -- handlers accept the desired-state payload and queue interactive editor steps.
+
+### Changed
+
+- Adds `EpicUnrealMCPPCGCommands` cpp+h, router id 28, bridge registration, `pcg_tools.py` + unit test, bootstrap + test patches, 20 task flips, `[~]` -> `[x]` for "独自Procedural生成あり".
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 599` (was 579; +20).
+- `python -m pytest Python/tests/unit/test_pcg_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **25 passed**.
+---
+
 ## [2026-05-23] - Sub-batch N: Foliage / Vegetation (20 tasks.md items, issue #44)
 
 Adds a Foliage / Vegetation handler class (route 27, `FEpicUnrealMCPFoliageCommands`) covering all 20 Foliage / Vegetation items in `docs/superpowers/plans/tasks.md` (FoliageType + StaticMesh / Actor registration, paint / erase, density / scale / random-yaw / align-to-normal / cull distance / LOD, Procedural Foliage Spawner + Volume + seed + biome spawn, Grass Type + landscape grass binding, Nanite foliage, wind, Pivot Painter). The Foliage module ships with UE 5.7 and is detected at runtime; queued payloads describe what the FoliageEditMode interactive editor will pick up.

@@ -285,6 +285,28 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("set_foliage_nanite"), 27},
         {TEXT("set_foliage_wind"), 27},
         {TEXT("configure_pivot_painter"), 27},
+        // ---- PCG Framework (Sub-batch O, route 28, issue #45) ----
+        {TEXT("create_pcg_graph"), 28},
+        {TEXT("add_pcg_component"), 28},
+        {TEXT("create_pcg_volume"), 28},
+        {TEXT("add_pcg_node"), 28},
+        {TEXT("connect_pcg_nodes"), 28},
+        {TEXT("set_pcg_graph_parameter"), 28},
+        {TEXT("configure_pcg_spline_sampler"), 28},
+        {TEXT("configure_pcg_surface_sampler"), 28},
+        {TEXT("configure_pcg_static_mesh_spawner"), 28},
+        {TEXT("configure_pcg_rule"), 28},
+        {TEXT("create_pcg_biome_graph"), 28},
+        {TEXT("operate_pcg_point_data"), 28},
+        {TEXT("operate_pcg_attribute"), 28},
+        {TEXT("execute_pcg_graph"), 28},
+        {TEXT("regenerate_pcg_graph"), 28},
+        {TEXT("set_pcg_runtime_generation"), 28},
+        {TEXT("use_pcg_editor_mode"), 28},
+        {TEXT("create_pcg_tool"), 28},
+        {TEXT("set_pcg_debug_display"), 28},
+        {TEXT("configure_pcg_self_pruning"), 28},
+
 
 
 
