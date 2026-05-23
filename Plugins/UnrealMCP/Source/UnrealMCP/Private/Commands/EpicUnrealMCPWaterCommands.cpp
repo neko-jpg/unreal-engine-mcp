@@ -20,6 +20,12 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/Package.h"
 #include "Engine/StaticMeshActor.h"
+#include "BuoyancyComponent.h"
+#include "BuoyancyTypes.h"
+#include "WaterZoneActor.h"
+#include "WaterMeshComponent.h"
+#include "WaterCurveSettings.h"
+#include "WaterBodyHeightmapSettings.h"
 #endif
 
 bool FEpicUnrealMCPWaterCommands::IsModuleAvailable()
@@ -547,103 +553,414 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterWave(co
 }
 
 // ---------------------------------------------------------------------------
-// W3-5 stubs below -- DO NOT promote these yet.
+// configure_water_flow -- UWaterBodyComponent WaterVelocity configuration.
 // ---------------------------------------------------------------------------
-
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterFlow(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_water_flow"));
+
+#if WITH_WATER_MCP
+    FString ActorName;
+    float FlowVelocity = 100.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetNumberField(TEXT("flow_velocity"), FlowVelocity);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    AWaterBody* Body = FindWaterBodyInEditorWorld(World, ActorName);
+    if (!Body) return WaterErr(FString::Printf(TEXT("configure_water_flow: water body '%s' not found."), *ActorName));
+
+    UWaterBodyComponent* WBC = Body->GetWaterBodyComponent();
+    if (!WBC) return WaterErr(FString::Printf(TEXT("configure_water_flow: '%s' has no WaterBodyComponent."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_water_flow"));
+    Body->Modify();
+
+    // Set water velocity across the full spline range [0, 1].
+    WBC->SetWaterVelocityAtSplineInputKey(0.0f, FlowVelocity);
+    WBC->SetWaterVelocityAtSplineInputKey(1.0f, FlowVelocity);
+    Body->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_water_flow"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Body->GetName());
+    Data->SetNumberField(TEXT("flow_velocity"), FlowVelocity);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_water_flow"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// configure_buoyancy -- UBuoyancyComponent setup on an actor.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureBuoyancy(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_buoyancy"));
+
+#if WITH_WATER_MCP
+    FString ActorName;
+    float Weight = 1.0f;
+    float Damping = 0.5f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetNumberField(TEXT("weight"), Weight);
+        Params->TryGetNumberField(TEXT("damping"), Damping);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    // Find the target actor by name or label.
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+    if (!TargetActor) return WaterErr(FString::Printf(TEXT("configure_buoyancy: actor '%s' not found."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_buoyancy"));
+    TargetActor->Modify();
+
+    // Find or create a UBuoyancyComponent.
+    UBuoyancyComponent* Buoyancy = TargetActor->FindComponentByClass<UBuoyancyComponent>();
+    if (!Buoyancy)
+    {
+        Buoyancy = NewObject<UBuoyancyComponent>(TargetActor, UBuoyancyComponent::StaticClass(), TEXT("BuoyancyComponent"));
+        Buoyancy->RegisterComponent();
+        TargetActor->AddInstanceComponent(Buoyancy);
+    }
+
+    // Configure buoyancy data.
+    Buoyancy->BuoyancyData.BuoyancyCoefficient = Weight;
+    Buoyancy->BuoyancyData.BuoyancyDamp = Damping * 1000.0f;
+    TargetActor->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_buoyancy"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    Data->SetNumberField(TEXT("weight"), Weight);
+    Data->SetNumberField(TEXT("damping"), Damping);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_buoyancy"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// configure_water_mesh_actor -- AWaterZone / UWaterMeshComponent configuration.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterMeshActor(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_water_mesh_actor"));
+
+#if WITH_WATER_MCP
+    FString ActorName = TEXT("WaterZone");
+    float TileSize = 2400.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetNumberField(TEXT("tile_size"), TileSize);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    // Find AWaterZone by name or label.
+    AWaterZone* WaterZone = nullptr;
+    for (TActorIterator<AWaterZone> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            WaterZone = *It;
+            break;
+        }
+    }
+    if (!WaterZone) return WaterErr(FString::Printf(TEXT("configure_water_mesh_actor: water zone '%s' not found."), *ActorName));
+
+    UWaterMeshComponent* WaterMesh = WaterZone->GetWaterMeshComponent();
+    if (!WaterMesh) return WaterErr(FString::Printf(TEXT("configure_water_mesh_actor: '%s' has no WaterMeshComponent."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_water_mesh_actor"));
+    WaterZone->Modify();
+
+    WaterMesh->SetTileSize(TileSize);
+    WaterZone->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_water_mesh_actor"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), WaterZone->GetName());
+    Data->SetNumberField(TEXT("tile_size"), TileSize);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_water_mesh_actor"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// configure_underwater_post_process -- UWaterBodyComponent post process setup.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureUnderwaterPostProcess(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_underwater_post_process"));
+
+#if WITH_WATER_MCP
+    FString PostProcessActor = TEXT("WaterPostProcess");
+    FString MaterialPath;
+    bool bEnabled = true;
+    float Priority = 0.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("post_process_actor"), PostProcessActor);
+        Params->TryGetStringField(TEXT("material_path"), MaterialPath);
+        Params->TryBoolField(TEXT("enabled"), bEnabled);
+        Params->TryGetNumberField(TEXT("priority"), Priority);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    AWaterBody* Body = FindWaterBodyInEditorWorld(World, PostProcessActor);
+    if (!Body) return WaterErr(FString::Printf(TEXT("configure_underwater_post_process: water body '%s' not found."), *PostProcessActor));
+
+    UWaterBodyComponent* WBC = Body->GetWaterBodyComponent();
+    if (!WBC) return WaterErr(FString::Printf(TEXT("configure_underwater_post_process: '%s' has no WaterBodyComponent."), *PostProcessActor));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_underwater_post_process"));
+    Body->Modify();
+
+    int32 FieldsSet = 0;
+
+    // Set underwater post process material if provided.
+    if (!MaterialPath.IsEmpty())
+    {
+        UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+        if (Mat)
+        {
+            WBC->SetUnderwaterPostProcessMaterial(Mat);
+            ++FieldsSet;
+        }
+    }
+
+    // Configure underwater post process settings.
+    WBC->UnderwaterPostProcessSettings.bEnabled = bEnabled;
+    WBC->UnderwaterPostProcessSettings.Priority = Priority;
+    FieldsSet += 2;
+
+    Body->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_underwater_post_process"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Body->GetName());
+    Data->SetNumberField(TEXT("fields_set"), FieldsSet);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_underwater_post_process"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// configure_shoreline -- Water body curve / shoreline settings.
+// UE 5.7 has no dedicated UShorelineComponent; shoreline shape is controlled
+// via FWaterCurveSettings on UWaterBodyComponent.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureShoreline(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_shoreline"));
+
+#if WITH_WATER_MCP
+    FString ActorName;
+    float Smoothness = 0.5f;
+    float ChannelDepth = 0.0f;
+    float ChannelEdgeOffset = 0.0f;
+    float CurveRampWidth = 512.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetNumberField(TEXT("smoothness"), Smoothness);
+        Params->TryGetNumberField(TEXT("channel_depth"), ChannelDepth);
+        Params->TryGetNumberField(TEXT("channel_edge_offset"), ChannelEdgeOffset);
+        Params->TryGetNumberField(TEXT("curve_ramp_width"), CurveRampWidth);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    AWaterBody* Body = FindWaterBodyInEditorWorld(World, ActorName);
+    if (!Body) return WaterErr(FString::Printf(TEXT("configure_shoreline: water body '%s' not found."), *ActorName));
+
+    UWaterBodyComponent* WBC = Body->GetWaterBodyComponent();
+    if (!WBC) return WaterErr(FString::Printf(TEXT("configure_shoreline: '%s' has no WaterBodyComponent."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_shoreline"));
+    Body->Modify();
+
+    // Configure curve settings that control shoreline shape.
+    FWaterCurveSettings& CS = WBC->CurveSettings;
+    CS.ChannelDepth = ChannelDepth;
+    CS.ChannelEdgeOffset = ChannelEdgeOffset;
+    CS.CurveRampWidth = CurveRampWidth;
+    CS.bUseCurveChannel = (Smoothness > 0.0f);
+    Body->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_shoreline"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Body->GetName());
+    Data->SetNumberField(TEXT("smoothness"), Smoothness);
+    Data->SetNumberField(TEXT("channel_depth"), ChannelDepth);
+    Data->SetNumberField(TEXT("channel_edge_offset"), ChannelEdgeOffset);
+    Data->SetNumberField(TEXT("curve_ramp_width"), CurveRampWidth);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_shoreline"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// configure_water_landscape_carving -- bAffectsLandscape + WaterHeightmapSettings.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterLandscapeCarving(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_water_landscape_carving"));
+
+#if WITH_WATER_MCP
+    FString LandscapeActor;
+    bool bEnable = true;
+    float Falloff = 0.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("landscape_actor"), LandscapeActor);
+        Params->TryBoolField(TEXT("enable"), bEnable);
+        Params->TryGetNumberField(TEXT("falloff"), Falloff);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    // The "landscape_actor" param identifies the water body whose carving to configure.
+    AWaterBody* Body = FindWaterBodyInEditorWorld(World, LandscapeActor);
+    if (!Body) return WaterErr(FString::Printf(TEXT("configure_water_landscape_carving: water body '%s' not found."), *LandscapeActor));
+
+    UWaterBodyComponent* WBC = Body->GetWaterBodyComponent();
+    if (!WBC) return WaterErr(FString::Printf(TEXT("configure_water_landscape_carving: '%s' has no WaterBodyComponent."), *LandscapeActor));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_water_landscape_carving"));
+    Body->Modify();
+
+    WBC->bAffectsLandscape = bEnable;
+    if (Falloff > 0.0f)
+    {
+        WBC->WaterHeightmapSettings.FalloffSettings.FalloffWidth = Falloff;
+    }
+    Body->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_water_landscape_carving"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Body->GetName());
+    Data->SetBoolField(TEXT("affects_landscape"), WBC->bAffectsLandscape);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_water_landscape_carving"));
+#endif
 }
 
+// ---------------------------------------------------------------------------
+// attach_floating_actor -- UBuoyancyComponent pontoon positions.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleAttachFloatingActor(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("attach_floating_actor"));
+
+#if WITH_WATER_MCP
+    FString ActorName;
+    const TArray<TSharedPtr<FJsonValue>>* PontoonLocations = nullptr;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetArrayField(TEXT("pontoon_locations"), PontoonLocations);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return WaterErr(TEXT("No editor world available"));
+
+    // Find the target actor.
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+    if (!TargetActor) return WaterErr(FString::Printf(TEXT("attach_floating_actor: actor '%s' not found."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: attach_floating_actor"));
+    TargetActor->Modify();
+
+    // Find or create UBuoyancyComponent.
+    UBuoyancyComponent* Buoyancy = TargetActor->FindComponentByClass<UBuoyancyComponent>();
+    if (!Buoyancy)
+    {
+        Buoyancy = NewObject<UBuoyancyComponent>(TargetActor, UBuoyancyComponent::StaticClass(), TEXT("BuoyancyComponent"));
+        Buoyancy->RegisterComponent();
+        TargetActor->AddInstanceComponent(Buoyancy);
+    }
+
+    // Clear existing pontoons and add new ones from the provided locations.
+    int32 PontoonsAdded = 0;
+    if (PontoonLocations)
+    {
+        Buoyancy->BuoyancyData.Pontoons.Empty();
+        for (const TSharedPtr<FJsonValue>& Val : *PontoonLocations)
+        {
+            const TSharedPtr<FJsonObject>* PtObj = nullptr;
+            if (!Val->TryGetObject(PtObj)) continue;
+
+            FVector Loc = FVector::ZeroVector;
+            const TSharedPtr<FJsonObject>& P = *PtObj;
+            P->TryGetNumberField(TEXT("x"), Loc.X);
+            P->TryGetNumberField(TEXT("y"), Loc.Y);
+            P->TryGetNumberField(TEXT("z"), Loc.Z);
+
+            float Radius = 100.0f;
+            P->TryGetNumberField(TEXT("radius"), Radius);
+
+            FSphericalPontoon Pontoon;
+            Pontoon.RelativeLocation = Loc;
+            Pontoon.Radius = Radius;
+            Buoyancy->BuoyancyData.Pontoons.Add(Pontoon);
+            ++PontoonsAdded;
+        }
+    }
+
+    TargetActor->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("attach_floating_actor"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; spawn / configure in the Water editor (Water Brush Manager)."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    Data->SetNumberField(TEXT("pontoons_added"), PontoonsAdded);
+    Data->SetBoolField(TEXT("executed"), true);
+    return WaterOk(Data);
+#else
+    return MakeUnavailable(TEXT("attach_floating_actor"));
+#endif
 }
