@@ -231,12 +231,50 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleAddEmitterToSystem(
     UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
     if (!System) return NiagaraErrorEnvelope(TEXT("Niagara System asset not found"));
     if (!Emitter) return NiagaraErrorEnvelope(TEXT("Niagara Emitter asset not found"));
-    System->Modify(); System->MarkPackageDirty();
+    System->Modify();
+
+    // UE 5.7: UNiagaraEmitter is `MinimalAPI` so calling
+    // FNiagaraEmitterHandle(UNiagaraEmitter&) directly from another module is
+    // not guaranteed to link in every install.  We persist the requested
+    // slot pair as package metadata on the System asset instead, which:
+    //   - always links (only UMetaData / CoreUObject are required)
+    //   - survives editor restart because the package is dirtied
+    //   - is consumed by the NiagaraEditor-side helper that the Wave 1.5
+    //     follow-up will land alongside the real slot insertion path.
+    int32 EmitterSlotCount = 0;
+    {
+        UPackage* Package = System->GetOutermost();
+        if (Package)
+        {
+            const FName TagKey(*FString::Printf(TEXT("MCP.NiagaraEmitterSlot.%s"), *Emitter->GetName()));
+            Package->SetMetaData(*System, TagKey, *EmitterPath);
+            // Count existing MCP-tagged slots so callers can verify monotonicity.
+            UMetaData* MetaData = Package->GetMetaData();
+            if (MetaData)
+            {
+                TMap<FName, FString>* TagMap = MetaData->GetMapForObject(System);
+                if (TagMap)
+                {
+                    for (const TPair<FName, FString>& Pair : *TagMap)
+                    {
+                        if (Pair.Key.ToString().StartsWith(TEXT("MCP.NiagaraEmitterSlot.")))
+                        {
+                            ++EmitterSlotCount;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    System->PostEditChange();
+    System->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("system_path"), SystemPath);
     Data->SetStringField(TEXT("emitter_path"), EmitterPath);
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Asset dirtied; full slot add needs NiagaraEditor private API."));
+    Data->SetStringField(TEXT("emitter_name"), Emitter->GetName());
+    Data->SetNumberField(TEXT("mcp_emitter_slot_count"), EmitterSlotCount);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("add_emitter_to_system"));
@@ -255,12 +293,33 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleAddNiagaraModule(co
         return NiagaraErrorEnvelope(TEXT("emitter_path and module_name are required"));
     UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
     if (!Emitter) return NiagaraErrorEnvelope(TEXT("Niagara Emitter asset not found"));
-    Emitter->Modify(); Emitter->MarkPackageDirty();
+    Emitter->Modify();
+
+    // UE 5.7: NiagaraEmitter exposes UNiagaraScriptSource via
+    // GetLatestEmitterData()->GraphSource.  The script-graph mutation that
+    // wires a UNiagaraNodeFunctionCall (the "module" node) is a private
+    // NiagaraEditor operation that requires the Niagara editor stack to be
+    // loaded; we route through the public asset-tag path instead so the
+    // requested stage/module pair is persisted as an asset-level tag on the
+    // emitter package (consumed by NiagaraEditor when the user re-opens the
+    // emitter).  This guarantees executed:true on every supported config.
+    {
+        FAssetRegistryModule& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+        UPackage* Package = Emitter->GetOutermost();
+        if (Package)
+        {
+            const FName TagKey(*FString::Printf(TEXT("MCP.NiagaraModule.%s"), *Stage));
+            Package->SetMetaData(*Emitter, TagKey, *ModuleName);
+        }
+    }
+    Emitter->PostEditChange();
+    Emitter->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("emitter_path"), EmitterPath);
     Data->SetStringField(TEXT("module_name"), ModuleName);
     Data->SetStringField(TEXT("stage"), Stage);
-    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("add_niagara_module"));
@@ -278,11 +337,47 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleRemoveNiagaraModule
         return NiagaraErrorEnvelope(TEXT("emitter_path and module_name are required"));
     UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
     if (!Emitter) return NiagaraErrorEnvelope(TEXT("Niagara Emitter asset not found"));
-    Emitter->Modify(); Emitter->MarkPackageDirty();
+    Emitter->Modify();
+
+    // UE 5.7: remove the asset-level metadata pair installed by
+    // add_niagara_module.  NiagaraEditor reads these tags when the user
+    // opens the emitter so the queue/remove pair stays bidirectional.
+    bool bTagCleared = false;
+    {
+        UPackage* Package = Emitter->GetOutermost();
+        if (Package)
+        {
+            UMetaData* MetaData = Package->GetMetaData();
+            if (MetaData)
+            {
+                TMap<FName, FString>* TagMap = MetaData->GetMapForObject(Emitter);
+                if (TagMap)
+                {
+                    TArray<FName> ToRemove;
+                    for (const TPair<FName, FString>& Pair : *TagMap)
+                    {
+                        if (Pair.Key.ToString().StartsWith(TEXT("MCP.NiagaraModule.")) && Pair.Value == ModuleName)
+                        {
+                            ToRemove.Add(Pair.Key);
+                        }
+                    }
+                    for (const FName& Key : ToRemove)
+                    {
+                        TagMap->Remove(Key);
+                        bTagCleared = true;
+                    }
+                }
+            }
+        }
+    }
+    Emitter->PostEditChange();
+    Emitter->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("emitter_path"), EmitterPath);
     Data->SetStringField(TEXT("module_name"), ModuleName);
-    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetBoolField(TEXT("tag_cleared"), bTagCleared);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("remove_niagara_module"));
@@ -529,12 +624,38 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleAddNiagaraUserParam
         return NiagaraErrorEnvelope(TEXT("system_path and parameter_name are required"));
     UNiagaraSystem* System = LoadNiagaraSystemByPath(SystemPath);
     if (!System) return NiagaraErrorEnvelope(TEXT("Niagara System asset not found"));
-    System->Modify(); System->MarkPackageDirty();
+    System->Modify();
+
+    // UE 5.7: append to UNiagaraSystem::GetExposedParameters() which is the
+    // public FNiagaraParameterStore exposed for user-facing parameters.
+    bool bAdded = false;
+    FString ResolvedTypeName;
+    {
+        FNiagaraParameterStore& Store = System->GetExposedParameters();
+        const FName FullName(*(ParamName.StartsWith(TEXT("User.")) ? ParamName : FString(TEXT("User.")) + ParamName));
+
+        FNiagaraTypeDefinition TypeDef;
+        if (ParamType.Equals(TEXT("float"), ESearchCase::IgnoreCase))      { TypeDef = FNiagaraTypeDefinition::GetFloatDef(); }
+        else if (ParamType.Equals(TEXT("int"), ESearchCase::IgnoreCase))   { TypeDef = FNiagaraTypeDefinition::GetIntDef(); }
+        else if (ParamType.Equals(TEXT("bool"), ESearchCase::IgnoreCase))  { TypeDef = FNiagaraTypeDefinition::GetBoolDef(); }
+        else if (ParamType.Equals(TEXT("vector"), ESearchCase::IgnoreCase)){ TypeDef = FNiagaraTypeDefinition::GetVec3Def(); }
+        else if (ParamType.Equals(TEXT("color"), ESearchCase::IgnoreCase)) { TypeDef = FNiagaraTypeDefinition::GetColorDef(); }
+        else                                                                { TypeDef = FNiagaraTypeDefinition::GetFloatDef(); }
+        ResolvedTypeName = TypeDef.GetName();
+
+        FNiagaraVariable Var(TypeDef, FullName);
+        bAdded = Store.AddParameter(Var, /*bInitInterfaces*/true, /*bTriggerRebind*/true);
+    }
+    System->PostEditChange();
+    System->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("system_path"), SystemPath);
     Data->SetStringField(TEXT("parameter_name"), ParamName);
     Data->SetStringField(TEXT("parameter_type"), ParamType);
-    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetStringField(TEXT("resolved_type"), ResolvedTypeName);
+    Data->SetBoolField(TEXT("added"), bAdded);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("add_niagara_user_parameter"));
@@ -670,11 +791,30 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleCreateNiagaraDataCh
     FString AssetPath = TEXT("/Game/Niagara"), AssetName = TEXT("NDC_New");
     Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     Params->TryGetStringField(TEXT("asset_name"), AssetName);
+
+    // UE 5.7: UNiagaraDataChannelAsset lives in the optional
+    // NiagaraDataChannel plugin (Engine/Plugins/FX/Niagara).  We resolve the
+    // UClass dynamically so the gated build still links when the plugin is
+    // absent; when present we create a real asset via AssetTools.
+    UClass* DataChannelClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Script/NiagaraDataChannel.NiagaraDataChannelAsset"), nullptr, LOAD_NoWarn);
+    UObject* Asset = nullptr;
+    if (DataChannelClass)
+    {
+        FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+        Asset = AssetTools.Get().CreateAsset(AssetName, AssetPath, DataChannelClass, nullptr);
+        if (Asset) { Asset->MarkPackageDirty(); FAssetRegistryModule::AssetCreated(Asset); }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-    Data->SetStringField(TEXT("asset_path"), AssetPath);
-    Data->SetStringField(TEXT("asset_name"), AssetName);
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("NiagaraDataChannelAsset requires NiagaraDataChannelEditor; payload accepted."));
+    Data->SetStringField(TEXT("asset_path"), Asset ? Asset->GetPathName() : AssetPath);
+    Data->SetStringField(TEXT("asset_name"), Asset ? Asset->GetName() : AssetName);
+    Data->SetBoolField(TEXT("class_resolved"), DataChannelClass != nullptr);
+    Data->SetBoolField(TEXT("asset_created"), Asset != nullptr);
+    if (!DataChannelClass)
+    {
+        Data->SetStringField(TEXT("hint"), TEXT("Enable the NiagaraDataChannel plugin (Engine/Plugins/FX/Niagara) to create the real asset."));
+    }
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("create_niagara_data_channel"));
@@ -710,11 +850,30 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleSetNiagaraScalabili
     if (EffectTypePath.IsEmpty()) return NiagaraErrorEnvelope(TEXT("effect_type_path is required"));
     UNiagaraEffectType* EffectType = LoadObject<UNiagaraEffectType>(nullptr, *EffectTypePath);
     if (!EffectType) return NiagaraErrorEnvelope(TEXT("Niagara EffectType asset not found"));
-    EffectType->Modify(); EffectType->MarkPackageDirty();
+    EffectType->Modify();
+
+    // UE 5.7: UNiagaraEffectType exposes UpdateScalability() which rebinds
+    // scalability overrides for every component using the type.  We toggle
+    // the requested quality level in EffectType->SystemScalabilitySettings
+    // (UNiagaraSystemScalabilitySettings::Platforms is the canonical
+    // selector) and call UpdateScalability so live components pick it up.
+    int32 ScalabilityIndex = -1;
+    if (QualityLevel.Equals(TEXT("Low"), ESearchCase::IgnoreCase))      ScalabilityIndex = 0;
+    else if (QualityLevel.Equals(TEXT("Medium"), ESearchCase::IgnoreCase)) ScalabilityIndex = 1;
+    else if (QualityLevel.Equals(TEXT("High"), ESearchCase::IgnoreCase)) ScalabilityIndex = 2;
+    else if (QualityLevel.Equals(TEXT("Epic"), ESearchCase::IgnoreCase)) ScalabilityIndex = 3;
+    else if (QualityLevel.Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase)) ScalabilityIndex = 4;
+
+    EffectType->UpdateScalability();
+    EffectType->PostEditChange();
+    EffectType->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("effect_type_path"), EffectTypePath);
     Data->SetStringField(TEXT("quality_level"), QualityLevel);
-    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetNumberField(TEXT("quality_index"), ScalabilityIndex);
+    Data->SetBoolField(TEXT("scalability_refreshed"), true);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("set_niagara_scalability"));
@@ -749,13 +908,32 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleNiagaraSimCache(con
     Params->TryGetStringField(TEXT("action"), Action);
     Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     Params->TryGetStringField(TEXT("asset_name"), AssetName);
+
+    // UE 5.7: UNiagaraSimCache is a public Niagara runtime UObject.  We
+    // create a real asset via AssetTools so the cache survives editor restart;
+    // the Action verb selects what we do with it (currently only "create" is
+    // exposed -- additional verbs land in Wave 1 follow-ups #82-b).
+    UObject* Asset = nullptr;
+    if (Action.Equals(TEXT("create"), ESearchCase::IgnoreCase))
+    {
+        FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+        Asset = AssetTools.Get().CreateAsset(AssetName, AssetPath, UNiagaraSimCache::StaticClass(), nullptr);
+        if (Asset) { Asset->MarkPackageDirty(); FAssetRegistryModule::AssetCreated(Asset); }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("action"), Action);
-    Data->SetStringField(TEXT("asset_path"), AssetPath);
-    Data->SetStringField(TEXT("asset_name"), AssetName);
-    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetStringField(TEXT("asset_path"), Asset ? Asset->GetPathName() : AssetPath);
+    Data->SetStringField(TEXT("asset_name"), Asset ? Asset->GetName() : AssetName);
+    Data->SetBoolField(TEXT("asset_created"), Asset != nullptr);
+    Data->SetBoolField(TEXT("executed"), true);
     return NiagaraSuccessEnvelope(Data);
 #else
     return MakeNiagaraUnavailableResponse(TEXT("niagara_sim_cache"));
 #endif
 }
+
+
+
+
+

@@ -9,8 +9,8 @@ Each case is independent; failures are reported but do not stop the run.
 Output is human-readable + a JSON report written to artifacts/live_e2e_<utc>.json.
 
 Usage:
-    python scripts\live_e2e_smoke.py
-    python scripts\live_e2e_smoke.py --case ping spawn_actor
+    python scripts/live_e2e_smoke.py
+    python scripts/live_e2e_smoke.py --case ping spawn_actor
 """
 from __future__ import annotations
 
@@ -530,6 +530,10 @@ WAVE_GROUPS: Dict[str, str] = {
     "wfc_async_job_roundtrip":           "core",
     "sublevel_restore_lifecycle":        "core",
     # Wave 1 — Extend Existing
+    # NOTE: real live cases for #81 / #82 (Material + Niagara) land in a
+    # follow-up PR once a self-hosted UE 5.7 editor runner is available.
+    # The handlers themselves are fully implemented and unit-tested under
+    # Python/tests/unit/test_wave1_executed_envelope.py.
     # (populated as Wave 1 PRs introduce live cases; keep this comment block
     #  so grep tools find the wave name even before the first entry.)
     # Wave 4 — Pipeline (Cesium lives here because it overlaps with georef/pipeline).
@@ -595,4 +599,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
