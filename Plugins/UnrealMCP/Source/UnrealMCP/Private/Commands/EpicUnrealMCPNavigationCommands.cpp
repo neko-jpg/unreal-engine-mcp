@@ -1166,10 +1166,17 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNavigationCommands::HandleCreateEQSQuery(c
     if (!Query)
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UEnvQuery asset"));
 
+    // UE 5.7: UEnvQuery::QueryName is protected and friended only to UEnvQueryManager.
+    // Renaming the asset triggers UEnvQuery::PostRename() which keeps QueryName in
+    // sync with the UObject name, so we re-rename instead of assigning directly.
     FString QueryName;
     if (Params->TryGetStringField(TEXT("query_name"), QueryName) && !QueryName.IsEmpty())
     {
-        Query->QueryName = FName(*QueryName);
+        const FName DesiredName(*QueryName);
+        if (Query->GetFName() != DesiredName)
+        {
+            Query->Rename(*QueryName, Query->GetOuter(), REN_DontCreateRedirectors | REN_NonTransactional);
+        }
     }
 
     FAssetRegistryModule::AssetCreated(Query);

@@ -1285,3 +1285,60 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateAdvancedMate
     Result->SetStringField(TEXT("material_domain"), MaterialDomain);
     return Result;
 }
+
+
+// ---------------------------------------------------------------------------
+// HandleCreateSubstrateMaterial / HandleCreateLayeredMaterial
+//
+// These were declared in EpicUnrealMCPMaterialCommands.h and wired into the
+// dispatch map (lines ~259-260) but the function bodies were never landed,
+// which causes LNK2019 once every other translation unit compiles cleanly
+// (UE 5.7 build).  We add safe stub implementations that follow the
+// queued-envelope pattern used by the other Sub-batch extension handlers
+// so the bridge can answer the call and the editor links.
+//
+// Substrate is enabled via Project Settings -> Rendering -> Substrate plus
+// r.Substrate=1; Layered Materials are constructed inside the Material Editor
+// (UMaterialExpressionMaterialLayerBlend + UMaterialFunctionInterface).  Both
+// flows require interactive editor context, so we accept the payload and
+// hint the caller at the manual setup -- callers can still use the existing
+// create_material + add_material_node + connect_material_nodes path.
+// ---------------------------------------------------------------------------
+
+static TSharedPtr<FJsonObject> MakeMaterialQueuedEnvelope(const TCHAR* CommandName, const TSharedPtr<FJsonObject>& Params, const TCHAR* Hint)
+{
+    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+    Data->SetStringField(TEXT("command"), CommandName);
+    if (Params.IsValid())
+    {
+        Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
+    }
+    Data->SetBoolField(TEXT("queued"), true);
+    Data->SetStringField(TEXT("hint"), Hint);
+
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), true);
+    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
+    return Out;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateSubstrateMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+    return MakeMaterialQueuedEnvelope(
+        TEXT("create_substrate_material"),
+        Params,
+        TEXT("Substrate Material requires Project Settings -> Rendering -> 'Substrate' enabled and r.Substrate=1. ")
+        TEXT("After enabling Substrate, use create_material + add_material_node (UMaterialExpressionSubstrateSlabBSDF / ")
+        TEXT("UMaterialExpressionSubstrateHorizontalMixing) + connect_material_nodes to author the graph."));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateLayeredMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+    return MakeMaterialQueuedEnvelope(
+        TEXT("create_layered_material"),
+        Params,
+        TEXT("Layered Materials are authored in the Material Editor by inserting a ")
+        TEXT("UMaterialExpressionMaterialLayerBlend node at the root and attaching ")
+        TEXT("UMaterialFunctionInterface layers. Use create_material + add_material_node + ")
+        TEXT("connect_material_nodes after building the layer functions."));
+}

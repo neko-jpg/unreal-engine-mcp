@@ -113,7 +113,8 @@ public class UnrealMCP : ModuleRules
 					"ApplicationCore",      // For SlateApplication window management
 					"WorkspaceMenuStructure", // For editor workspace access
 					"DataLayerEditor",     // For UE5.7 Data Layer editor operations
-                    "SourceControl"        // W1-H: ISourceControlModule for status queries
+                    "SourceControl",       // W1-H: ISourceControlModule for status queries
+					"DataValidation"      // UE 5.7: EditorValidatorSubsystem moved to DataValidation plugin
 				}
 			);
 		}

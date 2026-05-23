@@ -1,4 +1,4 @@
-﻿#include "Commands/EpicUnrealMCPAnimationRiggingCommands.h"
+#include "Commands/EpicUnrealMCPAnimationRiggingCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 
 #include "Modules/ModuleManager.h"
@@ -10,7 +10,7 @@
 #include "AssetToolsModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Factories/SkeletonFactory.h"
-#include "PhysicsEngine/PhysicsAssetFactory.h"
+#include "Factories/PhysicsAssetFactory.h"  // UE 5.7: lives under Editor/UnrealEd/Classes/Factories
 #endif
 
 namespace
