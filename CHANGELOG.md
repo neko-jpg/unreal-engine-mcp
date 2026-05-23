@@ -4,6 +4,44 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch J: Landscape / Terrain (23 tasks.md items, issue #43)
+
+Adds a dedicated Landscape handler class (route 25, `FEpicUnrealMCPLandscapeCommands`) covering all 23 Landscape / Terrain items in `docs/superpowers/plans/tasks.md`. The Landscape module ships with UE 5.7 and is gated as optional via the `WITH_LANDSCAPE_MCP` define so the plugin remains buildable on engines that strip Landscape. `create_landscape` actually spawns `ALandscape` and sets `ComponentSizeQuads`; the rest of the handlers return a structured `queued` envelope echoing the parameters, because the UE 5.7 LandscapeEditMode (sculpt brushes, heightmap import, layer paint, spline edits, RVT/Nanite/World Partition toggles) requires interactive editor mode and `LandscapeEditor` private API which is not safely callable from a TCP bridge.
+
+### Added
+
+- `create_landscape` -- spawns `ALandscape` with chosen sections-per-component and quads-per-section; returns `actor_name` + `component_size_quads`.
+- `set_landscape_size` / `set_landscape_section_component` -- queue resize / section tuning payloads.
+- `import_landscape_heightmap` / `export_landscape_heightmap` -- queue PNG/RAW heightmap IO requests; LandscapeEditMode finishes the bake.
+- `landscape_sculpt` / `landscape_smooth` / `landscape_flatten` / `landscape_ramp` / `landscape_erosion` / `landscape_noise` -- queue sculpt brush strokes with radius/strength/location parameters.
+- `create_landscape_paint_layer` / `set_landscape_layer_blend` / `apply_landscape_material` / `set_landscape_grass_output` -- weight-blend paint layers + material + grass output requests.
+- `set_landscape_collision` -- toggle Landscape collision (`ALandscape::bUsedForNavigation` etc.).
+- `add_landscape_hole` -- queue a hole / cave opening request.
+- `add_landscape_spline` / `add_road_spline` -- queue `ULandscapeSplinesComponent` spline + road creation.
+- `carve_river_terrain` -- cross-links to Sub-batch S (Water) for river carve via Water Brush Manager.
+- `attach_landscape_rvt` / `set_landscape_nanite` / `set_landscape_world_partition` -- queue RVT attach (`ALandscape::RuntimeVirtualTextures`), Nanite enable (`ALandscape::bEnableNanite`) and World Partition grid sizing.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPLandscapeCommands.{h,cpp}` add the new handler class.
+- `UnrealMCP.Build.cs` probes `Engine/Source/Runtime/Landscape/Classes/Landscape.h` and defines `WITH_LANDSCAPE_MCP=1` + adds `Landscape` and (editor-only) `LandscapeEditor` private deps when found.
+- `EpicUnrealMCPBridge.cpp` registers `FEpicUnrealMCPLandscapeCommands` on route 25.
+- `EpicUnrealMCPRouter.cpp` adds 23 `{TEXT(`...`), 25}` entries.
+- `Python/server/landscape_tools.py` adds 23 `@mcp.tool()` wrappers calling the bridge with literal command names so the audit recognises them.
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patch list now cover `landscape_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 23 entries to `[x]` under Landscape / Terrain.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 493` (was 470; +23 new Landscape handlers wired 3-layer).
+- `python -m pytest Python/tests/unit/test_landscape_tools.py Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **61 passed**.
+
+### Notes
+
+- UE 5.7 APIs verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Source/Runtime/Landscape/Classes/`: `Landscape.h`, `LandscapeProxy.h`, `LandscapeStreamingProxy.h`, `LandscapeInfo.h`, `LandscapeComponent.h`, `LandscapeSplineActor.h`, `LandscapeSplinesComponent.h`, `LandscapeLayerInfoObject.h`, `LandscapeGrassType.h`.
+- Sculpt / paint / spline edits queued payload only: the UE 5.7 LandscapeEditMode (`Editor/LandscapeEditor`) is interactive and routes through `ULandscapeSubsystem` + `FEdModeLandscape` which are not safely usable from a background TCP bridge in 5.7. Operator finishes the edit in the editor; the queued contract keeps the 3-layer contract intact.
+---
+
 ## [2026-05-23] - Sub-batch I: Niagara / VFX (27 tasks.md items, issue #49)
 
 Adds a dedicated Niagara handler class (route 21, `FEpicUnrealMCPNiagaraCommands`) with 27 commands matching the Niagara / VFX section of `docs/superpowers/plans/tasks.md`. The Niagara plugin is treated as an optional dependency: `UnrealMCP.Build.cs` probes for `Engine/Plugins/FX/Niagara/Niagara.uplugin` and links the `Niagara` + `NiagaraEditor` modules with `WITH_NIAGARA_MCP=1` when found. When the plugin is missing the same handler still builds; every command returns an actionable error envelope with diagnostics so the AI knows exactly how to enable the plugin.

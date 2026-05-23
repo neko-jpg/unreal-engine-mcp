@@ -51,6 +51,7 @@ def bootstrap():
     from server import vroid_tools                # noqa: F401
     from server import cesium_tools               # noqa: F401
     from server import niagara_tools              # noqa: F401  Sub-batch I
+    from server import landscape_tools            # noqa: F401  Sub-batch J
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

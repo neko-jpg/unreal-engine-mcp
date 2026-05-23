@@ -78,6 +78,7 @@
 #include "Commands/EpicUnrealMCPCesiumCommands.h"
 #include "Commands/EpicUnrealMCPProceduralCommands.h"
 #include "Commands/EpicUnrealMCPNiagaraCommands.h"
+#include "Commands/EpicUnrealMCPLandscapeCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -337,7 +338,8 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPNiagaraCommands>(21);          // Niagara / VFX (Sub-batch I)
     RegisterHandler<FEpicUnrealMCPPhysicsCommands>(22);          // Collision / physics body / forces / constraints (Phase 4)
     RegisterHandler<FEpicUnrealMCPValidationCommands>(23);       // compile_all_blueprints / run_map_check / find_broken_references (Phase 4)
-    RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
+    RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);
+    RegisterHandler<FEpicUnrealMCPLandscapeCommands>(25);         // Landscape / Terrain (Sub-batch J)         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

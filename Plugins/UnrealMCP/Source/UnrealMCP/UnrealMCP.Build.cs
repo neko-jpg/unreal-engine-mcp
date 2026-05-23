@@ -193,5 +193,22 @@ public class UnrealMCP : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_NIAGARA_MCP=0");
 		}
+		// ----- Optional Landscape integration (Sub-batch J, route 25) -----
+		bool bLandscapeFound = false;
+		string LandscapeProbe = System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "Landscape", "Classes", "Landscape.h");
+		if (System.IO.File.Exists(LandscapeProbe)) { bLandscapeFound = true; }
+		if (bLandscapeFound)
+		{
+			PublicDefinitions.Add("WITH_LANDSCAPE_MCP=1");
+			PrivateDependencyModuleNames.Add("Landscape");
+			if (Target.bBuildEditor)
+			{
+				PrivateDependencyModuleNames.Add("LandscapeEditor");
+			}
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_LANDSCAPE_MCP=0");
+		}
 	}
 }
