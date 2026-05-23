@@ -443,7 +443,53 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAnim
     return MakeRiggingUnavailableResponse(TEXT("create_anim_transition_rule"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAimOffset(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_aim_offset"), P, TEXT("UAimOffsetBlendSpace asset factory is gated; payload accepted.")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAimOffset(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_aim_offset"));
+#if WITH_ANIM_RIGGING_MCP
+    if (!P.IsValid()) return AnimErr(TEXT("'create_aim_offset' requires JSON parameters."));
+    FString PackagePath = TEXT("/Game/Anim"), AssetName = TEXT("AO_New"), SkeletonPath;
+    P->TryGetStringField(TEXT("asset_path"), PackagePath);
+    P->TryGetStringField(TEXT("asset_name"), AssetName);
+    P->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
+
+    FString FactoryErr;
+    UObject* Asset = TryCreateRuntimeResolvedAsset(
+        TEXT("/Script/Engine.AimOffsetBlendSpace"),
+        TEXT("/Script/UnrealEd.AimOffsetBlendSpaceFactoryNew"),
+        PackagePath, AssetName, FactoryErr);
+    if (Asset)
+    {
+        if (!SkeletonPath.IsEmpty())
+        {
+            UPackage* Pkg = Asset->GetOutermost();
+            if (Pkg) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_aim_offset.skeleton_path")), *SkeletonPath);
+        }
+        TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("command"), TEXT("create_aim_offset"));
+        Data->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+        Data->SetStringField(TEXT("asset_name"), Asset->GetName());
+        Data->SetStringField(TEXT("mode"), TEXT("factory"));
+        Data->SetBoolField(TEXT("executed"), true);
+        return AnimOk(Data);
+    }
+
+    if (SkeletonPath.IsEmpty())
+    {
+        return AnimErr(
+            TEXT("'create_aim_offset': UAimOffsetBlendSpace factory unavailable and no 'skeleton_path' was provided for metadata fallback."),
+            FactoryErr);
+    }
+    return AnimMetaFallback(
+        TEXT("create_aim_offset"),
+        SkeletonPath,
+        TEXT("/Script/Engine.AimOffsetBlendSpace"),
+        AssetName, PackagePath, FactoryErr, P,
+        [&](UObject* /*Host*/, TMap<FString,FString>& /*Kv*/, TSharedPtr<FJsonObject>& /*Data*/){});
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_aim_offset"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddNotifyState(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_notify_state"));
@@ -672,7 +718,62 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetRetarge
     return MakeRiggingUnavailableResponse(TEXT("set_retarget_chain"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateControlRig(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_control_rig"), P, TEXT("UControlRigBlueprintFactory is gated by ControlRigEditor.")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateControlRig(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_control_rig"));
+#if WITH_ANIM_RIGGING_MCP
+    if (!P.IsValid()) return AnimErr(TEXT("'create_control_rig' requires JSON parameters."));
+    FString PackagePath = TEXT("/Game/Rig"), AssetName = TEXT("CR_New");
+    FString SkeletonPath, SkeletalMeshPath, HostFallbackPath;
+    P->TryGetStringField(TEXT("asset_path"), PackagePath);
+    P->TryGetStringField(TEXT("asset_name"), AssetName);
+    P->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
+    P->TryGetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath);
+    P->TryGetStringField(TEXT("host_asset_path"), HostFallbackPath);
+    if (HostFallbackPath.IsEmpty()) HostFallbackPath = SkeletonPath.IsEmpty() ? SkeletalMeshPath : SkeletonPath;
+
+    FString FactoryErr;
+    UObject* Asset = TryCreateRuntimeResolvedAsset(
+        TEXT("/Script/ControlRigDeveloper.ControlRigBlueprint"),
+        TEXT("/Script/ControlRigEditor.ControlRigBlueprintFactory"),
+        PackagePath, AssetName, FactoryErr);
+    if (Asset)
+    {
+        UPackage* Pkg = Asset->GetOutermost();
+        if (Pkg)
+        {
+            if (!SkeletonPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_control_rig.skeleton_path")), *SkeletonPath);
+            if (!SkeletalMeshPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_control_rig.skeletal_mesh_path")), *SkeletalMeshPath);
+        }
+        TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("command"), TEXT("create_control_rig"));
+        Data->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+        Data->SetStringField(TEXT("asset_name"), Asset->GetName());
+        Data->SetStringField(TEXT("mode"), TEXT("factory"));
+        Data->SetBoolField(TEXT("executed"), true);
+        return AnimOk(Data);
+    }
+
+    if (HostFallbackPath.IsEmpty())
+    {
+        return AnimErr(
+            TEXT("'create_control_rig': UControlRigBlueprintFactory unavailable and no 'skeleton_path' / 'skeletal_mesh_path' / 'host_asset_path' provided for metadata fallback."),
+            FactoryErr);
+    }
+    return AnimMetaFallback(
+        TEXT("create_control_rig"),
+        HostFallbackPath,
+        TEXT("/Script/ControlRigDeveloper.ControlRigBlueprint"),
+        AssetName, PackagePath, FactoryErr, P,
+        [&](UObject* /*Host*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            if (!SkeletonPath.IsEmpty()) { Kv.Add(TEXT("skeleton_path"), SkeletonPath); Data->SetStringField(TEXT("skeleton_path"), SkeletonPath); }
+            if (!SkeletalMeshPath.IsEmpty()) { Kv.Add(TEXT("skeletal_mesh_path"), SkeletalMeshPath); Data->SetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath); }
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_control_rig"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddControlRigControl(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_control_rig_control"));
@@ -749,7 +850,34 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetControl
     return MakeRiggingUnavailableResponse(TEXT("set_control_rig_constraint"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSequencerControlRigTrack(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("sequencer_control_rig_track"), P, TEXT("Sequencer Control Rig track via UMovieSceneControlRigParameterTrack.")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSequencerControlRigTrack(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("sequencer_control_rig_track"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("sequencer_control_rig_track"),
+        TEXT("level_sequence_path"),
+        {TEXT("LevelSequence")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString ControlRigPath, BindingGuid, TrackName = TEXT("ControlRigTrack");
+            if (!P->TryGetStringField(TEXT("control_rig_path"), ControlRigPath) || ControlRigPath.IsEmpty())
+            {
+                Data->SetStringField(TEXT("warning"), TEXT("control_rig_path was empty; the wave-close replay will skip the track."));
+            }
+            P->TryGetStringField(TEXT("binding_guid"), BindingGuid);
+            P->TryGetStringField(TEXT("track_name"), TrackName);
+            Kv.Add(TEXT("control_rig_path"), ControlRigPath);
+            if (!BindingGuid.IsEmpty()) Kv.Add(TEXT("binding_guid"), BindingGuid);
+            Kv.Add(TEXT("track_name"), TrackName);
+            Data->SetStringField(TEXT("control_rig_path"), ControlRigPath);
+            Data->SetStringField(TEXT("track_name"), TrackName);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("sequencer_control_rig_track"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetFacialAnimation(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("set_facial_animation"));
@@ -835,4 +963,33 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetMorphTa
     return MakeRiggingUnavailableResponse(TEXT("set_morph_target"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleConnectMetaHuman(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("connect_metahuman"), P, TEXT("MetaHuman Plugin integration is a separate optional dep.")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleConnectMetaHuman(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("connect_metahuman"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("connect_metahuman"),
+        TEXT("host_asset_path"),
+        {TEXT("Skeleton"), TEXT("SkeletalMesh"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString MetaHumanId, GroomPath, IdentityPath, FaceArchetype = TEXT("Default");
+            if (!P->TryGetStringField(TEXT("metahuman_id"), MetaHumanId) || MetaHumanId.IsEmpty())
+            {
+                Data->SetStringField(TEXT("warning"), TEXT("metahuman_id was empty; the wave-close replay will pick a default identity."));
+            }
+            P->TryGetStringField(TEXT("groom_path"), GroomPath);
+            P->TryGetStringField(TEXT("identity_path"), IdentityPath);
+            P->TryGetStringField(TEXT("face_archetype"), FaceArchetype);
+            Kv.Add(TEXT("metahuman_id"), MetaHumanId);
+            if (!GroomPath.IsEmpty()) Kv.Add(TEXT("groom_path"), GroomPath);
+            if (!IdentityPath.IsEmpty()) Kv.Add(TEXT("identity_path"), IdentityPath);
+            Kv.Add(TEXT("face_archetype"), FaceArchetype);
+            Data->SetStringField(TEXT("metahuman_id"), MetaHumanId);
+            Data->SetStringField(TEXT("face_archetype"), FaceArchetype);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("connect_metahuman"));
+#endif
+}
