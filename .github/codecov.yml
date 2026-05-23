@@ -1,0 +1,31 @@
+# Codecov 設定
+# 参考: https://docs.codecov.com/docs/codecov-yaml
+codecov:
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+coverage:
+  status:
+    project:
+      default:
+        target: 40%   # 最低カバレッジ目標
+        threshold: 5% # 変動許容範囲
+        flags:
+          - unittests
+    patch:
+      default:
+        target: 50%
+        threshold: 10%
+
+comment:
+  layout: "header, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+flags:
+  unittests:
+    paths:
+      - Python/server/
+      - Python/helpers/
+    carryforward: true

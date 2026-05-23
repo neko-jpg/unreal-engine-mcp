@@ -4,8 +4,13 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test-python:
+  lint:
+    name: Lint (Ruff)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -13,7 +18,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
       - run: uv sync --extra dev
-      - run: uv run python -m compileall .
-      - run: uv run pytest tests/unit tests/contract -q
-      - run: uv run pytest tests/e2e --skip-unreal -q
+      - name: Ruff check
+        run: uv run ruff check server helpers scripts
+      - name: Ruff format check
+        run: uv run ruff format --check server helpers scripts
+      - name: Bandit security scan
+        run: uv run bandit -c pyproject.toml server helpers
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
+      - run: uv sync --extra dev
+      - name: mypy (advisory)
+        continue-on-error: true
+        run: uv run mypy server helpers
+      - name: deptry check
+        continue-on-error: true
+        run: uv run deptry .
+
+  test-python:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
+      - run: uv sync --extra dev
+      - name: Compile check
+        run: uv run python -m compileall .
+      - name: Unit + contract tests
+        run: uv run pytest tests/unit tests/contract -q --cov --cov-report=xml
+      - name: E2E tests (skip Unreal)
+        run: uv run pytest tests/e2e --skip-unreal -q
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: Python/coverage.xml
+          flags: unittests
+          fail_ci_if_error: false

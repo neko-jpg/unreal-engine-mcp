@@ -1,11 +1,16 @@
-name: Rust checks
+﻿name: Rust checks
 
 on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test-rust:
+  fmt-clippy:
+    name: Format + Clippy
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -13,7 +18,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test-rust:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test
+
+  build-release:
+    name: Build (release)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build --release

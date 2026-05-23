@@ -1,0 +1,31 @@
+name: Rust Tests (nextest)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nextest:
+    name: Test (nextest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: cargo nextest run --all-features --no-tests=warn
+      - name: Report test results
+        if: success() || failure()
+        run: cargo nextest run --all-features --no-tests=warn --message-format libtest-json 2>/dev/null || true

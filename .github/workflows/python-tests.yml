@@ -1,4 +1,4 @@
-﻿name: Python tests (234-stubs Wave 0 expansion)
+name: Python tests (234-stubs Wave 0 expansion)
 
 # 234-stubs Wave 0 (#74): unit + contract + envelope-helper tests, plus the
 # new helper smoke that asserts the executed-or-error envelope contract holds
