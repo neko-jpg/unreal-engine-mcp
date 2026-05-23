@@ -7,14 +7,19 @@
 #if WITH_ANIM_RIGGING_MCP
 #include "Animation/Skeleton.h"
 #include "Animation/MorphTarget.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Engine/SkeletalMesh.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "AssetToolsModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Factories/SkeletonFactory.h"
 #include "Factories/PhysicsAssetFactory.h"  // UE 5.7: lives under Editor/UnrealEd/Classes/Factories
+#include "Factories/Factory.h"
 #include "UObject/Package.h"
 #include "UObject/MetaData.h"
+#include "UObject/SavePackage.h"
 #endif
 
 namespace
@@ -139,6 +144,107 @@ static TSharedPtr<FJsonObject> AnimMetaPersist(
     Data->SetBoolField(TEXT("executed"), true);
     return AnimOk(Data);
 }
+
+// 234-stubs W1 part2 (#79): runtime-resolved asset creator.
+//
+// UE 5.7 keeps UIKRigDefinition / UIKRetargeter and their factories inside
+// the *Editor* modules (private). We instead use ConstructorHelpers-style
+// runtime class lookup (FindObject<UClass>) so the bridge stays buildable
+// when those editor modules are absent: if the class is found we create the
+// asset via UFactory::FactoryCreateNew, otherwise we degrade gracefully and
+// persist the requested intent in MCP metadata on a "host" asset (target
+// skeletal mesh or skeleton path).
+static UObject* TryCreateRuntimeResolvedAsset(
+    const FString& ClassPath,
+    const FString& FactoryClassPath,
+    const FString& PackagePath,
+    const FString& AssetName,
+    FString& OutError)
+{
+    UClass* AssetClass = FindObject<UClass>(nullptr, *ClassPath);
+    if (!AssetClass)
+    {
+        OutError = FString::Printf(TEXT("class '%s' is not loaded; the editor module that exposes it is probably absent."), *ClassPath);
+        return nullptr;
+    }
+    UClass* FactoryClass = FindObject<UClass>(nullptr, *FactoryClassPath);
+    if (!FactoryClass || !FactoryClass->IsChildOf(UFactory::StaticClass()))
+    {
+        OutError = FString::Printf(TEXT("factory class '%s' is not a UFactory or is missing."), *FactoryClassPath);
+        return nullptr;
+    }
+    FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+    UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+    if (!Factory)
+    {
+        OutError = TEXT("NewObject<UFactory> returned null.");
+        return nullptr;
+    }
+    UObject* Asset = AssetTools.Get().CreateAsset(AssetName, PackagePath, AssetClass, Factory);
+    if (!Asset)
+    {
+        OutError = FString::Printf(TEXT("AssetTools.CreateAsset returned null for %s/%s (%s)."), *PackagePath, *AssetName, *ClassPath);
+        return nullptr;
+    }
+    Asset->MarkPackageDirty();
+    FAssetRegistryModule::AssetCreated(Asset);
+    return Asset;
+}
+
+// Persist requested intent on a fallback host asset when the editor-side
+// factory is unavailable. Used by create_ik_rig / create_ik_retargeter.
+static TSharedPtr<FJsonObject> AnimMetaFallback(
+    const FString& CommandName,
+    const FString& HostAssetPath,
+    const FString& WantedClassPath,
+    const FString& WantedAssetName,
+    const FString& WantedPackagePath,
+    const FString& FactoryError,
+    const TSharedPtr<FJsonObject>& Params,
+    TFunctionRef<void(UObject* Host, TMap<FString,FString>& OutKv, TSharedPtr<FJsonObject>& OutData)> Build)
+{
+    UObject* Host = StaticLoadObject(UObject::StaticClass(), nullptr, *HostAssetPath);
+    if (!Host)
+    {
+        return AnimErr(
+            FString::Printf(TEXT("'%s': could not load host asset '%s' for metadata fallback."), *CommandName, *HostAssetPath),
+            FactoryError);
+    }
+    FMCPScopedTransaction Tx(FString::Printf(TEXT("UnrealMCP: %s (metadata fallback)"), *CommandName));
+    Host->Modify();
+    TMap<FString,FString> Kv;
+    TSharedPtr<FJsonObject> Extra = MakeShared<FJsonObject>();
+    Kv.Add(TEXT("wanted_class"), WantedClassPath);
+    Kv.Add(TEXT("wanted_package_path"), WantedPackagePath);
+    Kv.Add(TEXT("wanted_asset_name"), WantedAssetName);
+    Build(Host, Kv, Extra);
+    UPackage* Pkg = Host->GetOutermost();
+    int32 KeysPersisted = 0;
+    if (Pkg)
+    {
+        for (const TPair<FString,FString>& KvPair : Kv)
+        {
+            const FName K(*FString::Printf(TEXT("MCP.%s.%s"), *CommandName, *KvPair.Key));
+            Pkg->SetMetaData(*Host, K, *KvPair.Value);
+            ++KeysPersisted;
+        }
+        Pkg->MarkPackageDirty();
+    }
+    Host->PostEditChange();
+    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+    Data->SetStringField(TEXT("command"), CommandName);
+    Data->SetStringField(TEXT("host_asset_path"), Host->GetPathName());
+    Data->SetStringField(TEXT("host_asset_class"), Host->GetClass() ? Host->GetClass()->GetPathName() : FString());
+    Data->SetStringField(TEXT("wanted_class"), WantedClassPath);
+    Data->SetStringField(TEXT("wanted_package_path"), WantedPackagePath);
+    Data->SetStringField(TEXT("wanted_asset_name"), WantedAssetName);
+    Data->SetStringField(TEXT("factory_unavailable_reason"), FactoryError);
+    Data->SetNumberField(TEXT("mcp_metadata_keys_persisted"), KeysPersisted);
+    for (const auto& Pair : Extra->Values) Data->SetField(Pair.Key, Pair.Value);
+    Data->SetBoolField(TEXT("executed"), true);
+    Data->SetStringField(TEXT("mode"), TEXT("metadata_fallback"));
+    return AnimOk(Data);
+}
 #endif
 }
 
@@ -240,12 +346,132 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreatePhys
 #endif
 }
 
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddAnimGraphNode(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("add_anim_graph_node"), P, TEXT("AnimGraph node edits need UAnimBlueprint + persona editor; payload accepted.")); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAnimStateMachine(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_anim_state_machine"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddAnimState(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("add_anim_state"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAnimTransitionRule(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_anim_transition_rule"), P); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddAnimGraphNode(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_anim_graph_node"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("add_anim_graph_node"),
+        TEXT("anim_bp_path"),
+        {TEXT("AnimBlueprint"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString NodeType; double LocX=0.0, LocY=0.0;
+            P->TryGetStringField(TEXT("node_type"), NodeType);
+            P->TryGetNumberField(TEXT("location_x"), LocX);
+            P->TryGetNumberField(TEXT("location_y"), LocY);
+            if (!NodeType.IsEmpty()) Kv.Add(TEXT("node_type"), NodeType);
+            Kv.Add(TEXT("location_x"), FString::Printf(TEXT("%f"), LocX));
+            Kv.Add(TEXT("location_y"), FString::Printf(TEXT("%f"), LocY));
+            Data->SetStringField(TEXT("node_type"), NodeType);
+            Data->SetNumberField(TEXT("location_x"), LocX);
+            Data->SetNumberField(TEXT("location_y"), LocY);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("add_anim_graph_node"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAnimStateMachine(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_anim_state_machine"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("create_anim_state_machine"),
+        TEXT("anim_bp_path"),
+        {TEXT("AnimBlueprint"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString GraphName = TEXT("NewStateMachine");
+            P->TryGetStringField(TEXT("graph_name"), GraphName);
+            Kv.Add(TEXT("graph_name"), GraphName);
+            Data->SetStringField(TEXT("graph_name"), GraphName);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_anim_state_machine"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddAnimState(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_anim_state"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("add_anim_state"),
+        TEXT("anim_bp_path"),
+        {TEXT("AnimBlueprint"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString GraphName, StateName, AnimSequencePath;
+            P->TryGetStringField(TEXT("graph_name"), GraphName);
+            P->TryGetStringField(TEXT("state_name"), StateName);
+            P->TryGetStringField(TEXT("anim_sequence_path"), AnimSequencePath);
+            if (!GraphName.IsEmpty()) Kv.Add(TEXT("graph_name"), GraphName);
+            if (!StateName.IsEmpty()) Kv.Add(TEXT("state_name"), StateName);
+            if (!AnimSequencePath.IsEmpty()) Kv.Add(TEXT("anim_sequence_path"), AnimSequencePath);
+            Data->SetStringField(TEXT("graph_name"), GraphName);
+            Data->SetStringField(TEXT("state_name"), StateName);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("add_anim_state"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAnimTransitionRule(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_anim_transition_rule"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("create_anim_transition_rule"),
+        TEXT("anim_bp_path"),
+        {TEXT("AnimBlueprint"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString FromState, ToState, Condition;
+            P->TryGetStringField(TEXT("from_state"), FromState);
+            P->TryGetStringField(TEXT("to_state"), ToState);
+            P->TryGetStringField(TEXT("condition"), Condition);
+            if (!FromState.IsEmpty()) Kv.Add(TEXT("from_state"), FromState);
+            if (!ToState.IsEmpty()) Kv.Add(TEXT("to_state"), ToState);
+            if (!Condition.IsEmpty()) Kv.Add(TEXT("condition"), Condition);
+            Data->SetStringField(TEXT("from_state"), FromState);
+            Data->SetStringField(TEXT("to_state"), ToState);
+            Data->SetStringField(TEXT("condition"), Condition);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_anim_transition_rule"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAimOffset(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_aim_offset"), P, TEXT("UAimOffsetBlendSpace asset factory is gated; payload accepted.")); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddNotifyState(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("add_notify_state"), P); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddNotifyState(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_notify_state"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("add_notify_state"),
+        TEXT("anim_path"),
+        {TEXT("AnimSequence"), TEXT("AnimMontage"), TEXT("AnimComposite")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString NotifyClass; double StartTime=0.0, Duration=0.0; FString Track;
+            P->TryGetStringField(TEXT("notify_class"), NotifyClass);
+            P->TryGetStringField(TEXT("track"), Track);
+            P->TryGetNumberField(TEXT("start_time"), StartTime);
+            P->TryGetNumberField(TEXT("duration"), Duration);
+            if (!NotifyClass.IsEmpty()) Kv.Add(TEXT("notify_class"), NotifyClass);
+            if (!Track.IsEmpty()) Kv.Add(TEXT("track"), Track);
+            Kv.Add(TEXT("start_time"), FString::Printf(TEXT("%f"), StartTime));
+            Kv.Add(TEXT("duration"), FString::Printf(TEXT("%f"), Duration));
+            Data->SetStringField(TEXT("notify_class"), NotifyClass);
+            Data->SetNumberField(TEXT("start_time"), StartTime);
+            Data->SetNumberField(TEXT("duration"), Duration);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("add_notify_state"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetRetargetManager(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("set_retarget_manager"));
@@ -268,7 +494,54 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetRetarge
     return MakeRiggingUnavailableResponse(TEXT("set_retarget_manager"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRig(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_ik_rig"), P, TEXT("UIKRigDefinition asset factory lives in IKRigEditor (private).")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRig(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_ik_rig"));
+#if WITH_ANIM_RIGGING_MCP
+    if (!P.IsValid()) return AnimErr(TEXT("'create_ik_rig' requires JSON parameters."));
+    FString PackagePath = TEXT("/Game/IK"), AssetName = TEXT("IKRig_New");
+    FString SkeletalMeshPath;
+    P->TryGetStringField(TEXT("asset_path"), PackagePath);
+    P->TryGetStringField(TEXT("asset_name"), AssetName);
+    P->TryGetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath);
+
+    FString FactoryErr;
+    UObject* Asset = TryCreateRuntimeResolvedAsset(
+        TEXT("/Script/IKRig.IKRigDefinition"),
+        TEXT("/Script/IKRigEditor.IKRigDefinitionFactory"),
+        PackagePath, AssetName, FactoryErr);
+    if (Asset)
+    {
+        if (!SkeletalMeshPath.IsEmpty())
+        {
+            UPackage* Pkg = Asset->GetOutermost();
+            if (Pkg) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_rig.skeletal_mesh_path")), *SkeletalMeshPath);
+        }
+        TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("command"), TEXT("create_ik_rig"));
+        Data->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+        Data->SetStringField(TEXT("asset_name"), Asset->GetName());
+        Data->SetStringField(TEXT("mode"), TEXT("factory"));
+        Data->SetBoolField(TEXT("executed"), true);
+        return AnimOk(Data);
+    }
+
+    if (SkeletalMeshPath.IsEmpty())
+    {
+        return AnimErr(
+            FString::Printf(TEXT("'create_ik_rig': UIKRigDefinitionFactory unavailable and no 'skeletal_mesh_path' was provided for metadata fallback.")),
+            FactoryErr);
+    }
+    return AnimMetaFallback(
+        TEXT("create_ik_rig"),
+        SkeletalMeshPath,
+        TEXT("/Script/IKRig.IKRigDefinition"),
+        AssetName, PackagePath, FactoryErr, P,
+        [&](UObject* /*Host*/, TMap<FString,FString>& /*Kv*/, TSharedPtr<FJsonObject>& /*Data*/){});
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_ik_rig"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddIkGoal(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("add_ik_goal"));
@@ -318,7 +591,63 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddIkSolve
     return MakeRiggingUnavailableResponse(TEXT("add_ik_solver"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRetargeter(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("create_ik_retargeter"), P); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRetargeter(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("create_ik_retargeter"));
+#if WITH_ANIM_RIGGING_MCP
+    if (!P.IsValid()) return AnimErr(TEXT("'create_ik_retargeter' requires JSON parameters."));
+    FString PackagePath = TEXT("/Game/IK"), AssetName = TEXT("IKRetargeter_New");
+    FString SourceIkRigPath, TargetIkRigPath, HostFallbackPath;
+    P->TryGetStringField(TEXT("asset_path"), PackagePath);
+    P->TryGetStringField(TEXT("asset_name"), AssetName);
+    P->TryGetStringField(TEXT("source_ik_rig_path"), SourceIkRigPath);
+    P->TryGetStringField(TEXT("target_ik_rig_path"), TargetIkRigPath);
+    P->TryGetStringField(TEXT("host_asset_path"), HostFallbackPath);
+    if (HostFallbackPath.IsEmpty()) HostFallbackPath = TargetIkRigPath;
+    if (HostFallbackPath.IsEmpty()) HostFallbackPath = SourceIkRigPath;
+
+    FString FactoryErr;
+    UObject* Asset = TryCreateRuntimeResolvedAsset(
+        TEXT("/Script/IKRig.IKRetargeter"),
+        TEXT("/Script/IKRigEditor.IKRetargeterFactory"),
+        PackagePath, AssetName, FactoryErr);
+    if (Asset)
+    {
+        UPackage* Pkg = Asset->GetOutermost();
+        if (Pkg)
+        {
+            if (!SourceIkRigPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_retargeter.source_ik_rig_path")), *SourceIkRigPath);
+            if (!TargetIkRigPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_retargeter.target_ik_rig_path")), *TargetIkRigPath);
+        }
+        TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("command"), TEXT("create_ik_retargeter"));
+        Data->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+        Data->SetStringField(TEXT("asset_name"), Asset->GetName());
+        Data->SetStringField(TEXT("mode"), TEXT("factory"));
+        Data->SetBoolField(TEXT("executed"), true);
+        return AnimOk(Data);
+    }
+
+    if (HostFallbackPath.IsEmpty())
+    {
+        return AnimErr(
+            TEXT("'create_ik_retargeter': IKRetargeterFactory unavailable and no 'host_asset_path' / source / target IK Rig path was provided."),
+            FactoryErr);
+    }
+    return AnimMetaFallback(
+        TEXT("create_ik_retargeter"),
+        HostFallbackPath,
+        TEXT("/Script/IKRig.IKRetargeter"),
+        AssetName, PackagePath, FactoryErr, P,
+        [&](UObject* /*Host*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            if (!SourceIkRigPath.IsEmpty()) { Kv.Add(TEXT("source_ik_rig_path"), SourceIkRigPath); Data->SetStringField(TEXT("source_ik_rig_path"), SourceIkRigPath); }
+            if (!TargetIkRigPath.IsEmpty()) { Kv.Add(TEXT("target_ik_rig_path"), TargetIkRigPath); Data->SetStringField(TEXT("target_ik_rig_path"), TargetIkRigPath); }
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("create_ik_retargeter"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetRetargetChain(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("set_retarget_chain"));
@@ -395,7 +724,31 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleAddControl
     return MakeRiggingUnavailableResponse(TEXT("add_control_rig_bone"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetControlRigConstraint(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("set_control_rig_constraint"), P); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetControlRigConstraint(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsAnimRiggingAvailable()) return MakeRiggingUnavailableResponse(TEXT("set_control_rig_constraint"));
+#if WITH_ANIM_RIGGING_MCP
+    return AnimMetaPersist(
+        TEXT("set_control_rig_constraint"),
+        TEXT("control_rig_path"),
+        {TEXT("ControlRig"), TEXT("Blueprint")},
+        P,
+        [&](UObject* /*Asset*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Data)
+        {
+            FString ControlName, ConstraintType = TEXT("Parent"), Target;
+            P->TryGetStringField(TEXT("control_name"), ControlName);
+            P->TryGetStringField(TEXT("constraint_type"), ConstraintType);
+            P->TryGetStringField(TEXT("target"), Target);
+            if (!ControlName.IsEmpty()) Kv.Add(TEXT("control_name"), ControlName);
+            Kv.Add(TEXT("constraint_type"), ConstraintType);
+            if (!Target.IsEmpty()) Kv.Add(TEXT("target"), Target);
+            Data->SetStringField(TEXT("control_name"), ControlName);
+            Data->SetStringField(TEXT("constraint_type"), ConstraintType);
+        });
+#else
+    return MakeRiggingUnavailableResponse(TEXT("set_control_rig_constraint"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSequencerControlRigTrack(const TSharedPtr<FJsonObject>& P) { return AnimQueued(TEXT("sequencer_control_rig_track"), P, TEXT("Sequencer Control Rig track via UMovieSceneControlRigParameterTrack.")); }
 TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetFacialAnimation(const TSharedPtr<FJsonObject>& P)
 {
