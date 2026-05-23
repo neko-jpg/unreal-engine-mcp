@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
       - run: uv sync --extra dev
       - name: Run mypy (advisory)
         # mypy currently surfaces ~534 pre-existing union-attr / no_implicit_optional

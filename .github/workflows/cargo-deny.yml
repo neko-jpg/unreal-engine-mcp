@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/scene-syncd -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked --version ^0.18
       - name: Run cargo-deny

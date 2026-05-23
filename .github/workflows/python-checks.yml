@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
       - run: uv sync --extra dev
       - run: uv run python -m compileall .
       - run: uv run pytest tests/unit tests/contract -q
