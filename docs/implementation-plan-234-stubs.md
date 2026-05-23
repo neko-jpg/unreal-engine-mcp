@@ -205,3 +205,144 @@ These pieces live in the bridge and unblock every later wave:
 - [ ] `docs/implementation-plan-234-stubs.md` updated only if the plan
       itself changed (do **not** update it just to tick items — those go in
       the wave / category issue checklists).
+
+## 13. Wave 0.5 follow-up infrastructure (delivered separately from #76)
+
+The follow-up PR `codex/w0-followup-issue-resolution-infra` adds the
+collision-avoidance and audit machinery that makes Waves 1-5
+parallelisable across multiple worker agents. None of these files were
+in scope for Wave 0 itself, but every Wave 1+ PR depends on them.
+
+- `scripts/audit_no_new_queued.py` + `artifacts/queued_baseline.json`
+  Promotes the legacy warn-only `queued: true` grep to a blocking
+  audit. Run by `.github/workflows/queued-audit.yml`. Baseline is only
+  lowered from a wave-close PR via `--update-baseline`.
+- `scripts/run_local_uat_buildplugin.ps1`
+  One-liner wrapper for `RunUAT BuildPlugin` that captures the log under
+  `artifacts/local_uat/<timestamp>/runuat.log` so PR authors can quote a
+  deterministic path in the PR description.
+- `scripts/fold_changelog_fragments.py` + `CHANGELOG.d/`
+  Lets every category PR drop a fragment instead of editing the
+  100+ KiB `CHANGELOG.md` directly. The wave-close PR folds them into
+  `## [Unreleased]` and removes the originals.
+- `.github/labeler.yml` + `.github/workflows/labeler.yml`
+  Apply `ue5.7-build`, `stub-impl`, and `stub-cat-<key>` automatically
+  based on changed paths. `ue5.7-build` is required to trigger the
+  self-hosted `RunUAT BuildPlugin` job in `ue57-build.yml`.
+- `.github/workflows/agents-md-pr-check.yml`
+  Fails the PR if the body of a `stub-impl` PR is missing
+  `## Scope reconciliation`, `## UE 5.7 API research`, or `## Tests`.
+  Mirrors the AGENTS.md mandate so reviewers do not have to enforce it
+  manually.
+- `.github/PULL_REQUEST_TEMPLATE.md`
+  Canonical template that satisfies the agents-md check by default and
+  records the data the reviewer needs to integrate the change without
+  follow-up questions.
+- `docs/dev/shared-file-policy.md`
+  Single source of truth for "do not touch these files in a category
+  PR". Category workers must read this before writing any C++.
+- `docs/dev/runbooks/issue-resolution.md`
+  Step-by-step recipe a worker can follow from issue selection to PR
+  merge.
+- `docs/dev/runbooks/wave-close.md`
+  Step-by-step recipe the reviewer follows to drain `CHANGELOG.d/`,
+  lower the queued baseline, and close the wave roadmap issue.
+
+## 14. Updated PR / branch policy (supersedes #76 7.5)
+
+- Branch: `codex/stubs-w<N>-<category>-part<M>`.
+- Maximum 8 handlers per PR; large categories (>8) split into `part1`,
+  `part2`, ...
+- Final part PR uses `Closes #<issue>`; intermediate parts use
+  `Refs #<issue>`.
+- Shared files (router, bridge, `scripts/live_e2e_smoke.py`,
+  `CHANGELOG.md`, queued baseline) are *queued in the PR description*
+  and applied by the wave-close PR. See
+  `docs/dev/shared-file-policy.md`.
+- Every `stub-impl` PR must include `## Scope reconciliation`,
+  `## UE 5.7 API research`, and `## Tests` sections (the
+  agents-md-pr-check workflow enforces this).
+- Before opening the PR, run:
+
+  ```pwsh
+  python scripts\audit_route_contracts.py --strict
+  python scripts\audit_no_new_queued.py
+  cd Python; python -m pytest tests\unit tests\contract -q
+  pwsh -File scripts\run_local_uat_buildplugin.ps1
+  ```
+
+  and quote the artifact paths in the PR body.
+
+## 15. Wave -> milestone schedule
+
+| Phase | Issues | Target due |
+|---|---|---|
+| W0.5 | infra (this section) | 2026-05-27 |
+| W1 (#78) | #79, #80 | 2026-06-07 |
+| W2 (#83) | #84, #85, #86, #87 | 2026-07-04 |
+| W3 (#88) | #89, #90, #91, #92 | 2026-07-18 |
+| W4 (#93) | #94, #95, #96, #97 | 2026-08-01 |
+| W5 (#98) | #99, #100, #101 | 2026-08-08 |
+| Umbrella (#69) | close after W5 | 2026-08-08 + 2 days |
+
+## 16. Resource allocation
+
+- Worker A (light categories): Landscape, DataTable, Water, Localization,
+  MetaSound.
+- Worker B (editor / asset categories): Animation Rigging, Sequencer,
+  Foliage, Source Control, Testing/Validation.
+- Worker C (gameplay / physics categories): GAS, Chaos, Movie Render
+  Queue, Mobile/XR.
+- Worker D (high-risk-API categories): AI/Nav Extension, PCG, Networking.
+- Reviewer/Integrator: owns W0.5, shared-file edits, wave-close PRs,
+  CHANGELOG fold-in, queued baseline lowering, and #69.
+
+With only two workers available, serialise PCG / Chaos / Networking /
+Movie Render Queue and extend M8 / M9 / M10 due dates accordingly.
+
+## 17. SME review recommendations
+
+| Category | Reason |
+|---|---|
+| #84 AI/Nav Extension | StateTree + Navigation + AI Sense API churn in 5.7. |
+| #89 Chaos | GeometryCollection / Cluster API churn in 5.7. |
+| #91 PCG | PCG graph + GeometryScript interop is new in 5.7. |
+| #95 Movie Render Queue | MovieGraph supersedes MRQ in 5.7. |
+| #96 Networking | Iris + ReplicationGraph layout changes. |
+| #99 MetaSound | MetaSoundFrontend reorg in 5.7. |
+
+A spike doc lives under `docs/spike/<category>-ue57.md` for each of
+these before the implementation PRs land.
+
+## 18. W0.5 refinements applied on top of #105
+
+These tightenings landed on the same `codex-w0-followup-issue-resolution-infra`
+branch as the original #105 commits, addressing review findings:
+
+- **`agents-md-pr-check.yml` now always runs.** The previous job-level
+  `if: contains(github.event.pull_request.labels.*.name, 'stub-impl')`
+  caused the check to be reported as *skipped*, which GitHub branch
+  protection treats as "no status reported" and therefore cannot be
+  required. The `stub-impl` guard is now evaluated inside the script
+  body via `actions/github-script@v7`, so the check is always present
+  on every PR and can be marked Required.
+- **`ue5.7-build` repository label created.** Without it, the gated
+  `RunUAT BuildPlugin` job in `ue57-build.yml` could never trigger
+  (and `actions/labeler@v5` would fail on first run trying to apply a
+  non-existent label). Colour `#1D76DB`, description "Trigger the
+  self-hosted UE 5.7 RunUAT BuildPlugin job in ue57-build.yml".
+- **`concurrency`/`workflow_dispatch` added to all three new
+  workflows** (`labeler.yml`, `agents-md-pr-check.yml`,
+  `queued-audit.yml`). The concurrency groups prevent stale runs from
+  blocking re-pushes; the dispatch trigger gives the reviewer a manual
+  recovery path when the GitHub Actions queue is backed up (this was
+  the situation observed on the original #105 push, where no run was
+  scheduled within 15 minutes).
+- **`scripts/fold_changelog_fragments.py --all-waves`** drives the
+  umbrella-close PR (#69 close) without five separate invocations.
+- **`Python/tests/unit/test_w0_followup_workflow_hardening.py`** locks
+  the above invariants in place so a future PR cannot silently revert
+  them (the test fails if the job-level skip returns, the concurrency
+  block disappears, or the labeler config drops a category).
+- **`docs/dev/runbooks/wave-close.md` §§8-9** documents the manual
+  `gh workflow run` recovery commands and the umbrella-close steps.

@@ -1,0 +1,37 @@
+﻿name: queued:true regression audit (234-stubs)
+
+# 234-stubs Wave 0.5 follow-up (umbrella: #69).
+#
+# Replaces the warn-only `Queued regression grep` step that lives in
+# ue57-build.yml with a blocking check rooted in
+# artifacts/queued_baseline.json. Any PR that *adds* a new
+# `SetBoolField(TEXT("queued"), true)` site fails this job, which is
+# required for merge.
+#
+# The baseline can only be lowered (intentional wave-close PR) via
+# `python scripts/audit_no_new_queued.py --update-baseline`.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: queued-audit-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Show current queued counts
+        run: python scripts/audit_no_new_queued.py --print
+      - name: Enforce no-new-queued baseline
+        run: python scripts/audit_no_new_queued.py

@@ -1,0 +1,77 @@
+﻿name: AGENTS.md PR body check (234-stubs)
+
+# 234-stubs Wave 0.5 follow-up (umbrella: #69).
+#
+# Always runs against every PR so the resulting check status is
+# reportable for branch protection. Inside the job, we inspect the PR
+# labels at runtime and short-circuit if `stub-impl` is not present.
+# This is preferred over a job-level `if:` because GitHub treats a
+# skipped check as "no status reported", which cannot be required by
+# branch protection.
+#
+# Required body sections:
+#   * "## Scope reconciliation"
+#   * "## UE 5.7 API research"
+#   * "## Tests"
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to re-check"
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: agents-md-pr-check-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enforce-research-section:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required PR body sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isDispatch = context.eventName === "workflow_dispatch";
+            let pr;
+            if (isDispatch) {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(context.payload.inputs.pr_number),
+              });
+              pr = data;
+            } else {
+              pr = context.payload.pull_request;
+            }
+            const labels = (pr.labels || []).map((l) => l.name);
+            core.info(`PR #${pr.number} labels: ${labels.join(", ") || "(none)"}`);
+            if (!labels.includes("stub-impl")) {
+              core.info("PR is not labelled stub-impl; AGENTS.md body sections not required.");
+              return;
+            }
+            const body = (pr.body || "").replace(/\r\n/g, "\n");
+            const required = [
+              "## Scope reconciliation",
+              "## UE 5.7 API research",
+              "## Tests",
+            ];
+            const missing = required.filter((h) => !body.includes(h));
+            if (missing.length > 0) {
+              core.setFailed(
+                "PR body is missing required AGENTS.md sections: " +
+                  missing.join(", ") +
+                  ". See docs/dev/shared-file-policy.md and " +
+                  ".github/PULL_REQUEST_TEMPLATE.md."
+              );
+              return;
+            }
+            core.info("All required AGENTS.md PR body sections present.");
