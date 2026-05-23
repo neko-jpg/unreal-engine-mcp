@@ -89,6 +89,7 @@
 #include "Commands/EpicUnrealMCPGASCommands.h"
 #include "Commands/EpicUnrealMCPWaterCommands.h"
 #include "Commands/EpicUnrealMCPMobileXrCommands.h"
+#include "Commands/EpicUnrealMCPSourceControlCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -360,6 +361,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPGASCommands>(30); // Gameplay Ability System (Sub-batch R, route 30, issue #55)
     RegisterHandler<FEpicUnrealMCPWaterCommands>(31); // Water System (Sub-batch S, route 31, issue #46)
     RegisterHandler<FEpicUnrealMCPMobileXrCommands>(38); // Mobile / XR (Sub-batch T, route 38, issue #59)
+    RegisterHandler<FEpicUnrealMCPSourceControlCommands>(32); // Source Control / Multi-User (Sub-batch U, route 32, issue #60)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

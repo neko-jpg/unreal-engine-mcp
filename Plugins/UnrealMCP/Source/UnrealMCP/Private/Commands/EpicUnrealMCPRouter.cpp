@@ -396,6 +396,21 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("configure_ar_session"), 38},
         {TEXT("configure_ar_plane_detection"), 38},
         {TEXT("platform_specific_packaging"), 38},
+        // ---- Source Control / Multi-User (Sub-batch U, route 32, issue #60) ----
+        {TEXT("register_git_provider"), 32},
+        {TEXT("register_perforce_provider"), 32},
+        {TEXT("source_control_checkout"), 32},
+        {TEXT("source_control_checkin"), 32},
+        {TEXT("source_control_revert"), 32},
+        {TEXT("source_control_file_lock_acquire"), 32},
+        {TEXT("source_control_file_lock_release"), 32},
+        {TEXT("source_control_create_changelist"), 32},
+        {TEXT("source_control_asset_diff"), 32},
+        {TEXT("source_control_blueprint_diff"), 32},
+        {TEXT("source_control_merge"), 32},
+        {TEXT("multi_user_editing_start"), 32},
+        {TEXT("multi_user_session_join"), 32},
+
 
 
 

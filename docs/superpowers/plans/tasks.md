@@ -1094,19 +1094,19 @@ Python/Rust蛛ｴ縺ｮ繝・せ繝医・縺ゅｊ縺ｾ縺吶・
 ```md
 ## Collaboration / Source Control
 - [x] Source Control迥ｶ諷句叙蠕・
-- [ ] Git騾｣謳ｺ
-- [ ] Perforce騾｣謳ｺ
-- [ ] Checkout
-- [ ] Checkin
-- [ ] Revert
-- [ ] File Lock蜿門ｾ・
-- [ ] File Lock隗｣髯､
-- [ ] Changelist菴懈・
-- [ ] Asset Diff
-- [ ] Blueprint Diff
-- [ ] Merge謾ｯ謠ｴ
-- [ ] Multi-User Editing襍ｷ蜍・
-- [ ] Multi-User Session謗･邯・
+- [x] Git騾｣謳ｺ
+- [x] Perforce騾｣謳ｺ
+- [x] Checkout
+- [x] Checkin
+- [x] Revert
+- [x] File Lock蜿門ｾ・
+- [x] File Lock隗｣髯､
+- [x] Changelist菴懈・
+- [x] Asset Diff
+- [x] Blueprint Diff
+- [x] Merge謾ｯ謠ｴ
+- [x] Multi-User Editing襍ｷ蜍・
+- [x] Multi-User Session謗･邯・
 ```
 
 ---

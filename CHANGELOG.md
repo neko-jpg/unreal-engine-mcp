@@ -4,6 +4,20 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch U: Source Control / Multi-User (13 tasks.md items, issue #60)
+
+Adds a Source Control handler class (route 32, `FEpicUnrealMCPSourceControlCommands`) covering all 13 Collaboration / Source Control items (Git + Perforce provider registration, Checkout / Checkin / Revert, file Lock acquire / release, changelist creation, Asset Diff + Blueprint Diff, Merge helper, Multi-User Editing start + Session join).
+
+### Notes
+
+- UE 5.7 modules: `SourceControl` (`ISourceControlOperation`, `ISourceControlModule`), `GitSourceControl` / `PerforceSourceControl` runtime + editor, `ConcertSyncClient` + `MultiUserClient` for the Concert / Multi-User toolkit. All asynchronous ops queue and finish without blocking the TCP bridge.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 697` (was 684; +13).
+- `python -m pytest Python/tests/unit/test_source_control_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **18 passed**.
+---
+
 ## [2026-05-23] - Sub-batch T: Mobile / XR (14 tasks.md items, issue #59)
 
 Adds a Mobile / XR handler class (route 38, `FEpicUnrealMCPMobileXrCommands`) covering all 14 Platform / Mobile / XR items (Android / iOS settings, Mobile Rendering, Touch Input, Device + Scalability profiles, XR plugin enable, OpenXR config, VR Pawn spawn, Motion Controller / HMD camera setup, AR Session + Plane Detection, Platform-specific Packaging).
