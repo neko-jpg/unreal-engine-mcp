@@ -53,6 +53,7 @@ def bootstrap():
     from server import niagara_tools              # noqa: F401  Sub-batch I
     from server import landscape_tools            # noqa: F401  Sub-batch J
     from server import anim_rigging_tools         # noqa: F401  Sub-batch K
+    from server import ai_nav_extension_tools     # noqa: F401  Sub-batch L
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

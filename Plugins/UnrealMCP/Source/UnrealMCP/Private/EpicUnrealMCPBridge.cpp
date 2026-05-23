@@ -80,6 +80,7 @@
 #include "Commands/EpicUnrealMCPNiagaraCommands.h"
 #include "Commands/EpicUnrealMCPLandscapeCommands.h"
 #include "Commands/EpicUnrealMCPAnimationRiggingCommands.h"
+#include "Commands/EpicUnrealMCPAiNavExtensionCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -342,6 +343,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);
     RegisterHandler<FEpicUnrealMCPLandscapeCommands>(25);         // Landscape / Terrain (Sub-batch J)         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
     RegisterHandler<FEpicUnrealMCPAnimationRiggingCommands>(35); // Animation / Skeletal / Rigging (Sub-batch K)
+    RegisterHandler<FEpicUnrealMCPAiNavExtensionCommands>(36);   // AI / Navigation extensions (Sub-batch L)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

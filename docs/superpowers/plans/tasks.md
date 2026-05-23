@@ -646,40 +646,40 @@ NavMeshVolume縺ｨ蟾｡蝗朶pline縺ｯ縺ゅｊ縺ｾ縺吶・
 - [x] NavMeshBoundsVolume菴懈・
 - [x] NavMesh Rebuild隕∵ｱ・
 - [x] Patrol Route Spline菴懈・
-- [~] AI Behavior繧ｿ繧ｰ險ｭ螳・
-- [~] CognitiveAIController荳驛ｨ縺ゅｊ
+- [x] AI Behavior繧ｿ繧ｰ險ｭ螳・
+- [x] CognitiveAIController荳驛ｨ縺ゅｊ
 - [x] Behavior Tree Asset菴懈・
-- [ ] Behavior Tree Node霑ｽ蜉
-- [ ] Behavior Tree Node謗･邯・
-- [ ] Task菴懈・
-- [ ] Service菴懈・
-- [ ] Decorator菴懈・
+- [x] Behavior Tree Node霑ｽ蜉
+- [x] Behavior Tree Node謗･邯・
+- [x] Task菴懈・
+- [x] Service菴懈・
+- [x] Decorator菴懈・
 - [x] Blackboard Asset菴懈・
 - [x] Blackboard Key霑ｽ蜉
 - [x] Blackboard Key蜑企勁
-- [ ] Blackboard蝙玖ｨｭ螳・
-- [ ] AIController縺ｫBehavior Tree險ｭ螳・
-- [ ] Run Behavior Tree Node逕滓・
+- [x] Blackboard蝙玖ｨｭ螳・
+- [x] AIController縺ｫBehavior Tree險ｭ螳・
+- [x] Run Behavior Tree Node逕滓・
 - [x] AI Perception Component霑ｽ蜉
 - [x] Sight Sense險ｭ螳・
-- [ ] Hearing Sense險ｭ螳・
-- [ ] Damage Sense險ｭ螳・
-- [ ] Team Sense險ｭ螳・
+- [x] Hearing Sense險ｭ螳・
+- [x] Damage Sense險ｭ螳・
+- [x] Team Sense險ｭ螳・
 - [x] EQS Query菴懈・
-- [ ] EQS Generator險ｭ螳・
-- [ ] EQS Test險ｭ螳・
-- [ ] EQS Debug
+- [x] EQS Generator險ｭ螳・
+- [x] EQS Test險ｭ螳・
+- [x] EQS Debug
 - [x] Nav Modifier Volume菴懈・
 - [x] Nav Link Proxy菴懈・
-- [ ] Smart Nav Link險ｭ螳・
-- [ ] Nav Area菴懈・
+- [x] Smart Nav Link險ｭ螳・
+- [x] Nav Area菴懈・
 - [x] Agent Radius / Height險ｭ螳・
-- [ ] Recast NavMesh隧ｳ邏ｰ險ｭ螳・
+- [x] Recast NavMesh隧ｳ邏ｰ險ｭ螳・
 - [x] Crowd Following險ｭ螳・
-- [ ] MassEntity騾｣謳ｺ
-- [ ] StateTree菴懈・
-- [ ] StateTree State霑ｽ蜉
-- [ ] StateTree Task霑ｽ蜉
+- [x] MassEntity騾｣謳ｺ
+- [x] StateTree菴懈・
+- [x] StateTree State霑ｽ蜉
+- [x] StateTree Task霑ｽ蜉
 ```
 
 ---
