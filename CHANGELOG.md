@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch R: Gameplay Ability System (16 tasks.md items, issue #55)
+
+Adds a GAS handler class (route 30, `FEpicUnrealMCPGASCommands`) covering all 16 GAS items (plugin enable, ASC attach, AttributeSet / GameplayAbility / GameplayEffect / GameplayCue asset creation, ability input bind, grant, activation policy, cooldown, cost, attribute init + change event, GameplayTag link, ASC replication mode, Prediction toggle).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 655` (was 639; +16).
+- `python -m pytest Python/tests/unit/test_gas_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **21 passed**.
+---
+
 ## [2026-05-23] - Sub-batch Q: Chaos / Physics extensions (19 tasks.md items, issue #51)
 
 Adds a Chaos handler class (route 29, `FEpicUnrealMCPChaosCommands`) covering 19 remaining Physics / Chaos items (Collision/Object/Trace channel CRUD, Geometry Collection asset + fracture, Chaos Field actor, Chaos Solver, Chaos Cache, Chaos Vehicle wheel/suspension/engine, Cloth + Chaos Cloth asset, Groom Physics, Ragdoll, PhysicsAsset body/constraint edit, Chaos Visual Debugger attach).

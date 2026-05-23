@@ -348,6 +348,24 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("edit_physics_asset_body"), 29},
         {TEXT("edit_physics_asset_constraint"), 29},
         {TEXT("attach_chaos_visual_debugger"), 29},
+        // ---- Gameplay Ability System (Sub-batch R, route 30, issue #55) ----
+        {TEXT("enable_gas_plugin"), 30},
+        {TEXT("add_ability_system_component"), 30},
+        {TEXT("create_attribute_set"), 30},
+        {TEXT("create_gameplay_ability"), 30},
+        {TEXT("create_gameplay_effect"), 30},
+        {TEXT("create_gameplay_cue"), 30},
+        {TEXT("bind_ability_input"), 30},
+        {TEXT("grant_ability"), 30},
+        {TEXT("configure_ability_activation"), 30},
+        {TEXT("configure_ability_cooldown"), 30},
+        {TEXT("configure_ability_cost"), 30},
+        {TEXT("initialize_attribute"), 30},
+        {TEXT("bind_attribute_change_event"), 30},
+        {TEXT("link_gameplay_tag"), 30},
+        {TEXT("configure_gas_replication"), 30},
+        {TEXT("configure_gas_prediction"), 30},
+
 
 
 

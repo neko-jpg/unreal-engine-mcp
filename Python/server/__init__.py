@@ -59,6 +59,7 @@ def bootstrap():
     from server import pcg_tools                    # noqa: F401  Sub-batch O
     from server import networking_tools             # noqa: F401  Sub-batch P
     from server import chaos_tools                  # noqa: F401  Sub-batch Q
+    from server import gas_tools                    # noqa: F401  Sub-batch R
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

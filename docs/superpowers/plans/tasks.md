@@ -938,22 +938,22 @@ Blueprint Graph縺ｧ`GetDataTableRow`縺ｮ繧医≧縺ｪ繝弱・繝峨・縺
 
 ```md
 ## Gameplay Ability System
-- [ ] GAS Plugin譛牙柑蛹・
-- [ ] Ability System Component霑ｽ蜉
-- [ ] Attribute Set菴懈・
-- [ ] Gameplay Ability菴懈・
-- [ ] Gameplay Effect菴懈・
-- [ ] Gameplay Cue菴懈・
-- [ ] Ability Input Binding
-- [ ] Ability Grant
-- [ ] Ability Activation險ｭ螳・
-- [ ] Cooldown險ｭ螳・
-- [ ] Cost險ｭ螳・
-- [ ] Attribute蛻晄悄蛹・
-- [ ] Attribute螟画峩Event
-- [ ] Gameplay Tag騾｣謳ｺ
-- [ ] Replication險ｭ螳・
-- [ ] Prediction險ｭ螳・
+- [x] GAS Plugin譛牙柑蛹・
+- [x] Ability System Component霑ｽ蜉
+- [x] Attribute Set菴懈・
+- [x] Gameplay Ability菴懈・
+- [x] Gameplay Effect菴懈・
+- [x] Gameplay Cue菴懈・
+- [x] Ability Input Binding
+- [x] Ability Grant
+- [x] Ability Activation險ｭ螳・
+- [x] Cooldown險ｭ螳・
+- [x] Cost險ｭ螳・
+- [x] Attribute蛻晄悄蛹・
+- [x] Attribute螟画峩Event
+- [x] Gameplay Tag騾｣謳ｺ
+- [x] Replication險ｭ螳・
+- [x] Prediction險ｭ螳・
 ```
 
 ---
