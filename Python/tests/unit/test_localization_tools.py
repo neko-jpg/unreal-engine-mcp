@@ -1,4 +1,4 @@
-"""L1 unit tests for localization_tools (auto-generated scaffold)."""
+﻿"""L1 unit tests for localization_tools (auto-generated scaffold)."""
 from unittest.mock import patch, MagicMock
 import server.localization_tools as m
 
@@ -43,11 +43,11 @@ def test_import_po_files_payload():
     assert a[0][0] == "import_po_files"
 
 
-def test_create_string_table_payload():
+def test_localization_create_string_table_payload():
     with patch("server.localization_tools.get_unreal_connection", return_value=_conn()) as ue:
-        m.create_string_table()
+        m.localization_create_string_table()
     a = ue.return_value.send_command.call_args
-    assert a[0][0] == "create_string_table"
+    assert a[0][0] == "localization_create_string_table"
 
 
 def test_edit_string_table_payload():

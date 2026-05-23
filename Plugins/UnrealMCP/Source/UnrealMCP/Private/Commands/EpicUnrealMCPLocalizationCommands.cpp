@@ -1,4 +1,4 @@
-#include "Commands/EpicUnrealMCPLocalizationCommands.h"
+﻿#include "Commands/EpicUnrealMCPLocalizationCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 
 #include "Modules/ModuleManager.h"
@@ -34,7 +34,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCommand(const 
         {TEXT("run_text_gather"),  &FEpicUnrealMCPLocalizationCommands::HandleRunTextGather},
         {TEXT("export_po_files"),  &FEpicUnrealMCPLocalizationCommands::HandleExportPoFiles},
         {TEXT("import_po_files"),  &FEpicUnrealMCPLocalizationCommands::HandleImportPoFiles},
-        {TEXT("create_string_table"),  &FEpicUnrealMCPLocalizationCommands::HandleCreateStringTable},
+        {TEXT("localization_create_string_table"),  &FEpicUnrealMCPLocalizationCommands::HandleCreateStringTable},
         {TEXT("edit_string_table"),  &FEpicUnrealMCPLocalizationCommands::HandleEditStringTable},
         {TEXT("localize_widget_text"),  &FEpicUnrealMCPLocalizationCommands::HandleLocalizeWidgetText},
         {TEXT("localize_dialogue_wave"),  &FEpicUnrealMCPLocalizationCommands::HandleLocalizeDialogueWave},
@@ -122,9 +122,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleImportPoFiles(
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCreateStringTable(const TSharedPtr<FJsonObject>& Params)
 {
-    if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_string_table"));
+    if (!IsModuleAvailable()) return MakeUnavailable(TEXT("localization_create_string_table"));
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-    Data->SetStringField(TEXT("command"), TEXT("create_string_table"));
+    Data->SetStringField(TEXT("command"), TEXT("localization_create_string_table"));
     if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
     Data->SetBoolField(TEXT("queued"), true);
     Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; commandlet runs asynchronously."));

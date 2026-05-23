@@ -416,7 +416,7 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("run_text_gather"), 33},
         {TEXT("export_po_files"), 33},
         {TEXT("import_po_files"), 33},
-        {TEXT("create_string_table"), 33},
+        {TEXT("localization_create_string_table"), 33},
         {TEXT("edit_string_table"), 33},
         {TEXT("localize_widget_text"), 33},
         {TEXT("localize_dialogue_wave"), 33},

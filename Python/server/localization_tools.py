@@ -1,4 +1,4 @@
-"""Localization (Sub-batch V, issue #58) MCP tools (auto-generated scaffold).
+﻿"""Localization (Sub-batch V, issue #58) MCP tools (auto-generated scaffold).
 
 Each tool wraps a single C++ handler. The C++ side returns a queued
 envelope when the underlying plugin is missing; the wrappers surface that
@@ -112,7 +112,7 @@ def import_po_files(po_directory: str, target_name: str = "Game") -> Dict[str, A
 
 
 @mcp.tool()
-def create_string_table(asset_path: str = "/Game/Localization", asset_name: str = "ST_New") -> Dict[str, Any]:
+def localization_create_string_table(asset_path: str = "/Game/Localization", asset_name: str = "ST_New") -> Dict[str, Any]:
     """create_string_table -- queued (see C++ handler for runtime depth)."""
     try:
         pass
@@ -122,10 +122,10 @@ def create_string_table(asset_path: str = "/Game/Localization", asset_name: str 
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("create_string_table", {"asset_path": asset_path, "asset_name": asset_name})
+        r = u.send_command("localization_create_string_table", {"asset_path": asset_path, "asset_name": asset_name})
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_string_table': {e}")
-    return _envelope("create_string_table", r)
+    return _envelope("localization_create_string_table", r)
 
 
 @mcp.tool()

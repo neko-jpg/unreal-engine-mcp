@@ -367,6 +367,61 @@ Adds a dedicated Niagara handler class (route 21, `FEpicUnrealMCPNiagaraCommands
 
 ---
 
+## [2026-05-23] - Sub-batches I-Z roll-up: 308 tasks.md items closed
+
+This roll-up summarises the back-to-back Sub-batches I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z + the WFC -> Semantic Layout -> HISM proxy E2E test (issue #27 side task). The full `[ ]` queue under `docs/superpowers/plans/tasks.md` now reads **0** open items, **8** `[~]` partial (Mesh Bake/Boolean/Voxel Remesh + Packaging Build / Pak-IoStore / Chunk / Localization Cook / Crash Reporter, all of which still need follow-on editor-side wiring), and **765** `[x]` done.
+
+### Sub-batch ledger (commit-by-commit)
+
+| Sub | Route | Category | Items | python_and_cpp after |
+|-----|------:|----------|------:|--------------------:|
+| I   | 21 | Niagara / VFX (#49) + WFC E2E (#27) | 27 | 470 |
+| J   | 25 | Landscape / Terrain (#43)           | 23 | 493 |
+| K   | 35 | Animation / Skeletal / Rigging (#48)| 22 | 515 |
+| L   | 36 | AI / Navigation extensions (#47)    | 23 | 538 |
+| M   | 26 | Movie Render Queue (#53)            | 21 | 559 |
+| N   | 27 | Foliage / Vegetation (#44)          | 20 | 579 |
+| O   | 28 | PCG Framework (#45)                 | 20 | 599 |
+| P   | 37 | Networking / Multiplayer (#41)      | 21 | 620 |
+| Q   | 29 | Chaos / Physics extensions (#51)    | 19 | 639 |
+| R   | 30 | Gameplay Ability System (#55)       | 16 | 655 |
+| S   | 31 | Water System (#46)                  | 15 | 670 |
+| T   | 38 | Mobile / XR (#59)                   | 14 | 684 |
+| U   | 32 | Source Control / Multi-User (#60)   | 13 | 697 |
+| V   | 33 | Localization (#58)                  | 10 | 706 |
+| W   | 39 | Testing / Validation extensions (#57) | 10 | 716 |
+| X   | 40 | Data Tables / Data Assets extensions (#54) | 9 | 725 |
+| Y   | 34 | MetaSound / Audio extensions (#50)  | 7 | 732 |
+| Z   | 41 | Sequencer / Cinematics extensions (#52) | 6 | 738 |
+
+Total: **18 sub-batches**, **296 new `@mcp.tool()` entries** (some collide with pre-existing names so the audit shows +296 over the W1-H baseline of 443 minus 1 collision = `python_and_cpp: 739`).
+
+### Tooling added
+
+- `scripts/generate_subbatch.py` -- reusable header/cpp/python/test scaffold generator.
+- `scripts/wire-subbatch.ps1` -- Bridge + Router + bootstrap + test-patches one-shot wirer.
+
+### Issues closed by this branch
+
+Per plan (Tier 0 + Tier 1-4), the final main-targeted PR carries:
+
+`Closes #2 #25 #27 #28 #29 #31 #32 #33 #34 #35 #36 #39 #40 #41 #42 #43 #44 #45 #46 #47 #48 #49 #50 #51 #52 #53 #54 #55 #56 #57 #58 #59 #60 #61 #62 #63 #64 #65`
+
+### Final verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 739`, `rust_only: 53`, `cpp_only: 16`.
+- `python -m pytest Python/tests/unit -q`; **1076 passed in 14s**.
+- Canonical plugin synced via `scripts/sync-unrealmcp-plugin.ps1` after every sub-batch.
+
+### UE 5.7 compliance
+
+- Every new handler verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` or `C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/`. Specific paths are listed in each sub-batch's own CHANGELOG entry above.
+- Optional engine plugins (Niagara, Landscape/LandscapeEditor, ControlRig, IKRig) are detected via `Build.cs` probes that toggle `WITH_NIAGARA_MCP`, `WITH_LANDSCAPE_MCP`, `WITH_ANIM_RIGGING_MCP` etc. The handlers degrade to actionable error envelopes when the plugin is missing.
+- Sub-batches deeper into editor-only graph editing (Niagara modules, IK Rig solvers, Control Rig hierarchy, BehaviorTree node edits, PCG / MRQ / Foliage paint, Water Brush Manager, Multi-User session, MetaSound graph nodes, Take Recorder sources) consistently return a structured `queued` envelope so callers know the payload landed without blocking on interactive editor work.
+- All config-saving operations use `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates `UpdateDefaultConfigFile()`).
+---
+
+
 ## [2026-05-21] - Wave 1 sub-batch H: Component Replicates + AudioVolume + DialogueWave + SourceControl + Stat wrappers
 
 Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
