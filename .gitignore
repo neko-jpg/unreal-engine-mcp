@@ -125,7 +125,7 @@ FlopperamUnrealMCP/Source/MyWorldSubsystem.*
 FlopperamUnrealMCP/Source/TestGameModeCPP.*
 
 # Clang
-# .clang-format tracked in repo (remove from personal ignore)
+.clang-format
 .clangd
 
 # Agent instructions used by Codex, Jules, and other coding agents.
@@ -149,6 +149,7 @@ editor_output.txt
 history.txt
 output.txt
 screenshots/
+.antigravity/
 
 # Downloaded installers
 dotnet-install.ps1
@@ -178,9 +179,3 @@ FlopperamUnrealMCP/Plugins/
 
 # Generated test/report artifacts
 artifacts/
-
-# Local mise tools directory (not the config)
-.mise/
-
-# Starship prompt config (personal preference)
-starship.toml

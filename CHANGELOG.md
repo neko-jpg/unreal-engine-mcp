@@ -1,4 +1,17 @@
-﻿# Changelog
+﻿## [2026-05-23] - PR #104 scope tightening — keep Wave 0/1 only, drop unrelated CI tooling
+
+The PR initially bundled the Wave 0/1 work with 14+ brand-new CI workflows and lint configs (markdownlint, yamllint, vale, lychee, REUSE, actionlint, codeql, cargo-audit, pip-audit, gitleaks, codegen-check, release-please, pre-commit-autoupdate, semver-checks, stale, nextest, pyright) that the existing repo could not satisfy and that blocked all CI checks. To make the PR mergeable, those workflows and their paired configs (`.clang-format`, `.clang-tidy`, `.markdownlint.json`, `.yamllint`, `.vale.ini`, `.gitleaks.toml`, `.reuse/dep5`, `.pre-commit-config.yaml`, `.mise.toml`, `.editorconfig`, `.envrc`, `.dockerignore`, `Justfile`, `Dockerfile`, `docker-compose.yml`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/codecov.yml`, `.github/dependabot.yml`, `.github/styles/`) are removed from this branch. They can land later as a dedicated CI-hardening PR once the codebase is prepared (ruff/format/header/etc. clean-up).
+
+The actual deliverables stay intact:
+
+- Wave 0 foundation (`EpicUnrealMCPCommonUtils.*`, `EpicUnrealMCPBridge.cpp`, `UnrealMCP.Build.cs` optional-module gates, `Python/utils/envelope.py`, envelope helper + `live_e2e_smoke` grouping tests, `Python/tools/generate_codegen.py`, `.github/workflows/ue57-build.yml`, `.github/workflows/python-tests.yml`).
+- Wave 1 Material + Niagara real implementations (issues #81 / #82) and `test_wave1_executed_envelope.py`.
+- Housekeeping: removal of stale plans / verification scripts / the `scenectl` CLI (and its now-orphan unit test) / large untracked artifacts.
+- Existing workflows (`python-checks`, `rust-checks`, `cargo-deny`, `mypy-check`, `route-contract-audit`) are restored to the `main` baseline -- the extra ruff/bandit/codecov/clippy-D-warnings strictness introduced by the PR was reverted because it surfaces hundreds of pre-existing diagnostics outside this PR's scope.
+- Fixed `SyntaxWarning: invalid escape sequence '\l'` in `scripts/live_e2e_smoke.py` docstring by switching the example commands to forward slashes.
+
+---
+# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
 

@@ -9,8 +9,8 @@ Each case is independent; failures are reported but do not stop the run.
 Output is human-readable + a JSON report written to artifacts/live_e2e_<utc>.json.
 
 Usage:
-    python scripts\live_e2e_smoke.py
-    python scripts\live_e2e_smoke.py --case ping spawn_actor
+    python scripts/live_e2e_smoke.py
+    python scripts/live_e2e_smoke.py --case ping spawn_actor
 """
 from __future__ import annotations
 
