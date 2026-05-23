@@ -1,4 +1,4 @@
-﻿#include "Commands/EpicUnrealMCPRouter.h"
+#include "Commands/EpicUnrealMCPRouter.h"
 
 int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
 {
@@ -457,6 +457,13 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("register_take_recorder_source"), 41},
         {TEXT("add_control_rig_track"), 41},
         {TEXT("spawn_level_sequence_actor"), 41},
+
+        // ---- Packaging / Build / Deployment extensions (Sub-batch AA, route 42, issue #56) ----
+        {TEXT("set_live_coding_mode"),           42},
+        {TEXT("set_pak_iostore_settings"),       42},
+        {TEXT("set_chunk_settings"),             42},
+        {TEXT("set_localization_cook_settings"), 42},
+        {TEXT("set_crash_reporter_settings"),    42},
 
 
 

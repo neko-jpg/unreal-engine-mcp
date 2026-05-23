@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unreal Engine Advanced MCP Server
 
 A streamlined MCP server focused on advanced composition tools for Unreal Engine.
@@ -68,6 +68,7 @@ def bootstrap():
     from server import data_table_extension_tools   # noqa: F401  Sub-batch X
     from server import metasound_tools              # noqa: F401  Sub-batch Y
     from server import sequencer_extension_tools    # noqa: F401  Sub-batch Z
+    from server import packaging_extension_tools   # noqa: F401  Sub-batch AA
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 
