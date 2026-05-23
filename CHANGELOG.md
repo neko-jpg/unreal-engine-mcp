@@ -1,33 +1,78 @@
-# Changelog
+﻿# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
 
 ---
 
+## [2026-05-23] - 234-stubs Wave 0 (M5) foundation — issues #70 #71 #72 #73 #74 #75 #76 #77
+
+Lands the entire Wave-0 foundation for the 234-stub → UE 5.7 full-implementation effort tracked by issue #69. Wave 1+ implementation PRs depend on this branch shipping first.
+
+### Added / Changed
+
+- `docs/implementation-plan-234-stubs.md` (new) — pinned plan document referenced by every wave / category issue. Lists per-handler DoD, per-wave DoD, reference implementation skeleton, and the 234 vs 275 reconciliation. (#76)
+- `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPCommonUtils.h` + `EpicUnrealMCPCommonUtils.cpp` — adds:
+  - `TryUpdateDefaultConfigFileSafe(UObject*, FString*)` — only sanctioned UE 5.7 ini persistence path; downgrades failures to structured warnings.
+  - `MakeExecutedEnvelope(Payload)` — canonical `{ success:true, data:{ executed:true, … } }` shape Wave 1+ handlers must return.
+  - `ResponseIsExecuted()` / `MakeQueuedRegressionError()` — router-side contract helpers (#77).
+  - `FMCPScopedTransaction` — RAII wrapper around `FScopedTransaction` so command handlers can write a one-liner at the top of any mutating block. Compiles to no-op outside the editor. (#71)
+- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` — replaced inline Cesium / Niagara / Landscape / ControlRig probes with a single `AddOptionalModuleGates(Target)` machinery plus `AddIssue70PerModuleGates(Target)`. The latter performs exact per-module `*.Build.cs` probes and emits `WITH_<MODULE>_MCP=1/0` defines + conditional dependency injection for every module named by issue #70, including the less obvious Wave 2–5 dependencies (`ClusterUnion`, `PCGGeometryScriptInterop`, `MoviePipelineMaskRenderPass`, `MovieGraphCore`, `NetCore`, `ReplicationGraph`, `VoiceChat`, `LocalizationService`, `MetasoundGenerator`, `XRBase`, `OpenXRInput`, `AutomationTest`, `MassEntity`, `BehaviorTreeEditor`, `SequencerCore`, `LandscapeEditMode`, etc.). Backwards-compatible: keeps emitting `WITH_CESIUM` and `WITH_LIVE_CODING` for existing code paths. (#70)
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` — `ExecuteCommand` now audits every `success=true` response and flags handlers that returned without `executed=true`. Warn-only by default; set `UNREALMCP_ENFORCE_EXECUTED=1` to convert violations into MCP-422 errors so CI can hard-fail. (#77)
+- `Python/utils/envelope.py` (new) + `Python/utils/__init__.py` — `assert_executed`, `assert_no_queued`, `assert_error`, `is_executed_envelope`, `is_queued_envelope`, `EnvelopeAssertionError`. Single import for Wave 1+ unit tests. (#72)
+- `Python/tests/unit/test_envelope_helpers.py` (new) — 13 unit tests covering happy / queued-only / legacy-flat / status-success alias / hint propagation / predicate behaviours.
+- `scripts/live_e2e_smoke.py` — adds `WAVE_GROUPS` table + `wave_for()` / `list_groups()` helpers and new CLI flags: `--group`, `--only`, `--skip`, `--list-groups`. The pre-existing `--case` flag continues to work. Wave 1+ live cases register themselves by extending `WAVE_GROUPS`. (#75)
+- `Python/tests/unit/test_live_e2e_smoke_grouping.py` (new) — 4 unit tests that lock the grouping schema and reject typos (every `WAVE_GROUPS` entry must reference an existing case).
+- `.github/workflows/ue57-build.yml` (new) — static audit job (probe pattern lint + `UpdateDefaultConfigFile` regression grep + queued-success informational grep) plus a self-hosted `runs-on: [self-hosted, ue5.7, Win64]` `RunUAT BuildPlugin` job gated on the `ue5.7-build` label. (#73)
+- `.github/workflows/python-tests.yml` (new) — explicit unit + contract + e2e (skip-unreal) matrix that also exercises `scripts/live_e2e_smoke.py --list-groups` to keep the new helpers honest. Coexists with the older `python-checks.yml`. (#74)
+
+### Tests
+
+- 17/17 new unit tests pass locally (`pytest Python/tests/unit/test_envelope_helpers.py Python/tests/unit/test_live_e2e_smoke_grouping.py`).
+- Full local sweep: `pytest Python/tests/unit Python/tests/contract -q` — 1152 passed in ~18s.
+- `python scripts/live_e2e_smoke.py --list-groups` returns a well-formed grouping table.
+
+### AGENTS.md compliance
+
+- All UE 5.7 API references confirmed via `web_search` prior to implementation (`TryUpdateDefaultConfigFile`, `FScopedTransaction`, optional-plugin probe pattern using `IPluginManager` / .uplugin path detection).
+- Zero new `UpdateDefaultConfigFile()` call sites (only `TryUpdateDefaultConfigFileSafe`).
+- Build.cs uses header / .uplugin probes only — no LLM-guessed module names. Every gate emits `WITH_<KEY>_MCP=0` when the probe fails so Wave 1+ `#if WITH_<KEY>_MCP` blocks remain compilable on minimal installs.
+
+### Closes
+
+- #70 DEP: Expand UnrealMCP.Build.cs with all optional module gates
+- #71 Utils: TryUpdateDefaultConfigFileSafe + RAII scoped transaction
+- #72 Python: assert_executed envelope helper
+- #73 CI: ue57-build.yml workflow
+- #74 CI: python-tests.yml expansion
+- #75 live_e2e_smoke.py grouping + filters
+- #76 Docs: docs/implementation-plan-234-stubs.md
+- #77 Router: executed-or-error contract enforcement (warn-mode default; strict mode opt-in via `UNREALMCP_ENFORCE_EXECUTED=1`)
+
+---
 ## [2026-05-23] - Sub-batch AA: Packaging / Build / Deployment extensions (5 tasks.md items, issue #56)
 
 Adds a Packaging extensions handler class (route 42, FEpicUnrealMCPPackagingExtensionCommands) covering the remaining 5 `[~]` items in the `Packaging / Build / Deployment` section of `docs/superpowers/plans/tasks.md`:
 
-- `set_live_coding_mode` — wraps `ILiveCodingModule::EnableForSession()` / `Compile()` (Editor + Windows only, gated by `WITH_LIVE_CODING` + `PLATFORM_WINDOWS`).  Non-Windows / non-Editor builds return `{"available": false}` so callers can branch on it without erroring out.
-- `set_pak_iostore_settings` — mutates `UProjectPackagingSettings` `bUsePakFile` / `bUseIoStore` / `bCompressed` / `bGenerateNoChunks` and persists via `TryUpdateDefaultConfigFile()`.
-- `set_chunk_settings` — flips `bGenerateChunks` / `bChunkHardReferencesOnly` and echoes the `has_chunk_assignment_rules` intent back to the caller with a hint pointing at `UAssetManager` PrimaryAssetType rules.
-- `set_localization_cook_settings` — updates `CulturesToStage` / `bCookAll` / `LocalizationTargetsToChunk` on `UProjectPackagingSettings` (empty list clears, `None` leaves the field untouched).
-- `set_crash_reporter_settings` — UE 5.7 ships no UCLASS for client-side crash settings, so the handler writes `CrashReportClientEmail` / `bSendUnattendedBugReports` / `bSendUsageData` under `[CrashReportClient]` in `Config/DefaultEngine.ini` through `GConfig` and flushes the file so changes survive editor restarts.
+- `set_live_coding_mode` 窶・wraps `ILiveCodingModule::EnableForSession()` / `Compile()` (Editor + Windows only, gated by `WITH_LIVE_CODING` + `PLATFORM_WINDOWS`).  Non-Windows / non-Editor builds return `{"available": false}` so callers can branch on it without erroring out.
+- `set_pak_iostore_settings` 窶・mutates `UProjectPackagingSettings` `bUsePakFile` / `bUseIoStore` / `bCompressed` / `bGenerateNoChunks` and persists via `TryUpdateDefaultConfigFile()`.
+- `set_chunk_settings` 窶・flips `bGenerateChunks` / `bChunkHardReferencesOnly` and echoes the `has_chunk_assignment_rules` intent back to the caller with a hint pointing at `UAssetManager` PrimaryAssetType rules.
+- `set_localization_cook_settings` 窶・updates `CulturesToStage` / `bCookAll` / `LocalizationTargetsToChunk` on `UProjectPackagingSettings` (empty list clears, `None` leaves the field untouched).
+- `set_crash_reporter_settings` 窶・UE 5.7 ships no UCLASS for client-side crash settings, so the handler writes `CrashReportClientEmail` / `bSendUnattendedBugReports` / `bSendUsageData` under `[CrashReportClient]` in `Config/DefaultEngine.ini` through `GConfig` and flushes the file so changes survive editor restarts.
 
 All UObject-backed settings paths use `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates `UpdateDefaultConfigFile()`).  The handler does not invoke the deprecated entry point anywhere.
 
 ### Added / Changed
 
-- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPPackagingExtensionCommands.{h,cpp}` — new handler class.
-- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` — `#include` + `RegisterHandler<FEpicUnrealMCPPackagingExtensionCommands>(42);`.
-- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPRouter.cpp` — 5 new `{TEXT(...), 42}` entries.
-- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` — adds `DeveloperToolSettings` to `PrivateDependencyModuleNames` and a Cesium-style probe for `LiveCoding` that toggles `WITH_LIVE_CODING=0/1` (Editor + Win64 only).
-- `Python/server/packaging_extension_tools.py` (new) — 5 `@mcp.tool()` wrappers (1:1 with command names) that drop `None` fields from the payload so the C++ side can detect `unspecified` vs `set to false / empty list`.
-- `Python/server/__init__.py` — bootstrap import for the new tool module.
-- `Python/tests/unit/test_packaging_extension_tools.py` (new) — 15 L1 unit tests covering payload shape, `None` dropping, empty-list semantics, `available=False` envelope passthrough, and the three error paths (no connection / send exception / Unreal `success=False`).
-- `Python/tests/unit/test_tool_registration_and_mapping.py` — adds `packaging_extension_tools` to the import + patch lists so the cross-module registration test continues to cover every sub-batch.
-- `docs/superpowers/plans/tasks.md` — flipped the 5 `[~]` Packaging items to `[x]` (Sub-batch AA).
-- Companion documentation fix: the same task list flipped 3 `[~]` Static Mesh / Mesh Editing items (Mesh Bake, Boolean, Voxel Remesh) to `[x]` because those commands are already wired through `EpicUnrealMCPMeshEditingCommands` + `mesh_editing_tools.py` + router id 8 — the task list was simply out of date.  See issue #39 closure note.
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPPackagingExtensionCommands.{h,cpp}` 窶・new handler class.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` 窶・`#include` + `RegisterHandler<FEpicUnrealMCPPackagingExtensionCommands>(42);`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPRouter.cpp` 窶・5 new `{TEXT(...), 42}` entries.
+- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` 窶・adds `DeveloperToolSettings` to `PrivateDependencyModuleNames` and a Cesium-style probe for `LiveCoding` that toggles `WITH_LIVE_CODING=0/1` (Editor + Win64 only).
+- `Python/server/packaging_extension_tools.py` (new) 窶・5 `@mcp.tool()` wrappers (1:1 with command names) that drop `None` fields from the payload so the C++ side can detect `unspecified` vs `set to false / empty list`.
+- `Python/server/__init__.py` 窶・bootstrap import for the new tool module.
+- `Python/tests/unit/test_packaging_extension_tools.py` (new) 窶・15 L1 unit tests covering payload shape, `None` dropping, empty-list semantics, `available=False` envelope passthrough, and the three error paths (no connection / send exception / Unreal `success=False`).
+- `Python/tests/unit/test_tool_registration_and_mapping.py` 窶・adds `packaging_extension_tools` to the import + patch lists so the cross-module registration test continues to cover every sub-batch.
+- `docs/superpowers/plans/tasks.md` 窶・flipped the 5 `[~]` Packaging items to `[x]` (Sub-batch AA).
+- Companion documentation fix: the same task list flipped 3 `[~]` Static Mesh / Mesh Editing items (Mesh Bake, Boolean, Voxel Remesh) to `[x]` because those commands are already wired through `EpicUnrealMCPMeshEditingCommands` + `mesh_editing_tools.py` + router id 8 窶・the task list was simply out of date.  See issue #39 closure note.
 
 ### Verification
 
@@ -170,7 +215,7 @@ Adds a PCG handler class (route 28, `FEpicUnrealMCPPCGCommands`) covering all 19
 
 ### Changed
 
-- Adds `EpicUnrealMCPPCGCommands` cpp+h, router id 28, bridge registration, `pcg_tools.py` + unit test, bootstrap + test patches, 20 task flips, `[~]` -> `[x]` for "独自Procedural生成あり".
+- Adds `EpicUnrealMCPPCGCommands` cpp+h, router id 28, bridge registration, `pcg_tools.py` + unit test, bootstrap + test patches, 20 task flips, `[~]` -> `[x]` for "迢ｬ閾ｪProcedural逕滓・縺ゅｊ".
 
 ### Verification
 
@@ -544,7 +589,7 @@ Total this branch: **63 items implemented + 13 router fixes** across
 
 Implements 5 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
 covering animation editing primitives and AI module extensions that round out
-the remaining `[ ]` items in ﾂｧ18 (AI) and ﾂｧ19 (Animation).
+the remaining `[ ]` items in ・ゑｽｧ18 (AI) and ・ゑｽｧ19 (Animation).
 
 ### Added
 
@@ -1371,3 +1416,5 @@ The following improvements are identified but not yet implemented:
 - **Blueprint compile results**: `set_node_property`, `connect_nodes`, etc. do not return compile status.
 - **C++ command registry / `list_capabilities`**: No dynamic capability query or version negotiation.
 - **Pydantic input models**: Tools use raw `Dict[str, Any]` instead of typed models.
+
+

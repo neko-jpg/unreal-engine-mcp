@@ -1,4 +1,4 @@
-#include "EpicUnrealMCPBridge.h"
+﻿#include "EpicUnrealMCPBridge.h"
 #include "MCPServerRunnable.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
@@ -607,6 +607,46 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 
             TSharedPtr<FJsonObject> ResultJson = (*Handler)(CommandType, Params);
 
+            // 234-stubs Wave 0 (#77): executed-or-error contract.
+            //
+            // Any handler that returns success=true MUST also set
+            // data.executed=true (the canonical 234-stubs shape) -- the legacy
+            // "queued: true" pattern is treated as a soft regression here.
+            //
+            // Default behaviour: warn-only (we log a structured warning) so
+            // existing handlers keep working until they are migrated.
+            // Strict mode: set UNREALMCP_ENFORCE_EXECUTED=1 in the env, and the
+            // bridge converts the offending response into an MCP-422 error so
+            // tests / CI can hard-fail on regressions.
+            //
+            // The full migration path is tracked in
+            // docs/implementation-plan-234-stubs.md sec. 11.
+            if (ResultJson.IsValid())
+            {
+                bool bRespSuccess = false;
+                if (ResultJson->TryGetBoolField(TEXT("success"), bRespSuccess) && bRespSuccess)
+                {
+                    const bool bExecuted = FEpicUnrealMCPCommonUtils::ResponseIsExecuted(ResultJson);
+                    if (!bExecuted)
+                    {
+                        static const bool bEnforce = FPlatformMisc::GetEnvironmentVariable(TEXT("UNREALMCP_ENFORCE_EXECUTED")).Equals(TEXT("1"));
+                        if (bEnforce)
+                        {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("UnrealMCP[#77]: enforced executed-or-error on '%s'; converting to MCP-422."),
+                                *CommandType);
+                            ResultJson = FEpicUnrealMCPCommonUtils::MakeQueuedRegressionError(CommandType, ResultJson);
+                        }
+                        else
+                        {
+                            UE_LOG(LogTemp, Verbose,
+                                TEXT("UnrealMCP[#77]: handler '%s' returned success without executed=true; set UNREALMCP_ENFORCE_EXECUTED=1 to hard-fail in CI."),
+                                *CommandType);
+                        }
+                    }
+                }
+            }
+
             bool bSuccess = true;
             FString ErrorMessage;
 
@@ -693,3 +733,4 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 
     return Future.Get();
 }
+

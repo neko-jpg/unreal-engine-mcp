@@ -1,4 +1,5 @@
 #include "Commands/EpicUnrealMCPCommonUtils.h"
+#include "ScopedTransaction.h"
 #include "EngineUtils.h"
 #include "EpicUnrealMCPBridge.h"
 #include "Editor.h"
@@ -1215,4 +1216,129 @@ AActor* FEpicUnrealMCPCommonUtils::FindActorByMcpIdTag(UWorld* World, const FStr
         }
     }
     return nullptr;
+}
+
+
+// ============================================================================
+// ---- 234-stubs Wave 0 (#71): TryUpdateDefaultConfigFileSafe + envelopes ----
+// Source-of-truth issue: neko-jpg/unreal-engine-mcp#71
+// Spec: docs/implementation-plan-234-stubs.md sec. 11.
+//
+// UE 5.7 deprecates UObject::UpdateDefaultConfigFile().  The only sanctioned
+// editor-side persistence path is UObject::TryUpdateDefaultConfigFile(), which
+// returns a bool indicating whether the write succeeded.  We wrap that here
+// so every command handler can call a single utility and never deal with the
+// underlying nullptr / read-only / commandlet edge cases by hand.
+// ============================================================================
+
+bool FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(UObject* Object, FString* OutHint)
+{
+    if (!IsValid(Object))
+    {
+        if (OutHint) { *OutHint = TEXT("TryUpdateDefaultConfigFileSafe: object is null"); }
+        return false;
+    }
+#if WITH_EDITOR
+    const bool bSaved = Object->TryUpdateDefaultConfigFile();
+    if (!bSaved && OutHint)
+    {
+        *OutHint = FString::Printf(
+            TEXT("TryUpdateDefaultConfigFileSafe: failed to persist '%s' to Default*.ini"),
+            *Object->GetPathName());
+    }
+    return bSaved;
+#else
+    if (OutHint)
+    {
+        *OutHint = TEXT("TryUpdateDefaultConfigFileSafe: non-editor target, ini write skipped");
+    }
+    return false;
+#endif
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::MakeExecutedEnvelope(const TSharedPtr<FJsonObject>& Payload)
+{
+    TSharedPtr<FJsonObject> Data = Payload.IsValid() ? Payload : MakeShared<FJsonObject>();
+    Data->SetBoolField(TEXT("executed"), true);
+
+    TSharedPtr<FJsonObject> Envelope = MakeShared<FJsonObject>();
+    Envelope->SetBoolField(TEXT("success"), true);
+    Envelope->SetObjectField(TEXT("data"), Data);
+    return Envelope;
+}
+
+bool FEpicUnrealMCPCommonUtils::ResponseIsExecuted(const TSharedPtr<FJsonObject>& Response)
+{
+    if (!Response.IsValid()) { return false; }
+    bool bSuccess = false;
+    if (!Response->TryGetBoolField(TEXT("success"), bSuccess) || !bSuccess) { return false; }
+
+    const TSharedPtr<FJsonObject>* Data = nullptr;
+    if (!Response->TryGetObjectField(TEXT("data"), Data) || !Data || !(*Data).IsValid())
+    {
+        return false;
+    }
+    bool bExecuted = false;
+    if (!(*Data)->TryGetBoolField(TEXT("executed"), bExecuted)) { return false; }
+    if (bExecuted) { return true; }
+
+    // The legacy "queued: true" pattern explicitly fails the contract.
+    bool bQueued = false;
+    if ((*Data)->TryGetBoolField(TEXT("queued"), bQueued) && bQueued) { return false; }
+    return false;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::MakeQueuedRegressionError(
+    const FString& CommandType,
+    const TSharedPtr<FJsonObject>& OffendingResponse)
+{
+    TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+    Err->SetBoolField(TEXT("success"), false);
+    Err->SetStringField(TEXT("error"), FString::Printf(
+        TEXT("Command '%s' returned success without executed=true; this violates the executed-or-error contract enforced by the router (issue #77)."),
+        *CommandType));
+    Err->SetStringField(TEXT("code"), TEXT("MCP-422"));
+    if (OffendingResponse.IsValid())
+    {
+        Err->SetObjectField(TEXT("offending"), OffendingResponse);
+    }
+    Err->SetStringField(TEXT("hint"),
+        TEXT("Replace any queued/asset-dirtied path with a real engine mutation, then return FEpicUnrealMCPCommonUtils::MakeExecutedEnvelope(Data)."));
+    return Err;
+}
+
+// ============================================================================
+// ---- 234-stubs Wave 0 (#71): FMCPScopedTransaction implementation       ----
+// ============================================================================
+
+FMCPScopedTransaction::FMCPScopedTransaction(const FString& Context)
+{
+#if WITH_EDITOR
+    Inner = new FScopedTransaction(FText::FromString(Context));
+#else
+    (void)Context;
+#endif
+}
+
+FMCPScopedTransaction::~FMCPScopedTransaction()
+{
+#if WITH_EDITOR
+    if (Inner)
+    {
+        delete Inner;
+        Inner = nullptr;
+    }
+#endif
+}
+
+void FMCPScopedTransaction::Cancel()
+{
+#if WITH_EDITOR
+    if (Inner)
+    {
+        Inner->Cancel();
+        delete Inner;
+        Inner = nullptr;
+    }
+#endif
 }
