@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch P: Networking / Multiplayer (21 tasks.md items, issue #41)
+
+Adds a Networking handler class (route 37, `FEpicUnrealMCPNetworkingCommands`) covering the remaining 19 `[ ]` + 2 `[~]` Networking items (RPC Server / Client / Multicast funcs, Reliable / Unreliable toggle, RepNotify generation, Replicated variable enumeration, NetworkPrediction config, Dedicated / Listen server start, Client connect, Multi-PIE, OnlineSubsystem swap, Session create / find / join, Iris / Replication Graph config, Bandwidth + Network Profiler attach, generic NetworkComponent factory, Blueprint variable replication setter).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 620` (was 599; +21).
+- `python -m pytest Python/tests/unit/test_networking_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **26 passed**.
+---
+
 ## [2026-05-23] - Sub-batch O: PCG Framework (20 tasks.md items, issue #45)
 
 Adds a PCG handler class (route 28, `FEpicUnrealMCPPCGCommands`) covering all 19 `[ ]` + 1 `[~]` PCG Framework items (PCG Graph + Component + Volume, Node CRUD + connect, Parameters, Spline/Surface samplers, StaticMesh spawner, Rule, Biome Graph, Point Data + Attribute ops, Graph execute/regenerate, Runtime Generation, Editor Mode, Tool, Debug display, Self-Pruning). PCG ships under Engine/Plugins/Experimental/PCG in UE 5.7 -- handlers accept the desired-state payload and queue interactive editor steps.

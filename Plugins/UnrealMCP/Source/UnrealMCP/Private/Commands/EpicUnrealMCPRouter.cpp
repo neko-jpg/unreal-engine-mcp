@@ -306,6 +306,29 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_pcg_tool"), 28},
         {TEXT("set_pcg_debug_display"), 28},
         {TEXT("configure_pcg_self_pruning"), 28},
+        // ---- Networking / Multiplayer (Sub-batch P, route 37, issue #41) ----
+        {TEXT("create_rpc_server_function"), 37},
+        {TEXT("create_rpc_client_function"), 37},
+        {TEXT("create_rpc_multicast_function"), 37},
+        {TEXT("set_rpc_reliability"), 37},
+        {TEXT("set_rep_notify"), 37},
+        {TEXT("list_replicated_variables"), 37},
+        {TEXT("set_network_prediction"), 37},
+        {TEXT("configure_dedicated_server"), 37},
+        {TEXT("start_listen_server"), 37},
+        {TEXT("start_client"), 37},
+        {TEXT("configure_multi_pie"), 37},
+        {TEXT("set_online_subsystem"), 37},
+        {TEXT("create_session"), 37},
+        {TEXT("find_sessions"), 37},
+        {TEXT("join_session"), 37},
+        {TEXT("set_iris_replication"), 37},
+        {TEXT("set_replication_graph"), 37},
+        {TEXT("start_bandwidth_profiling"), 37},
+        {TEXT("attach_network_profiler"), 37},
+        {TEXT("create_network_component"), 37},
+        {TEXT("set_blueprint_variable_replication"), 37},
+
 
 
 
