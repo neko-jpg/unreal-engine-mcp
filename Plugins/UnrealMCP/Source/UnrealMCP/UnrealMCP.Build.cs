@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 using System;
 using System.IO;
@@ -148,6 +148,149 @@ public class UnrealMCP : ModuleRules
         }
     }
 
+
+    // Issue #70 requires per-module gates, not just per-category gates.  These
+    // helpers locate a module by its *.Build.cs rule file and emit a stable
+    // WITH_<MODULE>_MCP=1/0 define while only adding the dependency when the
+    // rule exists in this UE 5.7 install (or the project plugin tree).  This
+    // keeps minimal installs buildable and avoids hard-coding plugin layouts
+    // that vary between source / launcher / marketplace builds.
+    private string SanitizeModuleDefineKey(string ModuleName)
+    {
+        string Out = "";
+        foreach (char c in ModuleName)
+        {
+            Out += char.IsLetterOrDigit(c) ? char.ToUpperInvariant(c) : '_';
+        }
+        return Out;
+    }
+
+    private bool ModuleRuleExists(ReadOnlyTargetRules Target, string ModuleName)
+    {
+        string RuleFile = ModuleName + ".Build.cs";
+        List<string> Roots = new List<string>();
+        Roots.Add(Path.Combine(EngineDirectory, "Source"));
+        Roots.Add(Path.Combine(EngineDirectory, "Plugins"));
+        string ProjectDir = ProjectDirOrNull(Target);
+        if (ProjectDir != null)
+        {
+            Roots.Add(Path.Combine(ProjectDir, "Source"));
+            Roots.Add(Path.Combine(ProjectDir, "Plugins"));
+        }
+
+        foreach (string Root in Roots)
+        {
+            if (!Directory.Exists(Root)) continue;
+            try
+            {
+                string[] Matches = Directory.GetFiles(Root, RuleFile, SearchOption.AllDirectories);
+                if (Matches != null && Matches.Length > 0) return true;
+            }
+            catch
+            {
+                // Some launcher installs contain restricted directories. Treat
+                // them as "not found" rather than failing the entire build.
+            }
+        }
+        return false;
+    }
+
+    private bool HasDefinitionPrefix(string Prefix)
+    {
+        foreach (string Definition in PublicDefinitions)
+        {
+            if (Definition.StartsWith(Prefix)) return true;
+        }
+        return false;
+    }
+
+    private void SetDefinition(string Define, bool bEnabled)
+    {
+        string Prefix = Define + "=";
+        for (int i = PublicDefinitions.Count - 1; i >= 0; --i)
+        {
+            if (PublicDefinitions[i].StartsWith(Prefix))
+            {
+                PublicDefinitions.RemoveAt(i);
+            }
+        }
+        PublicDefinitions.Add(Prefix + (bEnabled ? "1" : "0"));
+    }
+
+    private void AddOptionalModuleGate(ReadOnlyTargetRules Target, string ModuleName, bool bEditorOnly)
+    {
+        string Define = "WITH_" + SanitizeModuleDefineKey(ModuleName) + "_MCP";
+        bool bFound = ModuleRuleExists(Target, ModuleName);
+        bool bEnabledForTarget = bFound && (!bEditorOnly || Target.bBuildEditor);
+        SetDefinition(Define, bEnabledForTarget);
+        if (bEnabledForTarget)
+        {
+            AddDepSafe(ModuleName);
+        }
+    }
+
+    private void AddIssue70PerModuleGates(ReadOnlyTargetRules Target)
+    {
+        // Wave 3: Chaos Physics
+        string[] RuntimeChaos = new string[] { "Chaos", "ChaosSolverEngine", "GeometryCollectionEngine", "ChaosCloth", "ChaosVehicles", "FieldSystemEngine", "ClusterUnion" };
+        foreach (string ModuleName in RuntimeChaos) AddOptionalModuleGate(Target, ModuleName, false);
+
+        // Wave 3: Foliage / PCG / Water
+        string[] RuntimeWorld = new string[] { "Foliage", "PCG", "PCGGeometryScriptInterop", "Water" };
+        foreach (string ModuleName in RuntimeWorld) AddOptionalModuleGate(Target, ModuleName, false);
+        string[] EditorWorld = new string[] { "FoliageEdit", "PCGEditor", "WaterEditor" };
+        foreach (string ModuleName in EditorWorld) AddOptionalModuleGate(Target, ModuleName, true);
+
+        // Wave 1: Niagara
+        string[] RuntimeNiagara = new string[] { "Niagara", "NiagaraCore" };
+        foreach (string ModuleName in RuntimeNiagara) AddOptionalModuleGate(Target, ModuleName, false);
+        AddOptionalModuleGate(Target, "NiagaraEditor", true);
+
+        // Wave 4: Movie Render Queue / Movie Graph
+        string[] RuntimeMoviePipeline = new string[] { "MovieRenderPipelineCore", "MovieRenderPipelineSettings", "MovieRenderPipelineRenderPasses", "MoviePipelineMaskRenderPass", "MovieGraph", "MovieGraphCore" };
+        foreach (string ModuleName in RuntimeMoviePipeline) AddOptionalModuleGate(Target, ModuleName, false);
+        AddOptionalModuleGate(Target, "MovieRenderPipelineEditor", true);
+
+        // Wave 4: Networking
+        string[] RuntimeNetworking = new string[] { "OnlineSubsystem", "OnlineSubsystemUtils", "NetCore", "ReplicationGraph", "Iris", "IrisCore", "Voice", "VoiceChat" };
+        foreach (string ModuleName in RuntimeNetworking) AddOptionalModuleGate(Target, ModuleName, false);
+
+        // Wave 4: Localization / Source Control
+        string[] RuntimeLocalization = new string[] { "Localization", "Internationalization", "LocalizationService" };
+        foreach (string ModuleName in RuntimeLocalization) AddOptionalModuleGate(Target, ModuleName, false);
+        AddOptionalModuleGate(Target, "LocalizationCommandletExecution", true);
+        AddOptionalModuleGate(Target, "SourceControl", true);
+        AddOptionalModuleGate(Target, "SourceControlWindows", true);
+
+        // Wave 5: MetaSound / XR / Mobile / Testing
+        string[] RuntimeMetaSound = new string[] { "MetasoundEngine", "MetasoundFrontend", "MetasoundGenerator", "MetasoundGraphCore" };
+        foreach (string ModuleName in RuntimeMetaSound) AddOptionalModuleGate(Target, ModuleName, false);
+        AddOptionalModuleGate(Target, "MetasoundEditor", true);
+        string[] RuntimeXr = new string[] { "XRBase", "HeadMountedDisplay", "OpenXRHMD", "OpenXRInput", "AndroidPermission", "AndroidDeviceProfileSelector", "IOSDeviceProfileSelector" };
+        foreach (string ModuleName in RuntimeXr) AddOptionalModuleGate(Target, ModuleName, false);
+        string[] TestingModules = new string[] { "AutomationTest", "DataValidation", "EditorValidator" };
+        foreach (string ModuleName in TestingModules) AddOptionalModuleGate(Target, ModuleName, true);
+        AddOptionalModuleGate(Target, "AutomationController", true);
+
+        // Wave 2: Gameplay / AI / Sequencer
+        string[] RuntimeGameplay = new string[] { "GameplayAbilities", "GameplayTags", "GameplayTasks", "MassEntity", "StateTreeModule" };
+        foreach (string ModuleName in RuntimeGameplay) AddOptionalModuleGate(Target, ModuleName, false);
+        string[] EditorGameplay = new string[] { "StateTreeEditorModule", "BehaviorTreeEditor", "EnvironmentQueryEditor" };
+        foreach (string ModuleName in EditorGameplay) AddOptionalModuleGate(Target, ModuleName, true);
+        string[] RuntimeSequencer = new string[] { "MovieScene", "MovieSceneTracks", "LevelSequence", "SequencerCore" };
+        foreach (string ModuleName in RuntimeSequencer) AddOptionalModuleGate(Target, ModuleName, false);
+        string[] EditorSequencer = new string[] { "MovieSceneTools", "LevelSequenceEditor", "Sequencer" };
+        foreach (string ModuleName in EditorSequencer) AddOptionalModuleGate(Target, ModuleName, true);
+
+        // Wave 1: Animation Rigging / Landscape
+        string[] RuntimeAnimRig = new string[] { "ControlRig", "ControlRigDeveloper", "IKRig", "RigVMDeveloper", "AnimGraphRuntime" };
+        foreach (string ModuleName in RuntimeAnimRig) AddOptionalModuleGate(Target, ModuleName, false);
+        string[] EditorAnimRig = new string[] { "ControlRigEditor", "IKRigEditor", "AnimGraph" };
+        foreach (string ModuleName in EditorAnimRig) AddOptionalModuleGate(Target, ModuleName, true);
+        AddOptionalModuleGate(Target, "LandscapeEditor", true);
+        AddOptionalModuleGate(Target, "LandscapeEditorUtilities", true);
+        AddOptionalModuleGate(Target, "LandscapeEditMode", true);
+    }
     private void AddOptionalModuleGates(ReadOnlyTargetRules Target)
     {
         // -- Cesium (legacy, kept for back-compat) --
@@ -289,6 +432,10 @@ public class UnrealMCP : ModuleRules
         bool bIkRig      = ProbeExists(PluginProbes(Target, Path.Combine("Animation", "IKRig"), "IKRig.uplugin"));
         AddGate("ANIM_RIGGING", bControlRig || bIkRig, new string[] { }, new string[] { }, Target);
 
+        // Issue #70 exact checklist: per-module optional gates for every
+        // module named by the Wave 1-5 category issues.
+        AddIssue70PerModuleGates(Target);
+
         // -- Live Coding (Win64 editor only) --
         bool bLiveCoding = false;
         if (Target.bBuildEditor && Target.Platform == UnrealTargetPlatform.Win64)
@@ -310,3 +457,6 @@ public class UnrealMCP : ModuleRules
         }
     }
 }
+
+
+
