@@ -141,6 +141,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_material_parameter_collection"), 4},
         {TEXT("edit_material_parameter_collection"), 4},
         {TEXT("create_advanced_material"), 4},
+        {TEXT("create_substrate_material"), 4},  // W1-#42
+        {TEXT("create_layered_material"), 4},     // W1-#42
         // Project / Editor Commands (5)
         {TEXT("get_project_settings"), 5},
         {TEXT("set_project_setting"), 5},

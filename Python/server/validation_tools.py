@@ -271,3 +271,62 @@ def get_stat_gpu() -> Dict[str, Any]:
     except Exception as exc:
         logger.error(f"get_stat_gpu error: {exc}")
         return make_error_response(str(exc))
+
+
+@mcp.tool()
+def enable_blueprint_profiler(
+    channels: str = "default,cpu,gpu,frame,bookmark,log,bp",
+    file: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Enable Blueprint profiling via Unreal Insights (UE 5.7).
+
+    This is the UE 5.7 equivalent of the legacy "Blueprint Profiler" panel
+    that was removed after UE 4.x. It:
+
+    1. Starts an Unreal Insights trace (FTraceAuxiliary::Start) that includes
+       the "bp" channel so per-Blueprint script overhead is sampled.
+    2. Issues the `stat ScriptVM` and `stat Game` console commands on the
+       editor world so high-level Blueprint VM stats are also shown in the
+       viewport HUD until the profiler is stopped.
+
+    Stop the trace via stop_unreal_insights_trace() to obtain the .utrace
+    output that Unreal Insights can open.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        payload: Dict[str, Any] = {"channels": channels}
+        if file:
+            payload["file"] = file
+        trace_resp = unreal.send_command("start_unreal_insights_trace", payload)
+        vm_resp = unreal.send_command("get_editor_stats", {"stat_command": "stat ScriptVM"})
+        return {
+            "success": bool((trace_resp or {}).get("success", False)),
+            "trace": trace_resp,
+            "stat_scriptvm": vm_resp,
+            "hint": "Open the resulting .utrace in Unreal Insights and inspect the 'Blueprint' tab; call stop_unreal_insights_trace to flush.",
+        }
+    except Exception as exc:
+        logger.error(f"enable_blueprint_profiler error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def disable_blueprint_profiler() -> Dict[str, Any]:
+    """Stop the Insights trace started by enable_blueprint_profiler (UE 5.7)."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        stop_resp = unreal.send_command("stop_unreal_insights_trace", {})
+        clear_resp = unreal.send_command("get_editor_stats", {"stat_command": "stat ScriptVM"})
+        return {
+            "success": bool((stop_resp or {}).get("success", False)),
+            "trace": stop_resp,
+            "stat_scriptvm_toggled_off": clear_resp,
+        }
+    except Exception as exc:
+        logger.error(f"disable_blueprint_profiler error: {exc}")
+        return make_error_response(str(exc))
+

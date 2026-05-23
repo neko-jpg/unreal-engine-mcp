@@ -4,6 +4,79 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Issue sweep #2: Substrate / Layered Material + Blueprint Profiler
+
+Closes the last three open `[ ]` entries under sections #40 (Blueprint - Missing / Partial)
+and #42 (Materials / Rendering) in `docs/superpowers/plans/tasks.md`.
+
+### Added
+
+**Material module (id 4, 2 items, issue #42):**
+- `create_substrate_material` -- creates a Surface-domain Material whose
+  `MP_FrontMaterial` input is wired to a fresh
+  `UMaterialExpressionSubstrateSlabBSDF`. Optional `base_color`, `metallic`,
+  `roughness`, and `specular` inputs are baked into the SlabBSDF DefaultValue
+  fields (`DiffuseAlbedo.Constant`, `F0.Constant`, `Roughness.Constant`) so a
+  callable Substrate material can be produced in a single call. Returns
+  `substrate_root` and `substrate_front_material_connected` for verification.
+- `create_layered_material` -- creates a coordinated `_Layer`,
+  `_Blend`, host-Material trio via `UMaterialFunctionMaterialLayerFactory`
+  and `UMaterialFunctionMaterialLayerBlendFactory`. The host material has
+  `bUseMaterialAttributes=true` so it is ready for Material Layers instance
+  configuration. Returns the three asset paths plus a `hint` for the
+  remaining instance-side wiring.
+
+**Validation module (id 23, 2 items, issue #40):**
+- `enable_blueprint_profiler` -- starts an Unreal Insights trace with the
+  `bp` channel enabled (UE 5.7 replacement for the deprecated UE 4.x
+  Blueprint Profiler panel) and issues `stat ScriptVM` on the editor world.
+- `disable_blueprint_profiler` -- flushes the Insights trace and toggles
+  `stat ScriptVM` off.
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added `create_substrate_material` and
+  `create_layered_material` to route id 4 (Material).
+- `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMaterialCommands.h`
+  declares the two new handlers.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp`
+  adds the Substrate / Layer factory includes and the two new handler bodies.
+- `docs/superpowers/plans/tasks.md`: flipped 3 entries to `[x]`
+  (Blueprint Profiler連携, Substrate Material作成, Layered Material作成).
+- Sync'd canonical plugin to source-built project (3 files updated via
+  `scripts/sync-unrealmcp-plugin.ps1`).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 443` (was 441; +2 new C++ handlers wired 3-layer;
+  `enable_blueprint_profiler` / `disable_blueprint_profiler` route through
+  the pre-existing `start_unreal_insights_trace` / `stop_unreal_insights_trace`
+  / `get_editor_stats` commands and therefore do not add C++-side rows).
+- `python -m pytest Python/tests/unit/test_material_w1_42.py Python/tests/unit/test_validation_w1_40_profiler.py Python/tests/unit/test_route_contracts_audit.py -q`;
+  **15 passed** (6 Substrate/Layered + 4 Profiler + 5 audit).
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/Engine/Public/Materials/MaterialExpressionSubstrate.h`
+    (`UMaterialExpressionSubstrateSlabBSDF` — `DiffuseAlbedo`, `F0`,
+    `Roughness` as `FExpressionInput`).
+  - `Runtime/Engine/Public/Materials/Material.h` (`UMaterial::MaterialDomain`,
+    `bUseMaterialAttributes`, `GetExpressionInputForProperty(MP_FrontMaterial)`,
+    `HasSubstrateFrontMaterialConnected`).
+  - `Runtime/Engine/Public/SceneTypes.h` (`EMaterialProperty::MP_FrontMaterial`).
+  - `Editor/UnrealEd/Classes/Factories/MaterialFunctionMaterialLayerFactory.h`
+    and `…/MaterialFunctionMaterialLayerBlendFactory.h`.
+- Substrate is gated by `r.Substrate=1`; when disabled, the rendering settings
+  do not expose `MP_FrontMaterial` and the handler returns an actionable error
+  hinting at the required cvar.
+- The Blueprint Profiler panel was removed after UE 4.x; UE 5.7 expects users
+  to use Unreal Insights for the equivalent insight. The new tools wrap that
+  flow so MCP callers do not need to know the channel + stat command pair.
+
+---
+
 ## [2026-05-23] - Issue sweep: procedural docs + UE 5.7 build toolchain docs
 
 ### Added

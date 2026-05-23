@@ -315,3 +315,76 @@ def create_runtime_virtual_texture_material(name: str, package_path: str = "/Gam
     except Exception as exc:
         logger.error(f"create_runtime_virtual_texture_material error: {exc}")
         return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_substrate_material(
+    name: str,
+    package_path: str = "/Game/Materials/",
+    base_color = None,
+    metallic = None,
+    roughness = None,
+    specular = None,
+) -> Dict[str, Any]:
+    """Create a Substrate-based Material (UE 5.7).
+
+    Creates a Surface-domain Material whose Front Material input is wired to a
+    UMaterialExpressionSubstrateSlabBSDF expression. Optional inputs let the
+    caller seed the Slab BSDF DefaultValue properties for DiffuseAlbedo
+    (base_color RGB), F0 (metallic, specular), and Roughness without having to
+    add separate parameter nodes.
+
+    Requires r.Substrate=1 to be enabled in the rendering settings.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        params: Dict[str, Any] = {
+            "name": name,
+            "package_path": package_path,
+        }
+        if base_color is not None:
+            params["base_color"] = list(base_color)
+        if metallic is not None:
+            params["metallic"] = float(metallic)
+        if roughness is not None:
+            params["roughness"] = float(roughness)
+        if specular is not None:
+            params["specular"] = float(specular)
+        response = unreal.send_command("create_substrate_material", params)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_substrate_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_layered_material(
+    name: str,
+    package_path: str = "/Game/Materials/",
+) -> Dict[str, Any]:
+    """Create a Material Layers stack (UE 5.7).
+
+    Generates three coordinated assets in package_path:
+      - {name}_Layer : UMaterialFunctionMaterialLayer
+      - {name}_Blend : UMaterialFunctionMaterialLayerBlend
+      - {name}       : UMaterial with bUseMaterialAttributes=true
+
+    The actual layer-to-host wiring (Material Layers parameter, layer/blend
+    assignments) happens through Material Instances or the Material editor.
+    This command produces the three asset endpoints that the wiring step needs.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_layered_material",
+            {"name": name, "package_path": package_path},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_layered_material error: {exc}")
+        return make_error_response(str(exc))
+
