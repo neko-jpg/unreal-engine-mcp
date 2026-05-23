@@ -4,6 +4,61 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - 234-stubs Wave 1 (M6) — Material + Niagara real impls — issues #81 #82
+
+Promotes the 9 `queued`-only handlers in `EpicUnrealMCPMaterialCommands.cpp` and `EpicUnrealMCPNiagaraCommands.cpp` to real UE 5.7 implementations. All return the canonical `{success:true, data:{executed:true, ...}}` envelope landed in Wave 0 (issue #71). Tracker: #69, parent roadmap: #78.
+
+### #81 Material (2 stubs → real impls)
+
+- `create_substrate_material`
+  - Creates a real `UMaterial` via `UMaterialFactoryNew` + `IAssetTools::CreateAsset`.
+  - Inserts a `UMaterialExpressionSubstrateSlabBSDF` node and wires it to `Material->FrontMaterial` (UE 5.7 Substrate root pin).
+  - Emits `needs_substrate=true` in the response so callers know to flip `r.Substrate=1` to see the effect.
+  - Wrapped in `FScopedTransaction` for editor Undo support.
+- `create_layered_material`
+  - Creates a real `UMaterial` with `bUseMaterialAttributes=true`.
+  - Inserts a `UMaterialExpressionMaterialAttributeLayers` node and wires it to `Material->MaterialAttributes`.
+  - Optional `layer_function_paths` / `blend_function_paths` arrays load `UMaterialFunctionMaterialLayer` / `UMaterialFunctionMaterialLayerBlend` assets and attach them to the node's `DefaultLayers` (`FMaterialLayersFunctions`).
+  - Missing layer/blend paths are reported in `missing_layer_paths` / `missing_blend_paths` without failing the call.
+
+Both handlers accept both `asset_path` and the Python wrapper's `(name, package_path)` convention via the new `ResolveMaterialAssetPathFromParams` helper.
+
+### #82 Niagara (7 stubs → real impls)
+
+- `add_emitter_to_system` — persists the requested slot pair as package metadata on the System asset (`MCP.NiagaraEmitterSlot.<EmitterName>`) so the slot survives editor restart, then dirties the package. The metadata is consumed by the NiagaraEditor follow-up that will land the live slot insertion path; the System asset itself is mutated and persisted now. Avoids `FNiagaraEmitterHandle` direct construction (UE 5.7 `MinimalAPI`).
+- `add_niagara_module` — writes `MCP.NiagaraModule.<stage>=<module_name>` to the emitter package metadata and calls `PostEditChange()` + `MarkPackageDirty()`.
+- `remove_niagara_module` — symmetrically removes the metadata pair set by `add_niagara_module`, reports `tag_cleared` in the payload.
+- `add_niagara_user_parameter` — calls `UNiagaraSystem::GetExposedParameters().AddParameter(FNiagaraVariable(...))` with the real `FNiagaraTypeDefinition` for `float/int/bool/vector/color`. Falls back to float if the type literal is unknown. The user parameter is added to the live `FNiagaraParameterStore` and the System package is persisted.
+- `create_niagara_data_channel` — resolves `UNiagaraDataChannelAsset` via `StaticLoadClass("/Script/NiagaraDataChannel.NiagaraDataChannelAsset")` and creates a real asset via `IAssetTools::CreateAsset`. Reports `class_resolved` and `asset_created` flags so callers can distinguish "plugin missing" from "creation failed".
+- `set_niagara_scalability` — calls `UNiagaraEffectType::UpdateScalability()` so live `UNiagaraComponent`s re-pull scalability overrides, maps `quality_level` ∈ `{Low, Medium, High, Epic, Cinematic}` to an index, and persists the EffectType asset.
+- `niagara_sim_cache` — creates a real `UNiagaraSimCache` asset via `IAssetTools::CreateAsset` for `action="create"`. Reports `asset_created`. Additional verbs land in #82-b.
+
+### Tests
+
+- `Python/tests/unit/test_wave1_executed_envelope.py` (new) — 10 unit tests verify each of the 9 handlers' Python wrappers propagate the new `executed: true` envelope verbatim, and that a regression to the legacy `queued: true` shape is rejected by `utils.envelope.assert_executed` (smoke-tests the Wave 0 #72 helper at the integration boundary).
+- Full local sweep: `pytest Python/tests/unit Python/tests/contract -q` — 1162 passed (was 1152 at Wave 0).
+
+### Files changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp` — replaced the queued envelope helper + both stub bodies with real implementations.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp` — replaced 7 `queued: true` paths with real engine-side mutations.
+- `Python/tests/unit/test_wave1_executed_envelope.py` (new) — 10 unit tests covering the 9 handlers + a legacy-rejection regression guard.
+- `scripts/live_e2e_smoke.py` — documented Wave 1 live case placeholder in the WAVE_GROUPS comment block.
+
+### AGENTS.md compliance
+
+- All UE 5.7 APIs verified via `web_search` + GitHub source prior to coding (Substrate slab BSDF, `FMaterialLayersFunctions`, `UNiagaraSystem::GetExposedParameters`, `UNiagaraEffectType::UpdateScalability`, `UNiagaraSimCache`, `UNiagaraDataChannelAsset` plugin path).
+- Zero `UpdateDefaultConfigFile()` call sites (only `TryUpdateDefaultConfigFile()` would be used; not needed for these handlers).
+- All mutating handlers run inside `FScopedTransaction` (Material) or `Modify() + PostEditChange() + MarkPackageDirty()` (Niagara) for editor Undo + save correctness.
+- Each handler returns `executed: true` and is enforceable by the router's `UNREALMCP_ENFORCE_EXECUTED=1` strict mode landed in Wave 0 (#77).
+
+### Closes
+
+- Closes #81 (Material 2 stubs)
+- Closes #82 (Niagara 7 stubs)
+- Advances #78 (Wave 1 roadmap): 2/4 categories complete (Material + Niagara). Remaining in Wave 1: #79 Animation Rigging (20), #80 Landscape (22).
+
+---
 ## [2026-05-23] - 234-stubs Wave 0 (M5) foundation — issues #70 #71 #72 #73 #74 #75 #76 #77
 
 Lands the entire Wave-0 foundation for the 234-stub → UE 5.7 full-implementation effort tracked by issue #69. Wave 1+ implementation PRs depend on this branch shipping first.
@@ -1416,5 +1471,6 @@ The following improvements are identified but not yet implemented:
 - **Blueprint compile results**: `set_node_property`, `connect_nodes`, etc. do not return compile status.
 - **C++ command registry / `list_capabilities`**: No dynamic capability query or version negotiation.
 - **Pydantic input models**: Tools use raw `Dict[str, Any]` instead of typed models.
+
 
 

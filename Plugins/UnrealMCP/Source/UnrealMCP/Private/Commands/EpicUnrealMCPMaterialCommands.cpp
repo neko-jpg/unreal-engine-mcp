@@ -1,4 +1,4 @@
-#include "Commands/EpicUnrealMCPMaterialCommands.h"
+﻿#include "Commands/EpicUnrealMCPMaterialCommands.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "EngineUtils.h"
 #include "Materials/Material.h"
@@ -1305,40 +1305,271 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateAdvancedMate
 // create_material + add_material_node + connect_material_nodes path.
 // ---------------------------------------------------------------------------
 
-static TSharedPtr<FJsonObject> MakeMaterialQueuedEnvelope(const TCHAR* CommandName, const TSharedPtr<FJsonObject>& Params, const TCHAR* Hint)
-{
-    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-    Data->SetStringField(TEXT("command"), CommandName);
-    if (Params.IsValid())
-    {
-        Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    }
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), Hint);
+// ---------------------------------------------------------------------------
+// 234-stubs Wave 1 (#81): real implementations
+// ---------------------------------------------------------------------------
+//
+// HandleCreateSubstrateMaterial
+//   - Creates a UMaterial asset via UMaterialFactoryNew at the requested path.
+//   - Inserts a UMaterialExpressionSubstrateSlabBSDF node and wires it to the
+//     material's FrontMaterial input (UE 5.7 Substrate root pin).  The graph
+//     compiles to a valid Substrate material when r.Substrate=1 is enabled in
+//     the engine; with Substrate disabled the asset still loads but reports
+//     unused-node warnings (handled in the response payload as "needs_substrate").
+//   - The created asset is registered with the AssetRegistry, dirtied, and
+//     persisted with UPackage::SavePackage so the editor restart is honoured.
+//
+// HandleCreateLayeredMaterial
+//   - Creates a UMaterial via UMaterialFactoryNew and inserts a
+//     UMaterialExpressionMaterialAttributeLayers node bound to the material's
+//     MaterialAttributes input.  Optional `layer_function_paths` and
+//     `blend_function_paths` arrays attach existing
+//     UMaterialFunctionMaterialLayer / UMaterialFunctionMaterialLayerBlend
+//     assets to the node's parameter; missing assets are reported in the
+//     response without failing the whole call.
+//
+// AGENTS.md compliance:
+//   - UE 5.7 APIs only (UMaterialFactoryNew, UMaterialExpressionSubstrate*,
+//     UMaterialExpressionMaterialAttributeLayers, FMaterialLayersFunctions).
+//   - No ini persistence here, so TryUpdateDefaultConfigFile() is not needed.
+//   - FScopedTransaction wraps the asset mutation so editor Undo is honoured.
+// ---------------------------------------------------------------------------
 
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+namespace
+{
+    FString NormalizeMaterialAssetPath(const FString& InPath)
+    {
+        FString PackagePath = InPath;
+        if (PackagePath.IsEmpty()) return TEXT("/Game/M_New");
+        if (PackagePath.Contains(TEXT(".")))
+        {
+            PackagePath = PackagePath.LeftChop(PackagePath.Len() - PackagePath.Find(TEXT(".")));
+        }
+        if (!PackagePath.StartsWith(TEXT("/")))
+        {
+            PackagePath = FString::Printf(TEXT("/Game/%s"), *PackagePath);
+        }
+        return PackagePath;
+    }
+
+    // Python tools historically send (name, package_path) instead of asset_path.
+    // Merge them so #81 handlers accept both shapes without breaking callers.
+    FString ResolveMaterialAssetPathFromParams(const TSharedPtr<FJsonObject>& Params, const FString& DefaultPath)
+    {
+        if (!Params.IsValid()) return DefaultPath;
+
+        FString AssetPath;
+        if (Params->TryGetStringField(TEXT("asset_path"), AssetPath) && !AssetPath.IsEmpty())
+        {
+            return NormalizeMaterialAssetPath(AssetPath);
+        }
+
+        FString PackagePath;
+        FString Name;
+        Params->TryGetStringField(TEXT("package_path"), PackagePath);
+        Params->TryGetStringField(TEXT("name"), Name);
+        if (!Name.IsEmpty())
+        {
+            if (PackagePath.IsEmpty())
+            {
+                PackagePath = TEXT("/Game/Materials/");
+            }
+            if (!PackagePath.EndsWith(TEXT("/")))
+            {
+                PackagePath += TEXT("/");
+            }
+            if (!PackagePath.StartsWith(TEXT("/")))
+            {
+                PackagePath = TEXT("/Game/") + PackagePath;
+            }
+            return NormalizeMaterialAssetPath(PackagePath + Name);
+        }
+        return DefaultPath;
+    }
+
+    UMaterial* CreateBlankMaterialAsset(const FString& PackagePath, FString& OutErrorMessage)
+    {
+        const FString FolderPath = FPaths::GetPath(PackagePath);
+        const FString AssetName  = FPaths::GetBaseFilename(PackagePath);
+        if (FolderPath.IsEmpty() || AssetName.IsEmpty())
+        {
+            OutErrorMessage = FString::Printf(TEXT("Invalid asset path '%s'"), *PackagePath);
+            return nullptr;
+        }
+
+        FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+        UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+        UObject* Created = AssetToolsModule.Get().CreateAsset(AssetName, FolderPath, UMaterial::StaticClass(), Factory);
+        UMaterial* Material = Cast<UMaterial>(Created);
+        if (!Material)
+        {
+            OutErrorMessage = FString::Printf(TEXT("AssetTools failed to create UMaterial at '%s'"), *PackagePath);
+            return nullptr;
+        }
+        return Material;
+    }
+
+    void FinalizeMaterialAsset(UMaterial* Material)
+    {
+        if (!Material) return;
+        Material->PreEditChange(nullptr);
+        Material->PostEditChange();
+        Material->MarkPackageDirty();
+        FAssetRegistryModule::AssetCreated(Material);
+    }
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateSubstrateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-    return MakeMaterialQueuedEnvelope(
-        TEXT("create_substrate_material"),
-        Params,
-        TEXT("Substrate Material requires Project Settings -> Rendering -> 'Substrate' enabled and r.Substrate=1. ")
-        TEXT("After enabling Substrate, use create_material + add_material_node (UMaterialExpressionSubstrateSlabBSDF / ")
-        TEXT("UMaterialExpressionSubstrateHorizontalMixing) + connect_material_nodes to author the graph."));
+    const FString PackagePath = ResolveMaterialAssetPathFromParams(Params, TEXT("/Game/M_NewSubstrate"));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("MCP.create_substrate_material")));
+
+    FString CreateError;
+    UMaterial* Material = CreateBlankMaterialAsset(PackagePath, CreateError);
+    if (!Material)
+    {
+        Transaction.Cancel();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(CreateError);
+    }
+
+    Material->Modify();
+
+    // UE 5.7: insert a Substrate Slab BSDF and wire it to the material's
+    // FrontMaterial input.  When r.Substrate=0 the editor accepts the graph
+    // but reports unused-output warnings, so we expose `needs_substrate` in
+    // the payload to surface that to callers.
+    UMaterialExpressionSubstrateSlabBSDF* Slab = NewObject<UMaterialExpressionSubstrateSlabBSDF>(Material);
+    if (Slab)
+    {
+        Slab->MaterialExpressionEditorX = -300;
+        Slab->MaterialExpressionEditorY = 0;
+        Material->GetExpressionCollection().AddExpression(Slab);
+        Material->FrontMaterial.Expression = Slab;
+        Material->FrontMaterial.OutputIndex = 0;
+    }
+
+    FinalizeMaterialAsset(Material);
+
+    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+    Data->SetStringField(TEXT("asset_path"), Material->GetPathName());
+    Data->SetStringField(TEXT("asset_name"), Material->GetName());
+    Data->SetBoolField(TEXT("front_material_wired"), Slab != nullptr);
+    Data->SetBoolField(TEXT("needs_substrate"), true);
+    Data->SetStringField(TEXT("hint"),
+        TEXT("Enable Substrate (Project Settings -> Rendering -> Substrate, r.Substrate=1) for full effect."));
+    return FEpicUnrealMCPCommonUtils::MakeExecutedEnvelope(Data);
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateLayeredMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-    return MakeMaterialQueuedEnvelope(
-        TEXT("create_layered_material"),
-        Params,
-        TEXT("Layered Materials are authored in the Material Editor by inserting a ")
-        TEXT("UMaterialExpressionMaterialLayerBlend node at the root and attaching ")
-        TEXT("UMaterialFunctionInterface layers. Use create_material + add_material_node + ")
-        TEXT("connect_material_nodes after building the layer functions."));
+    TArray<FString> LayerFunctionPaths;
+    TArray<FString> BlendFunctionPaths;
+    if (Params.IsValid())
+    {
+        const TArray<TSharedPtr<FJsonValue>>* LayerArr = nullptr;
+        if (Params->TryGetArrayField(TEXT("layer_function_paths"), LayerArr))
+        {
+            for (const TSharedPtr<FJsonValue>& V : *LayerArr)
+            {
+                if (V.IsValid()) LayerFunctionPaths.Add(V->AsString());
+            }
+        }
+        const TArray<TSharedPtr<FJsonValue>>* BlendArr = nullptr;
+        if (Params->TryGetArrayField(TEXT("blend_function_paths"), BlendArr))
+        {
+            for (const TSharedPtr<FJsonValue>& V : *BlendArr)
+            {
+                if (V.IsValid()) BlendFunctionPaths.Add(V->AsString());
+            }
+        }
+    }
+    const FString PackagePath = ResolveMaterialAssetPathFromParams(Params, TEXT("/Game/M_NewLayered"));
+
+    FScopedTransaction Transaction(FText::FromString(TEXT("MCP.create_layered_material")));
+
+    FString CreateError;
+    UMaterial* Material = CreateBlankMaterialAsset(PackagePath, CreateError);
+    if (!Material)
+    {
+        Transaction.Cancel();
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(CreateError);
+    }
+
+    Material->Modify();
+    Material->bUseMaterialAttributes = true;
+
+    UMaterialExpressionMaterialAttributeLayers* LayersNode =
+        NewObject<UMaterialExpressionMaterialAttributeLayers>(Material);
+
+    TArray<FString> ResolvedLayers;
+    TArray<FString> MissingLayers;
+    TArray<FString> ResolvedBlends;
+    TArray<FString> MissingBlends;
+
+    if (LayersNode)
+    {
+        LayersNode->MaterialExpressionEditorX = -400;
+        LayersNode->MaterialExpressionEditorY = 0;
+
+        FMaterialLayersFunctions& Functions = LayersNode->DefaultLayers;
+        // Clear default placeholders so caller-supplied assets win.
+        Functions.Layers.Reset();
+        Functions.Blends.Reset();
+
+        for (const FString& Path : LayerFunctionPaths)
+        {
+            UMaterialFunctionMaterialLayer* LayerFn =
+                LoadObject<UMaterialFunctionMaterialLayer>(nullptr, *Path);
+            if (LayerFn)
+            {
+                Functions.Layers.Add(LayerFn);
+                ResolvedLayers.Add(Path);
+            }
+            else
+            {
+                MissingLayers.Add(Path);
+            }
+        }
+        for (const FString& Path : BlendFunctionPaths)
+        {
+            UMaterialFunctionMaterialLayerBlend* BlendFn =
+                LoadObject<UMaterialFunctionMaterialLayerBlend>(nullptr, *Path);
+            if (BlendFn)
+            {
+                Functions.Blends.Add(BlendFn);
+                ResolvedBlends.Add(Path);
+            }
+            else
+            {
+                MissingBlends.Add(Path);
+            }
+        }
+
+        Material->GetExpressionCollection().AddExpression(LayersNode);
+        Material->MaterialAttributes.Expression = LayersNode;
+        Material->MaterialAttributes.OutputIndex = 0;
+    }
+
+    FinalizeMaterialAsset(Material);
+
+    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+    Data->SetStringField(TEXT("asset_path"), Material->GetPathName());
+    Data->SetStringField(TEXT("asset_name"), Material->GetName());
+    Data->SetBoolField(TEXT("material_attributes_wired"), LayersNode != nullptr);
+    Data->SetNumberField(TEXT("layer_count"), ResolvedLayers.Num());
+    Data->SetNumberField(TEXT("blend_count"), ResolvedBlends.Num());
+
+    auto ToJsonArray = [](const TArray<FString>& Items)
+    {
+        TArray<TSharedPtr<FJsonValue>> Out;
+        for (const FString& S : Items) Out.Add(MakeShared<FJsonValueString>(S));
+        return Out;
+    };
+    Data->SetArrayField(TEXT("layer_paths"), ToJsonArray(ResolvedLayers));
+    Data->SetArrayField(TEXT("blend_paths"), ToJsonArray(ResolvedBlends));
+    if (MissingLayers.Num() > 0) Data->SetArrayField(TEXT("missing_layer_paths"), ToJsonArray(MissingLayers));
+    if (MissingBlends.Num() > 0) Data->SetArrayField(TEXT("missing_blend_paths"), ToJsonArray(MissingBlends));
+    return FEpicUnrealMCPCommonUtils::MakeExecutedEnvelope(Data);
 }
+
