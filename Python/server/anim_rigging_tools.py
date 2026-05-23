@@ -56,8 +56,18 @@ def create_physics_asset(asset_path: str = "/Game/Anim", asset_name: str = "PHYS
 
 
 @mcp.tool()
-def add_anim_graph_node(anim_bp_path: str, node_type: str, location_x: float = 0.0, location_y: float = 0.0) -> Dict[str, Any]:
-    """Queue an AnimGraph node insertion."""
+def add_anim_graph_node(
+    anim_bp_path: str,
+    node_type: str,
+    location_x: float = 0.0,
+    location_y: float = 0.0,
+) -> Dict[str, Any]:
+    """Persist a requested AnimGraph node insertion on the UAnimBlueprint.
+
+    234-stubs W1 (#79) Part 2: the C++ handler now writes MCP-namespaced
+    UPackage::SetMetaData on the UAnimBlueprint so the requested node spec
+    survives editor restart. The Persona-side replay lands in a future PR.
+    """
     try:
         validate_string(anim_bp_path, "anim_bp_path")
         validate_string(node_type, "node_type")
@@ -67,7 +77,12 @@ def add_anim_graph_node(anim_bp_path: str, node_type: str, location_x: float = 0
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("add_anim_graph_node", {"anim_bp_path": anim_bp_path, "node_type": node_type, "location_x": float(location_x), "location_y": float(location_y)})
+        r = u.send_command("add_anim_graph_node", {
+            "anim_bp_path": anim_bp_path,
+            "node_type": node_type,
+            "location_x": float(location_x),
+            "location_y": float(location_y),
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'add_anim_graph_node': {e}")
     return _envelope("add_anim_graph_node", r)
@@ -75,7 +90,12 @@ def add_anim_graph_node(anim_bp_path: str, node_type: str, location_x: float = 0
 
 @mcp.tool()
 def create_anim_state_machine(anim_bp_path: str, graph_name: str = "NewStateMachine") -> Dict[str, Any]:
-    """Queue State Machine creation."""
+    """Persist a state-machine creation request on the UAnimBlueprint.
+
+    234-stubs W1 (#79) Part 2: now executed via the C++ AnimMetaPersist
+    helper so the request is recorded in MCP metadata on the AnimBlueprint
+    package.
+    """
     try:
         validate_string(anim_bp_path, "anim_bp_path")
     except ValidationError as e:
@@ -84,34 +104,67 @@ def create_anim_state_machine(anim_bp_path: str, graph_name: str = "NewStateMach
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("create_anim_state_machine", {"anim_bp_path": anim_bp_path, "graph_name": graph_name})
+        r = u.send_command("create_anim_state_machine", {
+            "anim_bp_path": anim_bp_path,
+            "graph_name": graph_name,
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_anim_state_machine': {e}")
     return _envelope("create_anim_state_machine", r)
 
 
 @mcp.tool()
-def add_anim_state(anim_bp_path: str, state_machine: str, state_name: str, asset_path: str = "") -> Dict[str, Any]:
-    """Queue State node addition."""
+def add_anim_state(
+    anim_bp_path: str,
+    state_machine: str = "",
+    state_name: str = "",
+    asset_path: str = "",
+    graph_name: str = "",
+    anim_sequence_path: str = "",
+) -> Dict[str, Any]:
+    """Persist a State node spec onto the UAnimBlueprint.
+
+    234-stubs W1 (#79) Part 2: legacy callers pass state_machine; new callers
+    can use graph_name explicitly. Either is forwarded as graph_name.
+    """
     try:
         validate_string(anim_bp_path, "anim_bp_path")
-        validate_string(state_machine, "state_machine")
         validate_string(state_name, "state_name")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    effective_graph = graph_name or state_machine
+    payload: Dict[str, Any] = {
+        "anim_bp_path": anim_bp_path,
+        "state_name": state_name,
+        "state_machine": state_machine,
+    }
+    if effective_graph:
+        payload["graph_name"] = effective_graph
+    if anim_sequence_path:
+        payload["anim_sequence_path"] = anim_sequence_path
+    elif asset_path:
+        payload["anim_sequence_path"] = asset_path
+    if asset_path:
+        payload["asset_path"] = asset_path
     try:
-        r = u.send_command("add_anim_state", {"anim_bp_path": anim_bp_path, "state_machine": state_machine, "state_name": state_name, "asset_path": asset_path})
+        r = u.send_command("add_anim_state", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'add_anim_state': {e}")
     return _envelope("add_anim_state", r)
 
 
 @mcp.tool()
-def create_anim_transition_rule(anim_bp_path: str, from_state: str, to_state: str, condition: str = "true") -> Dict[str, Any]:
-    """Queue Transition rule creation."""
+def create_anim_transition_rule(
+    anim_bp_path: str, from_state: str, to_state: str, condition: str = "true",
+) -> Dict[str, Any]:
+    """Persist a state-machine transition rule on the UAnimBlueprint.
+
+    234-stubs W1 (#79) Part 2: now executed via AnimMetaPersist on the
+    AnimBlueprint package.
+    """
     try:
         validate_string(anim_bp_path, "anim_bp_path")
         validate_string(from_state, "from_state")
@@ -122,7 +175,12 @@ def create_anim_transition_rule(anim_bp_path: str, from_state: str, to_state: st
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("create_anim_transition_rule", {"anim_bp_path": anim_bp_path, "from_state": from_state, "to_state": to_state, "condition": condition})
+        r = u.send_command("create_anim_transition_rule", {
+            "anim_bp_path": anim_bp_path,
+            "from_state": from_state,
+            "to_state": to_state,
+            "condition": condition,
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_anim_transition_rule': {e}")
     return _envelope("create_anim_transition_rule", r)
@@ -146,8 +204,19 @@ def create_aim_offset(asset_path: str = "/Game/Anim", asset_name: str = "AO_New"
 
 
 @mcp.tool()
-def add_notify_state(anim_sequence_path: str, notify_state_class: str, start_time: float = 0.0, duration: float = 0.5) -> Dict[str, Any]:
-    """Queue AnimNotifyState insertion."""
+def add_notify_state(
+    anim_sequence_path: str,
+    notify_state_class: str,
+    start_time: float = 0.0,
+    duration: float = 0.5,
+    track: str = "",
+) -> Dict[str, Any]:
+    """Persist an AnimNotifyState spec on the UAnimSequence / UAnimMontage.
+
+    234-stubs W1 (#79) Part 2: the C++ handler now resolves the host
+    asset (AnimSequence/AnimMontage/AnimComposite) and writes MCP-namespaced
+    metadata so the notify spec survives editor restart.
+    """
     try:
         validate_string(anim_sequence_path, "anim_sequence_path")
         validate_string(notify_state_class, "notify_state_class")
@@ -156,8 +225,18 @@ def add_notify_state(anim_sequence_path: str, notify_state_class: str, start_tim
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload = {
+        "anim_path": anim_sequence_path,
+        "anim_sequence_path": anim_sequence_path,
+        "notify_class": notify_state_class,
+        "notify_state_class": notify_state_class,
+        "start_time": float(start_time),
+        "duration": float(duration),
+    }
+    if track:
+        payload["track"] = track
     try:
-        r = u.send_command("add_notify_state", {"anim_sequence_path": anim_sequence_path, "notify_state_class": notify_state_class, "start_time": float(start_time), "duration": float(duration)})
+        r = u.send_command("add_notify_state", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'add_notify_state': {e}")
     return _envelope("add_notify_state", r)
@@ -201,17 +280,27 @@ def set_retarget_manager(
 
 
 @mcp.tool()
-def create_ik_rig(asset_path: str = "/Game/Anim", asset_name: str = "IKRig_New", skeletal_mesh_path: str = "") -> Dict[str, Any]:
-    """Queue UIKRigDefinition asset creation."""
-    try:
-        pass
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def create_ik_rig(
+    asset_path: str = "/Game/Anim",
+    asset_name: str = "IKRig_New",
+    skeletal_mesh_path: str = "",
+) -> Dict[str, Any]:
+    """Create a UIKRigDefinition asset, or fall back to metadata on the mesh.
+
+    234-stubs W1 (#79) Part 2: the C++ handler attempts a runtime-resolved
+    factory (IKRigEditor.IKRigDefinitionFactory). If unavailable, it falls
+    back to persisting the requested intent in MCP metadata on
+    skeletal_mesh_path so an IKRigEditor follow-up can replay it.
+    """
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("create_ik_rig", {"asset_path": asset_path, "asset_name": asset_name, "skeletal_mesh_path": skeletal_mesh_path})
+        r = u.send_command("create_ik_rig", {
+            "asset_path": asset_path,
+            "asset_name": asset_name,
+            "skeletal_mesh_path": skeletal_mesh_path,
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_ik_rig': {e}")
     return _envelope("create_ik_rig", r)
@@ -254,17 +343,35 @@ def add_ik_solver(ik_rig_path: str, solver_type: str = "FBIK") -> Dict[str, Any]
 
 
 @mcp.tool()
-def create_ik_retargeter(asset_path: str = "/Game/Anim", asset_name: str = "IKRetarget_New", source_ik_rig: str = "", target_ik_rig: str = "") -> Dict[str, Any]:
-    """Queue UIKRetargeter asset creation."""
-    try:
-        pass
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def create_ik_retargeter(
+    asset_path: str = "/Game/Anim",
+    asset_name: str = "IKRetarget_New",
+    source_ik_rig: str = "",
+    target_ik_rig: str = "",
+    host_asset_path: str = "",
+) -> Dict[str, Any]:
+    """Create a UIKRetargeter asset, or fall back to metadata on the host.
+
+    234-stubs W1 (#79) Part 2: the C++ handler attempts a runtime-resolved
+    factory (IKRigEditor.IKRetargeterFactory). If unavailable, it falls
+    back to persisting source_ik_rig_path / target_ik_rig_path as MCP
+    metadata on host_asset_path (or the target IK rig if no host given).
+    """
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload = {
+        "asset_path": asset_path,
+        "asset_name": asset_name,
+        "source_ik_rig": source_ik_rig,
+        "target_ik_rig": target_ik_rig,
+        "source_ik_rig_path": source_ik_rig,
+        "target_ik_rig_path": target_ik_rig,
+    }
+    if host_asset_path:
+        payload["host_asset_path"] = host_asset_path
     try:
-        r = u.send_command("create_ik_retargeter", {"asset_path": asset_path, "asset_name": asset_name, "source_ik_rig": source_ik_rig, "target_ik_rig": target_ik_rig})
+        r = u.send_command("create_ik_retargeter", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_ik_retargeter': {e}")
     return _envelope("create_ik_retargeter", r)
@@ -344,8 +451,16 @@ def add_control_rig_bone(control_rig_path: str, bone_name: str, parent_bone: str
 
 
 @mcp.tool()
-def set_control_rig_constraint(control_rig_path: str, control_name: str, constraint_type: str = "Parent", target: str = "") -> Dict[str, Any]:
-    """Queue Constraint setup."""
+def set_control_rig_constraint(
+    control_rig_path: str,
+    control_name: str,
+    constraint_type: str = "Parent",
+    target: str = "",
+) -> Dict[str, Any]:
+    """Persist a ControlRig constraint spec on the UControlRigBlueprint.
+
+    234-stubs W1 (#79) Part 2: now executed via AnimMetaPersist.
+    """
     try:
         validate_string(control_rig_path, "control_rig_path")
         validate_string(control_name, "control_name")
@@ -355,7 +470,12 @@ def set_control_rig_constraint(control_rig_path: str, control_name: str, constra
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("set_control_rig_constraint", {"control_rig_path": control_rig_path, "control_name": control_name, "constraint_type": constraint_type, "target": target})
+        r = u.send_command("set_control_rig_constraint", {
+            "control_rig_path": control_rig_path,
+            "control_name": control_name,
+            "constraint_type": constraint_type,
+            "target": target,
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_control_rig_constraint': {e}")
     return _envelope("set_control_rig_constraint", r)
