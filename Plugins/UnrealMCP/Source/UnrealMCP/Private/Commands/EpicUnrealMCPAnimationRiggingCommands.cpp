@@ -39,15 +39,6 @@ TSharedPtr<FJsonObject> AnimErr(const FString& Msg, const FString& Hint = FStrin
     if (!Hint.IsEmpty()) Out->SetStringField(TEXT("hint"), Hint);
     return Out;
 }
-static TSharedPtr<FJsonObject> AnimQueued(const FString& Cmd, const TSharedPtr<FJsonObject>& Params, const FString& Hint = FString())
-{
-    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-    Data->SetStringField(TEXT("command"), Cmd);
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    if (!Hint.IsEmpty()) Data->SetStringField(TEXT("hint"), Hint);
-    return AnimOk(Data);
-}
 
 #if WITH_ANIM_RIGGING_MCP
 // 234-stubs W1 (#79): persistent metadata tag helper.

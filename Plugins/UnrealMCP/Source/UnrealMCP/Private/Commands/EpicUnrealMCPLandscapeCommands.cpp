@@ -132,20 +132,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleCreateLandscape(c
 // 3-layer contract intact so the AI knows the call landed.
 // ---------------------------------------------------------------------------
 
-static TSharedPtr<FJsonObject> LandscapeQueued(const FString& Cmd, const TSharedPtr<FJsonObject>& Params, const FString& Hint = FString())
-{
-    TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-    Data->SetStringField(TEXT("command"), Cmd);
-    if (Params.IsValid())
-    {
-        // Echo the params object as data.params so callers can confirm what arrived.
-        Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    }
-    Data->SetBoolField(TEXT("queued"), true);
-    if (!Hint.IsEmpty()) Data->SetStringField(TEXT("hint"), Hint);
-    return LandscapeOk(Data);
-}
-
 #if WITH_LANDSCAPE_MCP
 // 234-stubs W1 (#80): Landscape actor resolver + executed-envelope helper.
 //

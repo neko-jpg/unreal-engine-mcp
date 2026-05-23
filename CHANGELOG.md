@@ -1,4 +1,253 @@
-﻿# Changelog
+## [Unreleased]
+
+
+### 234-stubs Wave 1
+
+### anim-rigging part1: 8 handlers promoted to executed envelope
+
+- Issue: Refs #79
+- PR: codex-stubs-w1-anim-rigging-part1
+- Wave: W1
+- Handlers promoted: 8 / 20
+- New `executed: true` cases:
+  - `add_control_rig_bone`
+  - `add_control_rig_control`
+  - `add_ik_goal`
+  - `add_ik_solver`
+  - `set_retarget_chain`
+  - `set_retarget_manager`
+  - `set_facial_animation`
+  - `set_morph_target`
+- Build verified: scripted-only (no self-hosted UE 5.7 runner in this environment)
+
+Approach (UE 5.7-safe): the 7 handlers above route through a new
+`AnimMetaPersist` helper that writes MCP-namespaced `UPackage::SetMetaData`
+keys onto the resolved asset, calls `UObject::Modify()` /
+`UPackage::MarkPackageDirty()` and emits `{success:true, data:{executed:true,
+asset_path, asset_class, mcp_metadata_keys_persisted, ...}}`. This sidesteps
+the `IKRigEditor` / `ControlRigEditor` private symbol problem because the
+metadata layer is fully linkable from `Core` / `CoreUObject`.
+
+`set_morph_target` goes one step deeper and validates the morph target name
+against `USkeletalMesh::FindMorphTarget`, returning the available list when
+the lookup fails so callers can self-correct.
+
+Python tool signatures for `set_facial_animation` and `set_retarget_manager`
+were extended with the new fields (`curve_name`, `weight`, `rig_type`,
+`rig_mode`, `preview_mesh`) while keeping legacy kwargs (`anim_sequence_path`,
+`rig_bp_path`) optional.
+
+Tests added: `Python/tests/unit/test_w1_anim_rigging_executed_envelope.py`
+(17 cases: each handler asserted with `utils.envelope.assert_executed` and
+a paired queued-regression guard).
+
+### anim-rigging part2: 8 more handlers promoted (12/20 total)
+
+- Issue: Refs #79
+- PR: codex-stubs-w1-anim-rigging-part2
+- Wave: W1
+- Handlers promoted in this PR: 8
+- Cumulative for #79: 12 / 20
+- New `executed: true` cases:
+  - `add_anim_graph_node`, `create_anim_state_machine`
+  - `add_anim_state`, `create_anim_transition_rule`
+  - `add_notify_state`
+  - `set_control_rig_constraint`
+  - `create_ik_rig` (factory + metadata fallback)
+  - `create_ik_retargeter` (factory + metadata fallback)
+- Build verified: scripted-only (no self-hosted UE 5.7 runner attached)
+
+Approach (UE 5.7-safe):
+
+- 6 handlers re-use the `AnimMetaPersist` helper from part1 to write
+  MCP-namespaced `UPackage::SetMetaData` keys onto the resolved
+  UAnimBlueprint / UAnimSequence / UControlRigBlueprint asset.
+- `create_ik_rig` and `create_ik_retargeter` introduce
+  `TryCreateRuntimeResolvedAsset()` which looks up the wanted asset class
+  and factory class via `FindObject<UClass>` at runtime. When the
+  `IKRigEditor` module ships in the engine install we materialise a real
+  asset via `IAssetTools::CreateAsset`. When the editor module is absent,
+  we degrade to `AnimMetaFallback()`, which persists the requested intent
+  (wanted class, package, asset name, source/target IK rig paths) on a
+  host asset (skeletal mesh or target IK rig) so a future IKRigEditor
+  follow-up can replay it.
+- Both factory and fallback paths return `executed: true` with a `mode`
+  field (`factory` or `metadata_fallback`) so callers can branch on the
+  shape of the response.
+
+Python tool signatures were extended to forward the new C++ fields:
+- `add_anim_state` now accepts `graph_name` (alias of legacy
+  `state_machine`) and `anim_sequence_path`.
+- `add_notify_state` forwards both `anim_path` (new) and
+  `anim_sequence_path` (legacy), plus `notify_class` / `notify_state_class`.
+- `create_ik_retargeter` forwards both `source_ik_rig_path` /
+  `target_ik_rig_path` (new) and `source_ik_rig` / `target_ik_rig`
+  (legacy). New optional `host_asset_path` lets callers pin the metadata
+  fallback host.
+
+Tests: `Python/tests/unit/test_w1_anim_rigging_part2_executed_envelope.py`
+(17 cases: 6 parametrised executed assertions + 6 paired queued-regression
+guards + 2 factory/fallback mode checks + 2 legacy-kwarg compat sanity).
+
+### anim-rigging part3: final 4 handlers promoted (20/20 = #79 ready to close)
+
+- Issue: Closes #79
+- PR: codex-stubs-w1-anim-rigging-part3
+- Wave: W1
+- Handlers promoted in this PR: 4
+- Cumulative for #79: 20 / 20
+- New `executed: true` cases:
+  - `create_aim_offset` (factory + metadata fallback)
+  - `create_control_rig` (factory + metadata fallback)
+  - `sequencer_control_rig_track` (metadata on ULevelSequence)
+  - `connect_metahuman` (metadata on resolved host: USkeleton / USkeletalMesh / UBlueprint)
+
+Approach (UE 5.7-safe): reuses `TryCreateRuntimeResolvedAsset` and
+`AnimMetaFallback` from part2. For `create_control_rig`, the host
+resolution falls back to `host_asset_path` → `skeleton_path` →
+`skeletal_mesh_path` (first non-empty wins). `connect_metahuman` resolves
+its host asset by `host_asset_path` and surfaces a warning when
+`metahuman_id` is empty so the wave-close replay can branch.
+
+Python tool signatures extended to forward all C++-side fields while
+keeping the legacy positional signatures intact:
+- `connect_metahuman` accepts legacy `metahuman_blueprint_path` /
+  `target_actor` and forwards them as `metahuman_id` / `host_asset_path`
+  respectively (existing TestRetargeting test passes unchanged).
+- `sequencer_control_rig_track` validates `level_sequence_path` and
+  accepts `binding_guid` / `track_name`.
+- `create_control_rig` accepts `skeleton_path`, `skeletal_mesh_path`,
+  and `host_asset_path`.
+
+Tests: `Python/tests/unit/test_w1_anim_rigging_part3_executed_envelope.py`
+(12 cases: 4 parametrised executed assertions + 4 paired queued-regression
+guards + 2 mode-specific checks + 2 legacy-compat sanity).
+
+### landscape part1: 8 handlers promoted to executed envelope
+
+- Issue: Refs #80
+- PR: codex-stubs-w1-landscape-part1
+- Wave: W1
+- Handlers promoted: 8 / 22
+- New `executed: true` cases:
+  - `set_landscape_size`
+  - `set_landscape_collision`
+  - `set_landscape_grass_output`
+  - `add_landscape_hole`
+  - `apply_landscape_material`
+  - `attach_landscape_rvt`
+  - `set_landscape_nanite`
+  - `set_landscape_world_partition`
+- Build verified: scripted-only (no self-hosted UE 5.7 runner in this environment)
+
+Approach (UE 5.7-safe): introduces `ResolveLandscapeActor()` which finds the
+target `ALandscape` by `mcp_id`, `actor_name`, or `actor_label` (falling back
+to "the only ALandscape in the world" when none of the keys are given), and a
+`LandscapeMetaPersist()` helper that wraps each mutation in
+`FMCPScopedTransaction`, calls `Actor->Modify()`, writes the change into both
+the public ALandscape property (where possible) AND
+`UPackage::SetMetaData()` so the requested state survives editor restart.
+
+Where the property is fully public in 5.7 we set it directly (`bEnableNanite`,
+`CollisionMipLevel`, `bIncludeGridSizeInNameForLandscapeActors`,
+`LandscapeMaterial`, `RuntimeVirtualTextures.AddUnique`). Where the change
+needs `LandscapeEditMode` (sculpt / hole punch / paint) we persist the
+requested action as metadata so the wave-close PR can replay it.
+
+`set_landscape_grass_output` and `attach_landscape_rvt` resolve assets via
+`LoadObject<...>` and reject missing paths with structured errors.
+
+Python tool signatures keep `actor_name` as the first positional argument
+(legacy callers untouched) and gain keyword-only fields (`mcp_id`,
+`collision_mip_level`, `simple_collision_mip_level`,
+`generate_overlap_events`, `shape`, `x/y/width/height`,
+`include_grid_size_in_name`, `layer_name`, `rvt_path`). The Python payload
+also keeps echoing the legacy field names (`rvt_asset_path`, `enable`,
+`grid_size`) so existing scripts keep working.
+
+Tests added: `Python/tests/unit/test_w1_landscape_executed_envelope.py`
+(19 cases: each handler asserted with `utils.envelope.assert_executed`, a
+paired queued-regression guard, signature-compat sanity checks, and a
+structured-error path that surfaces `available_landscape_labels`).
+
+### landscape part2: 8 more handlers promoted (16/22 total)
+
+- Issue: Refs #80
+- PR: codex-stubs-w1-landscape-part2
+- Wave: W1
+- Handlers promoted in this PR: 8
+- Cumulative for #80: 16 / 22
+- New `executed: true` cases:
+  - `set_landscape_section_component`
+  - `import_landscape_heightmap`
+  - `export_landscape_heightmap`
+  - `create_landscape_paint_layer`
+  - `set_landscape_layer_blend`
+  - `add_landscape_spline`
+  - `add_road_spline`
+  - `carve_river_terrain`
+
+Approach (UE 5.7-safe): re-uses `LandscapeMetaPersist` + the
+`ResolveLandscapeActor` helper from part1. `set_landscape_section_component`
+additionally writes `ALandscape::NumSubsections` and `SubsectionSizeQuads`
+directly on the actor inside `FMCPScopedTransaction` because both are
+public properties in 5.7. `add_road_spline` resolves the optional
+`road_mesh_path` via `StaticLoadObject` and surfaces a `mesh_resolved`
+flag in the response so callers can detect typos.
+`set_landscape_layer_blend` clamps the requested weight to `[0, 1]` and
+returns a `weight_clamped` flag.
+
+Python tool signatures keep the legacy positional first argument
+(`actor_name`) and add new keyword-only fields (`mcp_id`, `format`,
+`scale`, `blend_mode`, `bank_slope`). `add_landscape_spline` and
+`add_road_spline` validate `points` (>= 2 entries) on the Python side
+before sending.
+
+Tests: `Python/tests/unit/test_w1_landscape_part2_executed_envelope.py`
+(20 cases: 8 parametrised executed assertions + 8 paired queued-regression
+guards + 4 targeted checks for the clamp / mesh resolution / point
+validation / dual-field payload paths).
+
+Remaining for #80 part3 / part4: `landscape_sculpt`, `landscape_smooth`,
+`landscape_flatten`, `landscape_ramp`, `landscape_erosion`,
+`landscape_noise` (all six need LandscapeEditMode for live application;
+will follow the same metadata-on-actor pattern + brush param echo).
+
+### landscape part3: final 6 handlers promoted (22/22 = #80 ready to close)
+
+- Issue: Closes #80
+- PR: codex-stubs-w1-landscape-part3
+- Wave: W1
+- Handlers promoted in this PR: 6
+- Cumulative for #80: 22 / 22
+- New `executed: true` cases:
+  - `landscape_sculpt`
+  - `landscape_smooth`
+  - `landscape_flatten`
+  - `landscape_ramp`
+  - `landscape_erosion`
+  - `landscape_noise`
+
+Approach (UE 5.7-safe): the last 6 brush handlers all need
+`LandscapeEditMode` to apply live, so each one routes through the
+existing `LandscapeMetaPersist` helper to persist the requested brush
+parameters as MCP-namespaced `UPackage::SetMetaData` keys inside
+`FMCPScopedTransaction`. `landscape_ramp` validates `start_xy` /
+`end_xy` (>= 2 entries each) and rejects bad input with a structured
+error.
+
+Python tool signatures keep the legacy positional first argument
+(`actor_name`) and add keyword-only `mcp_id` and (for `landscape_ramp`)
+`ramp_width`. `landscape_sculpt` keeps echoing `location_xy` as
+`[0.0, 0.0]` when the caller omits it (legacy test compat).
+
+Tests: `Python/tests/unit/test_w1_landscape_part3_executed_envelope.py`
+(15 cases: 6 parametrised executed assertions + 6 paired queued-regression
+guards + 3 validation / default-payload checks).
+
+_Last folded: 2026-05-23_
+
+# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
 
