@@ -30,9 +30,12 @@ jobs:
             echo "UnrealMCP.Build.cs is missing AddOptionalModuleGates(); see issue #70."
             exit 1
           fi
-          if grep -nE "UpdateDefaultConfigFile\(" \
+          legacy_calls=$(grep -nE "UpdateDefaultConfigFile\(" \
               Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/*.cpp \
-              | grep -v "TryUpdateDefaultConfigFile" ; then
+              | grep -v "TryUpdateDefaultConfigFile" \
+              | grep -vE "^[^:]+:[0-9]+:[[:space:]]*//" || true)
+          if [ -n "$legacy_calls" ]; then
+            echo "$legacy_calls"
             echo "Found legacy UpdateDefaultConfigFile() call; UE 5.7 requires TryUpdateDefaultConfigFile(). See AGENTS.md."
             exit 1
           fi
@@ -69,3 +72,4 @@ jobs:
               -Package="$pwd\artifacts\UnrealMCP-Plugin" `
               -TargetPlatforms=Win64 `
               -Rocket
+
