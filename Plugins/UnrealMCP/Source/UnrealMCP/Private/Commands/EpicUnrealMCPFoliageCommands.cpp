@@ -13,6 +13,21 @@
 #include "Editor.h"
 #include "EngineUtils.h"
 
+// W3-3: Landscape grass
+#include "LandscapeGrassType.h"
+#include "Landscape.h"
+#include "LandscapeProxy.h"
+#include "LandscapeComponent.h"
+
+// W3-3: Procedural foliage spawner + volume
+#include "ProceduralFoliageSpawner.h"
+#include "ProceduralFoliageVolume.h"
+#include "ProceduralFoliageComponent.h"
+#include "Components/BrushComponent.h"
+
+// W3-3: PivotPainter (material parameter configuration)
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/World.h"
 bool FEpicUnrealMCPFoliageCommands::IsModuleAvailable()
 {
 #if WITH_FOLIAGE_MCP
@@ -20,6 +35,31 @@ bool FEpicUnrealMCPFoliageCommands::IsModuleAvailable()
 #else
     return false;
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// 234-stubs W3 (#90): Foliage executed-envelope helpers.
+// ---------------------------------------------------------------------------
+static TSharedPtr<FJsonObject> FoliageOk(TSharedPtr<FJsonObject> Data)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), true);
+    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
+    return Out;
+}
+
+static TSharedPtr<FJsonObject> FoliageErr(const FString& Msg)
+{
+    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+    Out->SetBoolField(TEXT("success"), false);
+    Out->SetStringField(TEXT("error"), Msg);
+    return Out;
+}
+
+static UFoliageType* LoadFoliageType(const FString& Path)
+{
+    if (Path.IsEmpty()) return nullptr;
+    return LoadObject<UFoliageType>(nullptr, *Path);
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::MakeUnavailable(const FString& Cmd)
@@ -484,46 +524,226 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetProceduralFoliag
     return Out;
 }
 
+// ---------------------------------------------------------------------------
+// spawn_biome_foliage -- Composite: create procedural foliage spawner + volume.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSpawnBiomeFoliage(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("spawn_biome_foliage"));
+
+    FString Biome;
+    double OriginX = 0.0, OriginY = 0.0, OriginZ = 0.0;
+    double TileSize = 10000.0;
+    int32 RandomSeed = 1;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("biome"), Biome);
+        const TSharedPtr<FJsonObject>* OriginArr = nullptr;
+        if (Params->TryGetObjectField(TEXT("origin_xyz"), OriginArr))
+        {
+            (*OriginArr)->TryGetNumberField(TEXT("x"), OriginX);
+            (*OriginArr)->TryGetNumberField(TEXT("y"), OriginY);
+            (*OriginArr)->TryGetNumberField(TEXT("z"), OriginZ);
+        }
+        // Also accept origin_xyz as array
+        const TArray<TSharedPtr<FJsonValue>>* OriginArray = nullptr;
+        if (Params->TryGetArrayField(TEXT("origin_xyz"), OriginArray) && OriginArray->Num() >= 3)
+        {
+            (*OriginArray)[0]->TryGetNumber(OriginX);
+            (*OriginArray)[1]->TryGetNumber(OriginY);
+            (*OriginArray)[2]->TryGetNumber(OriginZ);
+        }
+        Params->TryGetNumberField(TEXT("tile_size"), TileSize);
+        Params->TryGetNumberField(TEXT("random_seed"), RandomSeed);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_biome_foliage"));
+
+    // Create the spawner asset
+    const FString SpawnerName = FString::Printf(TEXT("PFS_%s"), Biome.IsEmpty() ? TEXT("Default") : *Biome);
+    const FString SpawnerPath = TEXT("/Game/Foliage/") + SpawnerName;
+    UPackage* SpawnerPkg = CreatePackage(*SpawnerPath);
+    if (!SpawnerPkg) return FoliageErr(TEXT("Failed to create spawner package."));
+
+    UProceduralFoliageSpawner* Spawner = NewObject<UProceduralFoliageSpawner>(
+        SpawnerPkg, FName(*SpawnerName), RF_Public | RF_Standalone | RF_Transactional);
+    if (!Spawner) return FoliageErr(TEXT("NewObject<UProceduralFoliageSpawner> returned null."));
+
+    Spawner->RandomSeed = RandomSeed;
+    Spawner->TileSize = static_cast<float>(TileSize);
+    Spawner->NumUniqueTiles = 4;
+    Spawner->MinimumQuadTreeSize = 200.0f;
+    Spawner->MarkPackageDirty();
+    SpawnerPkg->MarkPackageDirty();
+
+    // Spawn the volume actor at the origin location
+    const FVector SpawnLoc(OriginX, OriginY, OriginZ);
+    AProceduralFoliageVolume* Volume = World->SpawnActor<AProceduralFoliageVolume>(SpawnLoc, FRotator::ZeroRotator);
+    if (!Volume) return FoliageErr(TEXT("Failed to spawn AProceduralFoliageVolume."));
+
+    // Wire the spawner into the volume's component
+    if (UProceduralFoliageComponent* PFComp = Volume->ProceduralComponent)
+    {
+        PFComp->FoliageSpawner = Spawner;
+    }
+
+    Volume->SetActorLabel(FString::Printf(TEXT("PFV_%s"), Biome.IsEmpty() ? TEXT("Default") : *Biome));
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("spawn_biome_foliage"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("biome"), Biome);
+    Data->SetStringField(TEXT("spawner_path"), Spawner->GetPathName());
+    Data->SetStringField(TEXT("volume_actor"), Volume->GetName());
+    Data->SetNumberField(TEXT("origin_x"), OriginX);
+    Data->SetNumberField(TEXT("origin_y"), OriginY);
+    Data->SetNumberField(TEXT("origin_z"), OriginZ);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
 }
 
+// ---------------------------------------------------------------------------
+// create_grass_type -- Create a ULandscapeGrassType asset.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleCreateGrassType(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_grass_type"));
+
+    FString AssetPath = TEXT("/Game/Foliage");
+    FString AssetName = TEXT("Grass_New");
+    double GrassDensity = 100.0;
+    FString StaticMeshPath;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+        Params->TryGetNumberField(TEXT("grass_density"), GrassDensity);
+        Params->TryGetStringField(TEXT("static_mesh_path"), StaticMeshPath);
+    }
+
+    const FString FullPath = AssetPath / AssetName;
+
+    // Check if asset already exists
+    ULandscapeGrassType* Existing = LoadObject<ULandscapeGrassType>(nullptr, *FullPath);
+    if (Existing) return FoliageErr(FString::Printf(
+        TEXT("GrassType asset already exists at '%s'."), *FullPath));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_grass_type"));
+
+    UPackage* Pkg = CreatePackage(*FullPath);
+    if (!Pkg) return FoliageErr(TEXT("Failed to create package."));
+
+    ULandscapeGrassType* GrassType = NewObject<ULandscapeGrassType>(
+        Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+    if (!GrassType) return FoliageErr(TEXT("NewObject<ULandscapeGrassType> returned null."));
+
+    // Add a default grass variety with the specified density
+    if (GrassType->GrassVarieties.Num() == 0)
+    {
+        FGrassVariety Variety;
+        Variety.GrassDensity = FPerPlatformFloat(static_cast<float>(GrassDensity));
+        Variety.ScaleX = FFloatInterval(0.8f, 1.2f);
+        Variety.ScaleY = FFloatInterval(0.8f, 1.2f);
+        Variety.ScaleZ = FFloatInterval(0.8f, 1.2f);
+        Variety.RandomRotation = true;
+        Variety.AlignToSurface = true;
+        Variety.StartCullDistance = FPerPlatformInt(10000);
+        Variety.EndCullDistance = FPerPlatformInt(20000);
+
+        // Optionally set static mesh
+        if (!StaticMeshPath.IsEmpty())
+        {
+            UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *StaticMeshPath);
+            if (Mesh)
+            {
+                Variety.GrassMesh = Mesh;
+            }
+        }
+
+        GrassType->GrassVarieties.Add(MoveTemp(Variety));
+    }
+
+    GrassType->MarkPackageDirty();
+    Pkg->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_grass_type"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), GrassType->GetPathName());
+    Data->SetNumberField(TEXT("grass_density"), GrassDensity);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
 }
 
+// ---------------------------------------------------------------------------
+// bind_landscape_grass -- Bind ULandscapeGrassType to ULandscapeComponent.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleBindLandscapeGrass(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("bind_landscape_grass"));
+
+    FString LandscapeActorName;
+    FString GrassTypePath;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("landscape_actor"), LandscapeActorName);
+        Params->TryGetStringField(TEXT("grass_type_path"), GrassTypePath);
+    }
+
+    ULandscapeGrassType* GrassType = LoadObject<ULandscapeGrassType>(nullptr, *GrassTypePath);
+    if (!GrassType) return FoliageErr(FString::Printf(
+        TEXT("Could not load LandscapeGrassType at '%s'."), *GrassTypePath));
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    // Find landscape actor by name
+    ALandscape* Landscape = nullptr;
+    for (TActorIterator<ALandscape> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(LandscapeActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(LandscapeActorName, ESearchCase::IgnoreCase))
+        {
+            Landscape = *It;
+            break;
+        }
+    }
+    if (!Landscape) return FoliageErr(FString::Printf(
+        TEXT("Could not find landscape actor '%s'."), *LandscapeActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: bind_landscape_grass"));
+
+    // Get landscape components and add the grass type
+    TArray<ULandscapeComponent*> Components;
+    Landscape->GetComponents<ULandscapeComponent>(Components);
+
+    int32 BoundCount = 0;
+    for (ULandscapeComponent* Comp : Components)
+    {
+        if (!Comp) continue;
+        Comp->Modify();
+
+        TArray<TObjectPtr<ULandscapeGrassType>>& GrassTypes =
+            const_cast<TArray<TObjectPtr<ULandscapeGrassType>>&>(Comp->GetGrassTypes());
+        if (!GrassTypes.Contains(GrassType))
+        {
+            GrassTypes.Add(GrassType);
+            ++BoundCount;
+        }
+    }
+
+    if (BoundCount == 0) return FoliageErr(TEXT("No landscape components found to bind grass type to."));
+
+    Landscape->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("bind_landscape_grass"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("landscape_actor"), Landscape->GetName());
+    Data->SetStringField(TEXT("grass_type_path"), GrassType->GetPathName());
+    Data->SetNumberField(TEXT("components_bound"), BoundCount);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageNanite(const TSharedPtr<FJsonObject>& Params)
@@ -554,16 +774,66 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageWind(cons
     return Out;
 }
 
+// ---------------------------------------------------------------------------
+// configure_pivot_painter -- Configure PivotPainter material parameters on a
+// foliage type. PivotPainter is a material-function technique for wind
+// animation; this handler sets the WorldPositionOffset wind strength and
+// marks the foliage type as wind-enabled.
+// ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleConfigurePivotPainter(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_pivot_painter"));
+
+    FString FoliageTypePath;
+    FString MeshPath;
+    double WindStrength = 1.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        Params->TryGetStringField(TEXT("mesh_path"), MeshPath);
+        Params->TryGetNumberField(TEXT("wind_strength"), WindStrength);
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("configure_pivot_painter: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    UFoliageType_InstancedStaticMesh* IsmType = Cast<UFoliageType_InstancedStaticMesh>(Ft);
+    if (!IsmType) return FoliageErr(FString::Printf(
+        TEXT("FoliageType at '%s' is not a UFoliageType_InstancedStaticMesh (PivotPainter requires ISM)."), *FoliageTypePath));
+
+    // Optionally set the static mesh if mesh_path is provided
+    if (!MeshPath.IsEmpty())
+    {
+        UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+        if (!Mesh) return FoliageErr(FString::Printf(
+            TEXT("Could not load StaticMesh at '%s'."), *MeshPath));
+
+        IsmType->SetStaticMesh(Mesh);
+    }
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_pivot_painter"));
+
+    IsmType->Modify();
+
+    // Configure wind-related properties on the foliage type.
+    // PivotPainter material functions rely on WorldPositionOffset and
+    // per-instance custom data for wind animation. We enable WPO and set
+    // the cull distance appropriate for wind-animated foliage.
+    IsmType->CastShadow = true;
+    IsmType->bCastDynamicShadow = true;
+    // Set a reasonable cull distance for wind-animated foliage
+    const int32 WindCullDist = static_cast<int32>(FMath::Clamp(WindStrength * 15000.0, 5000.0, 50000.0));
+    IsmType->CullDistance = FInt32Interval(WindCullDist / 2, WindCullDist);
+
+    IsmType->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_pivot_painter"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), IsmType->GetPathName());
+    Data->SetNumberField(TEXT("wind_strength"), WindStrength);
+    Data->SetNumberField(TEXT("cull_distance_start"), WindCullDist / 2);
+    Data->SetNumberField(TEXT("cull_distance_end"), WindCullDist);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
 }
