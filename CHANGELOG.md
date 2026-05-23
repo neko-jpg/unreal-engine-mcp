@@ -1,9 +1,50 @@
-﻿# Changelog
+# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
 
 ---
 
+## [2026-05-23] - Sub-batch AA: Packaging / Build / Deployment extensions (5 tasks.md items, issue #56)
+
+Adds a Packaging extensions handler class (route 42, FEpicUnrealMCPPackagingExtensionCommands) covering the remaining 5 `[~]` items in the `Packaging / Build / Deployment` section of `docs/superpowers/plans/tasks.md`:
+
+- `set_live_coding_mode` — wraps `ILiveCodingModule::EnableForSession()` / `Compile()` (Editor + Windows only, gated by `WITH_LIVE_CODING` + `PLATFORM_WINDOWS`).  Non-Windows / non-Editor builds return `{"available": false}` so callers can branch on it without erroring out.
+- `set_pak_iostore_settings` — mutates `UProjectPackagingSettings` `bUsePakFile` / `bUseIoStore` / `bCompressed` / `bGenerateNoChunks` and persists via `TryUpdateDefaultConfigFile()`.
+- `set_chunk_settings` — flips `bGenerateChunks` / `bChunkHardReferencesOnly` and echoes the `has_chunk_assignment_rules` intent back to the caller with a hint pointing at `UAssetManager` PrimaryAssetType rules.
+- `set_localization_cook_settings` — updates `CulturesToStage` / `bCookAll` / `LocalizationTargetsToChunk` on `UProjectPackagingSettings` (empty list clears, `None` leaves the field untouched).
+- `set_crash_reporter_settings` — UE 5.7 ships no UCLASS for client-side crash settings, so the handler writes `CrashReportClientEmail` / `bSendUnattendedBugReports` / `bSendUsageData` under `[CrashReportClient]` in `Config/DefaultEngine.ini` through `GConfig` and flushes the file so changes survive editor restarts.
+
+All UObject-backed settings paths use `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates `UpdateDefaultConfigFile()`).  The handler does not invoke the deprecated entry point anywhere.
+
+### Added / Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPPackagingExtensionCommands.{h,cpp}` — new handler class.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` — `#include` + `RegisterHandler<FEpicUnrealMCPPackagingExtensionCommands>(42);`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPRouter.cpp` — 5 new `{TEXT(...), 42}` entries.
+- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` — adds `DeveloperToolSettings` to `PrivateDependencyModuleNames` and a Cesium-style probe for `LiveCoding` that toggles `WITH_LIVE_CODING=0/1` (Editor + Win64 only).
+- `Python/server/packaging_extension_tools.py` (new) — 5 `@mcp.tool()` wrappers (1:1 with command names) that drop `None` fields from the payload so the C++ side can detect `unspecified` vs `set to false / empty list`.
+- `Python/server/__init__.py` — bootstrap import for the new tool module.
+- `Python/tests/unit/test_packaging_extension_tools.py` (new) — 15 L1 unit tests covering payload shape, `None` dropping, empty-list semantics, `available=False` envelope passthrough, and the three error paths (no connection / send exception / Unreal `success=False`).
+- `Python/tests/unit/test_tool_registration_and_mapping.py` — adds `packaging_extension_tools` to the import + patch lists so the cross-module registration test continues to cover every sub-batch.
+- `docs/superpowers/plans/tasks.md` — flipped the 5 `[~]` Packaging items to `[x]` (Sub-batch AA).
+- Companion documentation fix: the same task list flipped 3 `[~]` Static Mesh / Mesh Editing items (Mesh Bake, Boolean, Voxel Remesh) to `[x]` because those commands are already wired through `EpicUnrealMCPMeshEditingCommands` + `mesh_editing_tools.py` + router id 8 — the task list was simply out of date.  See issue #39 closure note.
+
+### Verification
+
+- `python -m pytest Python/tests/unit -q -p no:cacheprovider`; **1091 passed** (1076 previous + 15 new).
+- `python -m pytest Python/tests/unit/test_packaging_extension_tools.py -v`; **15/15 passed**.
+- `python scripts/audit_route_contracts.py --strict`; exit 0.  `python_and_cpp: 744` (was 739; +5).  `cpp_only` remains at the 16-item whitelist with no drift.
+- `powershell -ExecutionPolicy Bypass -File .\scripts\sync-unrealmcp-plugin.ps1 -Verify`; `VERIFY OK: target matches source (154 files).`
+- `Build.bat FlopperamUnrealMCPEditor Win64 Development` (UE 5.7); the new `EpicUnrealMCPPackagingExtensionCommands.cpp` translation unit compiles cleanly (0 errors / 0 warnings).  The overall editor link is currently blocked by unrelated pre-existing errors in other sub-batches (Validation / AnimationRigging / Physics / Rendering / Navigation -- `UEnvQuery::QueryName` protected access, `CineCameraRigRail.h` / `EditorValidatorSubsystem.h` / `PhysicsEngine/PhysicsAssetFactory.h` missing includes, `UCollisionProfile::ReadChannelDisplayNames` rename); those are tracked separately and are out of scope for this sub-batch.
+- `Select-String -Path 'Plugins\UnrealMCP\Source\UnrealMCP\Private\Commands\EpicUnrealMCPPackagingExtensionCommands.cpp' -Pattern 'UpdateDefaultConfigFile\b(?!\()'`; 0 matches.  `Select-String -Path 'Plugins\UnrealMCP\Source\UnrealMCP\Private\Commands\EpicUnrealMCPPackagingExtensionCommands.cpp' -Pattern '\bUpdateDefaultConfigFile\('` (the deprecated UE 5.7 entry point); 0 matches (the file uses `TryUpdateDefaultConfigFile()` exclusively).
+- Final task ledger: `docs/superpowers/plans/tasks.md` -> `[x] 773 / [~] 0 / [ ] 0` (was `[x] 765 / [~] 8 / [ ] 0` before this sub-batch).  Open GitHub Issues #39 + #56 close out with this commit.
+
+### Notes
+
+- UE 5.7 modules: `DeveloperToolSettings` (`UProjectPackagingSettings` with `MinimalAPI` UCLASS), `LiveCoding` (`ILiveCodingModule` under `Engine/Source/Developer/Windows/LiveCoding/Public`).  Crash Reporter client-side settings ship as `[CrashReportClient]` ini keys rather than a UCLASS in UE 5.7, so the handler writes through `GConfig` + `Flush(false, GEngineIni)`.
+- Optional plugin / module detection uses the same Cesium-style probe pattern already in `UnrealMCP.Build.cs`, so a build environment without the Windows `LiveCoding` module still compiles cleanly with `WITH_LIVE_CODING=0`.
+- Issue #39 (Static Mesh / Mesh Editing residue) is closed by the same commit because the three `[~]` entries simply never made it onto the `tasks.md` ledger; the underlying `mesh_bake` / `mesh_boolean` / `mesh_voxel_remesh` commands have been wired through C++ + router + Python since the W1-B sub-batch (see `EpicUnrealMCPMeshEditingCommands.cpp` `HandleMeshBake` / `HandleMeshBoolean` / `HandleMeshVoxelRemesh` and the router id `8` entries).
+---
 ## [2026-05-23] - Sub-batch Z: Sequencer / Cinematics extensions (6 tasks.md items, issue #52)
 
 Adds a Sequencer extensions handler class (route 41, `FEpicUnrealMCPSequencerExtensionCommands`) covering all 5 `[ ]` + 1 `[~]` Sequencer items (Camera Rail / Crane spawn, Sequencer Render Preview hook, Take Recorder source register, Control Rig Track add on Skeletal binding, Level Sequence Actor placement).
@@ -1247,7 +1288,7 @@ the plan in `docs/implementation-plan-tasks-unimplemented.md`.
   - `EpicUnrealMCPBlueprintGraphCommands.cpp`: `HandleAddBlueprintNode`, `HandleConnectNodes`, `HandleCreateVariable`, `HandleSetVariableProperties`, `HandleAddEventNode`, `HandleDeleteNode`, `HandleSetNodeProperty`, `HandleCreateFunction`, `HandleAddFunctionInput`, `HandleAddFunctionOutput`, `HandleDeleteFunction`, `HandleRenameFunction`
 - Added `Actor->Modify()` call in `HandleSetActorTransform` before modifying the transform, so the transaction records the previous state correctly.
 
-#### Tests 窶・Python/C++ command mapping
+#### Tests  - Python/C++ command mapping
 
 - Added `TestPythonToCppCommandMapping` class in `Python/tests/unit/test_tool_registration_and_mapping.py` with four tests:
   - `test_python_commands_are_handled_in_cpp`: every command that Python sends to Unreal has a matching C++ dispatcher route.
@@ -1262,7 +1303,7 @@ the plan in `docs/implementation-plan-tasks-unimplemented.md`.
 
 - Updated tool count from ~38 to 46.
 - Added `batch_spawn_actors`, `add_event_node`, `get_actor_material_info`, `get_blueprint_material_info` to the tool table.
-- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10窶・.13 supported)" to match `pyproject.toml`.
+- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10 - .13 supported)" to match `pyproject.toml`.
 
 #### `unreal_mcp_server_advanced.py`
 

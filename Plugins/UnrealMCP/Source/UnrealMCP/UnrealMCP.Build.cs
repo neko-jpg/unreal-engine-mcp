@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
 
@@ -80,9 +80,10 @@ public class UnrealMCP : ModuleRules
 				"MovieSceneTracks",     // For UMovieScene3DTransformSection / Track / CameraCutTrack / EventTrack
 			"LevelSequence",		// For ULevelSequence and Sequencer tracks
 				"CommonUI",				// For Common UI widget class support
-				"CommonInput"			// For Common UI input routing dependencies
-			}
-		);
+				"CommonInput"          // For Common UI input routing dependencies
+            ,"DeveloperToolSettings"  // For UProjectPackagingSettings (Sub-batch AA)
+            }
+        );
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
@@ -220,6 +221,30 @@ public class UnrealMCP : ModuleRules
 		else
 		{
 			PublicDefinitions.Add("WITH_ANIM_RIGGING_MCP=0");
+		}
+	
+		// ----- Optional Live Coding integration (Sub-batch AA, route 42, issue #56) -----
+		// Live Coding is shipped only on the Windows host editor in UE 5.7
+		// (Engine/Source/Developer/Windows/LiveCoding).  We hard-gate on both
+		// the platform and editor build so non-Windows or non-editor targets
+		// fall back to the graceful "available=false" path.
+		bool bLiveCodingFound = false;
+		if (Target.bBuildEditor && Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			string LiveCodingProbe = System.IO.Path.Combine(EngineDirectory, "Source", "Developer", "Windows", "LiveCoding", "Public", "ILiveCodingModule.h");
+			if (System.IO.File.Exists(LiveCodingProbe))
+			{
+				bLiveCodingFound = true;
+			}
+		}
+		if (bLiveCodingFound)
+		{
+			PublicDefinitions.Add("WITH_LIVE_CODING=1");
+			PrivateDependencyModuleNames.Add("LiveCoding");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_LIVE_CODING=0");
 		}
 	}
 }

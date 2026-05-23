@@ -1,4 +1,4 @@
-﻿#include "EpicUnrealMCPBridge.h"
+#include "EpicUnrealMCPBridge.h"
 #include "MCPServerRunnable.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
@@ -95,6 +95,7 @@
 #include "Commands/EpicUnrealMCPDataTableExtensionCommands.h"
 #include "Commands/EpicUnrealMCPMetaSoundCommands.h"
 #include "Commands/EpicUnrealMCPSequencerExtensionCommands.h"
+#include "Commands/EpicUnrealMCPPackagingExtensionCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -372,6 +373,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPDataTableExtensionCommands>(40); // Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54)
     RegisterHandler<FEpicUnrealMCPMetaSoundCommands>(34); // MetaSound / Audio extensions (Sub-batch Y, route 34, issue #50)
     RegisterHandler<FEpicUnrealMCPSequencerExtensionCommands>(41); // Sequencer / Cinematics extensions (Sub-batch Z, route 41, issue #52)
+    RegisterHandler<FEpicUnrealMCPPackagingExtensionCommands>(42); // Packaging / Build / Deployment extensions (Sub-batch AA, route 42, issue #56)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()
