@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch S: Water System (15 tasks.md items, issue #46)
+
+Adds a Water handler class (route 31, `FEpicUnrealMCPWaterCommands`) covering 15 Water System items (plugin enable, ocean / lake / river / custom water bodies, river spline edit, water material, waves, flow, buoyancy, water mesh actor, underwater post process, shoreline smoothness, landscape carving, floating actor attach). All commands accept the desired-state payload; finishing the carve / mesh rebuild runs in the editor's Water Brush Manager.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 670` (was 655; +15).
+- `python -m pytest Python/tests/unit/test_water_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **20 passed**.
+---
+
 ## [2026-05-23] - Sub-batch R: Gameplay Ability System (16 tasks.md items, issue #55)
 
 Adds a GAS handler class (route 30, `FEpicUnrealMCPGASCommands`) covering all 16 GAS items (plugin enable, ASC attach, AttributeSet / GameplayAbility / GameplayEffect / GameplayCue asset creation, ability input bind, grant, activation policy, cooldown, cost, attribute init + change event, GameplayTag link, ASC replication mode, Prediction toggle).

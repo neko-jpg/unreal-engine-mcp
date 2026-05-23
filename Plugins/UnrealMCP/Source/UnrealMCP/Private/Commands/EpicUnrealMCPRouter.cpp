@@ -365,6 +365,23 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("link_gameplay_tag"), 30},
         {TEXT("configure_gas_replication"), 30},
         {TEXT("configure_gas_prediction"), 30},
+        // ---- Water System (Sub-batch S, route 31, issue #46) ----
+        {TEXT("enable_water_plugin"), 31},
+        {TEXT("spawn_water_body_ocean"), 31},
+        {TEXT("spawn_water_body_lake"), 31},
+        {TEXT("spawn_water_body_river"), 31},
+        {TEXT("spawn_water_body_custom"), 31},
+        {TEXT("configure_river_spline"), 31},
+        {TEXT("set_water_material"), 31},
+        {TEXT("configure_water_wave"), 31},
+        {TEXT("configure_water_flow"), 31},
+        {TEXT("configure_buoyancy"), 31},
+        {TEXT("configure_water_mesh_actor"), 31},
+        {TEXT("configure_underwater_post_process"), 31},
+        {TEXT("configure_shoreline"), 31},
+        {TEXT("configure_water_landscape_carving"), 31},
+        {TEXT("attach_floating_actor"), 31},
+
 
 
 
