@@ -1,0 +1,35 @@
+name: 234-stubs follow-up
+description: Track a follow-up that falls out of scope of an existing wave / category issue.
+title: "[234-stubs follow-up] <area>: <short title>"
+labels:
+  - stub-impl
+  - stub-tracker
+body:
+  - type: input
+    id: parent-issue
+    attributes:
+      label: Parent wave / category issue
+      placeholder: "#84"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What is the residual work this issue tracks?
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done
+      description: Bullet list of acceptance criteria.
+    validations:
+      required: true
+  - type: textarea
+    id: ue57-api
+    attributes:
+      label: UE 5.7 API references
+      description: |
+        Required if this issue describes an implementation. List the search
+        terms, docs, and headers consulted (AGENTS.md compliance).

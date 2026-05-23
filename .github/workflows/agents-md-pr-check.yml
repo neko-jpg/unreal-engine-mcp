@@ -1,0 +1,49 @@
+name: AGENTS.md PR body check (234-stubs)
+
+# 234-stubs Wave 0.5 follow-up (umbrella: #69).
+#
+# Any PR labelled `stub-impl` (set by the labeler workflow when a
+# stub category C++ file changes) must include the AGENTS.md-mandated
+# `## UE 5.7 API research` section in its body. This makes the
+# "no learned-data API guessing" rule enforceable in CI instead of
+# relying on reviewer memory.
+#
+# Body sections looked up:
+#   * "## UE 5.7 API research"
+#   * "## Scope reconciliation"
+#   * "## Tests"
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enforce-research-section:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'stub-impl')
+    steps:
+      - name: Verify required PR body sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = (context.payload.pull_request.body || '').replace(/\r\n/g, '\n');
+            const required = [
+              '## Scope reconciliation',
+              '## UE 5.7 API research',
+              '## Tests',
+            ];
+            const missing = required.filter((h) => !body.includes(h));
+            if (missing.length > 0) {
+              core.setFailed(
+                'PR body is missing required AGENTS.md sections: ' +
+                missing.join(', ') +
+                '. See docs/dev/shared-file-policy.md and ' +
+                '.github/PULL_REQUEST_TEMPLATE.md.'
+              );
+              return;
+            }
+            core.info('All required PR body sections present.');

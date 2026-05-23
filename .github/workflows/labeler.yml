@@ -1,0 +1,28 @@
+name: PR labeler (234-stubs)
+
+# 234-stubs Wave 0.5 follow-up (umbrella: #69).
+#
+# Reads .github/labeler.yml and applies path-based labels to PRs so
+# that:
+#   * `ue5.7-build` triggers the gated RunUAT BuildPlugin job in
+#     .github/workflows/ue57-build.yml.
+#   * `stub-impl` triggers the agents-md-pr-check workflow.
+#   * `stub-cat-*` lets reviewers slice PRs by category.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: false

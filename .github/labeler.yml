@@ -1,0 +1,177 @@
+# 234-stubs Wave 0.5 follow-up (umbrella: #69).
+#
+# Drives .github/workflows/labeler.yml so that PRs touching the
+# UnrealMCP plugin sources or specific stub categories get the right
+# labels automatically. The labels then gate the heavy UE 5.7 build
+# job in ue57-build.yml and let reviewers filter category PRs.
+#
+# Path patterns use the actions/labeler v5 'changed-files' syntax.
+
+ue5.7-build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/**"
+          - "scripts/run_local_uat_buildplugin.ps1"
+          - ".github/workflows/ue57-build.yml"
+
+stub-impl:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPAiNavExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPAnimationRiggingCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPChaosCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPDataTableExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPFoliageCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPGASCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPLandscapeCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPLocalizationCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMetaSoundCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMobileXrCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMovieRenderQueueCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNetworkingCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPPCGCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPSequencerExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPSourceControlCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPTestingValidationCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPWaterCommands.cpp"
+
+# Wave 1 (M6)
+stub-cat-anim-rigging:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPAnimationRiggingCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPAnimationRiggingCommands.h"
+          - "Python/server/anim_rigging_tools.py"
+          - "Python/tests/unit/test_anim_rigging_*.py"
+
+stub-cat-landscape:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPLandscapeCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPLandscapeCommands.h"
+          - "Python/server/landscape_tools.py"
+          - "Python/tests/unit/test_landscape_*.py"
+
+# Wave 2 (M7)
+stub-cat-ai-nav-extension:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPAiNavExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPAiNavExtensionCommands.h"
+          - "Python/server/ai_nav_extension_tools.py"
+          - "Python/tests/unit/test_ai_nav_extension_*.py"
+
+stub-cat-data-table-extension:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPDataTableExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPDataTableExtensionCommands.h"
+          - "Python/server/data_table_extension_tools.py"
+          - "Python/tests/unit/test_data_table_extension_*.py"
+
+stub-cat-gas:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPGASCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPGASCommands.h"
+          - "Python/server/gas_tools.py"
+          - "Python/tests/unit/test_gas_*.py"
+
+stub-cat-sequencer-extension:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPSequencerExtensionCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPSequencerExtensionCommands.h"
+          - "Python/server/sequencer_extension_tools.py"
+          - "Python/tests/unit/test_sequencer_extension_*.py"
+
+# Wave 3 (M8)
+stub-cat-chaos:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPChaosCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPChaosCommands.h"
+          - "Python/server/chaos_tools.py"
+          - "Python/tests/unit/test_chaos_*.py"
+
+stub-cat-foliage:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPFoliageCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPFoliageCommands.h"
+          - "Python/server/foliage_tools.py"
+          - "Python/tests/unit/test_foliage_*.py"
+
+stub-cat-pcg:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPPCGCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPPCGCommands.h"
+          - "Python/server/pcg_tools.py"
+          - "Python/tests/unit/test_pcg_*.py"
+
+stub-cat-water:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPWaterCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPWaterCommands.h"
+          - "Python/server/water_tools.py"
+          - "Python/tests/unit/test_water_*.py"
+
+# Wave 4 (M9)
+stub-cat-localization:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPLocalizationCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPLocalizationCommands.h"
+          - "Python/server/localization_tools.py"
+          - "Python/tests/unit/test_localization_*.py"
+
+stub-cat-movie-render-queue:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMovieRenderQueueCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMovieRenderQueueCommands.h"
+          - "Python/server/movie_render_queue_tools.py"
+          - "Python/tests/unit/test_movie_render_queue_*.py"
+
+stub-cat-networking:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNetworkingCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPNetworkingCommands.h"
+          - "Python/server/networking_tools.py"
+          - "Python/tests/unit/test_networking_*.py"
+
+stub-cat-source-control:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPSourceControlCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPSourceControlCommands.h"
+          - "Python/server/source_control_tools.py"
+          - "Python/tests/unit/test_source_control_*.py"
+
+# Wave 5 (M10)
+stub-cat-metasound:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMetaSoundCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMetaSoundCommands.h"
+          - "Python/server/metasound_tools.py"
+          - "Python/tests/unit/test_metasound_*.py"
+
+stub-cat-mobile-xr:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMobileXrCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMobileXrCommands.h"
+          - "Python/server/mobile_xr_tools.py"
+          - "Python/tests/unit/test_mobile_xr_*.py"
+
+stub-cat-testing-validation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPTestingValidationCommands.cpp"
+          - "Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPTestingValidationCommands.h"
+          - "Python/server/testing_validation_tools.py"
+          - "Python/tests/unit/test_testing_validation_*.py"

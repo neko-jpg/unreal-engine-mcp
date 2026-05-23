@@ -177,5 +177,7 @@ FlopperamUnrealMCP/Content/Tests/MCP_Runtime/
 # Generated source-built UnrealMCP plugin copy; canonical source is Plugins/UnrealMCP/.
 FlopperamUnrealMCP/Plugins/
 
-# Generated test/report artifacts
-artifacts/
+# Generated test/report artifacts (queued_baseline.json is versioned)
+/artifacts/*
+!/artifacts/queued_baseline.json
+
