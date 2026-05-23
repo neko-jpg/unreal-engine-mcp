@@ -295,17 +295,267 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeSize(
     return MakeLandscapeUnavailableResponse(TEXT("set_landscape_size"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeSectionComponent(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("set_landscape_section_component"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleImportLandscapeHeightmap(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("import_landscape_heightmap"), P, TEXT("Heightmap PNG/RAW import is interactive in 5.7; payload recorded for batch step.")); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleExportLandscapeHeightmap(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("export_landscape_heightmap"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeSculpt(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_sculpt"), P, TEXT("Brush strokes need LandscapeEditMode active.")); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeSmooth(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_smooth"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeFlatten(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_flatten"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeRamp(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_ramp"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeErosion(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_erosion"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeNoise(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("landscape_noise"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleCreateLandscapePaintLayer(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("create_landscape_paint_layer"), P, TEXT("Create the ULandscapeLayerInfoObject asset via the editor weight-blend layer panel.")); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeLayerBlend(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("set_landscape_layer_blend"), P); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeSectionComponent(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("set_landscape_section_component"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("set_landscape_section_component"), P,
+        [&](ALandscape* L, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double SectionsPerComponent = L->NumSubsections;
+            double QuadsPerSection = L->SubsectionSizeQuads;
+            P->TryGetNumberField(TEXT("sections_per_component"), SectionsPerComponent);
+            P->TryGetNumberField(TEXT("quads_per_section"), QuadsPerSection);
+            // NumSubsections / SubsectionSizeQuads are int32 public properties on ALandscape (and inherited from ALandscapeProxy).
+            L->NumSubsections = (int32)SectionsPerComponent;
+            L->SubsectionSizeQuads = (int32)QuadsPerSection;
+            Kv.Add(TEXT("sections_per_component"), FString::FromInt((int32)SectionsPerComponent));
+            Kv.Add(TEXT("quads_per_section"), FString::FromInt((int32)QuadsPerSection));
+            Out->SetNumberField(TEXT("sections_per_component"), SectionsPerComponent);
+            Out->SetNumberField(TEXT("quads_per_section"), QuadsPerSection);
+            Out->SetNumberField(TEXT("component_size_quads_derived"), (int32)SectionsPerComponent * (int32)QuadsPerSection);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("set_landscape_section_component"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleImportLandscapeHeightmap(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("import_landscape_heightmap"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("import_landscape_heightmap"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            FString HeightmapPath, Format = TEXT("png");
+            double Scale = 1.0;
+            if (!P->TryGetStringField(TEXT("heightmap_path"), HeightmapPath) || HeightmapPath.IsEmpty())
+                return TOptional<FString>(TEXT("'import_landscape_heightmap' requires 'heightmap_path'."));
+            P->TryGetStringField(TEXT("format"), Format);
+            P->TryGetNumberField(TEXT("scale"), Scale);
+            Kv.Add(TEXT("heightmap_path"), HeightmapPath);
+            Kv.Add(TEXT("format"), Format);
+            Kv.Add(TEXT("scale"), FString::Printf(TEXT("%f"), Scale));
+            Out->SetStringField(TEXT("heightmap_path"), HeightmapPath);
+            Out->SetStringField(TEXT("format"), Format);
+            Out->SetNumberField(TEXT("scale"), Scale);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("import_landscape_heightmap"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleExportLandscapeHeightmap(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("export_landscape_heightmap"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("export_landscape_heightmap"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            FString OutputPath, Format = TEXT("png");
+            if (!P->TryGetStringField(TEXT("output_path"), OutputPath) || OutputPath.IsEmpty())
+                return TOptional<FString>(TEXT("'export_landscape_heightmap' requires 'output_path'."));
+            P->TryGetStringField(TEXT("format"), Format);
+            Kv.Add(TEXT("output_path"), OutputPath);
+            Kv.Add(TEXT("format"), Format);
+            Out->SetStringField(TEXT("output_path"), OutputPath);
+            Out->SetStringField(TEXT("format"), Format);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("export_landscape_heightmap"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeSculpt(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_sculpt"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_sculpt"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double BrushRadius = 100.0, BrushStrength = 0.5;
+            P->TryGetNumberField(TEXT("brush_radius"), BrushRadius);
+            P->TryGetNumberField(TEXT("brush_strength"), BrushStrength);
+            const TArray<TSharedPtr<FJsonValue>>* LocationArr = nullptr;
+            double LocX = 0.0, LocY = 0.0;
+            if (P->TryGetArrayField(TEXT("location_xy"), LocationArr) && LocationArr && LocationArr->Num() >= 2)
+            {
+                LocX = (*LocationArr)[0]->AsNumber();
+                LocY = (*LocationArr)[1]->AsNumber();
+            }
+            Kv.Add(TEXT("brush_radius"), FString::Printf(TEXT("%f"), BrushRadius));
+            Kv.Add(TEXT("brush_strength"), FString::Printf(TEXT("%f"), BrushStrength));
+            Kv.Add(TEXT("location_x"), FString::Printf(TEXT("%f"), LocX));
+            Kv.Add(TEXT("location_y"), FString::Printf(TEXT("%f"), LocY));
+            Out->SetNumberField(TEXT("brush_radius"), BrushRadius);
+            Out->SetNumberField(TEXT("brush_strength"), BrushStrength);
+            Out->SetNumberField(TEXT("location_x"), LocX);
+            Out->SetNumberField(TEXT("location_y"), LocY);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_sculpt"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeSmooth(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_smooth"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_smooth"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double BrushRadius = 200.0;
+            double Iterations = 1.0;
+            P->TryGetNumberField(TEXT("brush_radius"), BrushRadius);
+            P->TryGetNumberField(TEXT("iterations"), Iterations);
+            Kv.Add(TEXT("brush_radius"), FString::Printf(TEXT("%f"), BrushRadius));
+            Kv.Add(TEXT("iterations"), FString::FromInt((int32)Iterations));
+            Out->SetNumberField(TEXT("brush_radius"), BrushRadius);
+            Out->SetNumberField(TEXT("iterations"), (int32)Iterations);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_smooth"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeFlatten(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_flatten"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_flatten"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double TargetHeight = 0.0, BrushRadius = 200.0;
+            P->TryGetNumberField(TEXT("target_height"), TargetHeight);
+            P->TryGetNumberField(TEXT("brush_radius"), BrushRadius);
+            Kv.Add(TEXT("target_height"), FString::Printf(TEXT("%f"), TargetHeight));
+            Kv.Add(TEXT("brush_radius"), FString::Printf(TEXT("%f"), BrushRadius));
+            Out->SetNumberField(TEXT("target_height"), TargetHeight);
+            Out->SetNumberField(TEXT("brush_radius"), BrushRadius);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_flatten"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeRamp(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_ramp"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_ramp"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            const TArray<TSharedPtr<FJsonValue>>* StartArr = nullptr;
+            const TArray<TSharedPtr<FJsonValue>>* EndArr = nullptr;
+            if (!P->TryGetArrayField(TEXT("start_xy"), StartArr) || !StartArr || StartArr->Num() < 2)
+                return TOptional<FString>(TEXT("'landscape_ramp' requires 'start_xy' ([x,y])."));
+            if (!P->TryGetArrayField(TEXT("end_xy"), EndArr) || !EndArr || EndArr->Num() < 2)
+                return TOptional<FString>(TEXT("'landscape_ramp' requires 'end_xy' ([x,y])."));
+            double RampHeight = 100.0, RampWidth = 200.0;
+            P->TryGetNumberField(TEXT("ramp_height"), RampHeight);
+            P->TryGetNumberField(TEXT("ramp_width"), RampWidth);
+            Kv.Add(TEXT("start_x"), FString::Printf(TEXT("%f"), (*StartArr)[0]->AsNumber()));
+            Kv.Add(TEXT("start_y"), FString::Printf(TEXT("%f"), (*StartArr)[1]->AsNumber()));
+            Kv.Add(TEXT("end_x"), FString::Printf(TEXT("%f"), (*EndArr)[0]->AsNumber()));
+            Kv.Add(TEXT("end_y"), FString::Printf(TEXT("%f"), (*EndArr)[1]->AsNumber()));
+            Kv.Add(TEXT("ramp_height"), FString::Printf(TEXT("%f"), RampHeight));
+            Kv.Add(TEXT("ramp_width"), FString::Printf(TEXT("%f"), RampWidth));
+            Out->SetNumberField(TEXT("ramp_height"), RampHeight);
+            Out->SetNumberField(TEXT("ramp_width"), RampWidth);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_ramp"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeErosion(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_erosion"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_erosion"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double Iterations = 10.0, Strength = 0.5;
+            P->TryGetNumberField(TEXT("iterations"), Iterations);
+            P->TryGetNumberField(TEXT("strength"), Strength);
+            Kv.Add(TEXT("iterations"), FString::FromInt((int32)Iterations));
+            Kv.Add(TEXT("strength"), FString::Printf(TEXT("%f"), Strength));
+            Out->SetNumberField(TEXT("iterations"), (int32)Iterations);
+            Out->SetNumberField(TEXT("strength"), Strength);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_erosion"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleLandscapeNoise(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("landscape_noise"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("landscape_noise"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            double Frequency = 0.05, Amplitude = 100.0;
+            P->TryGetNumberField(TEXT("frequency"), Frequency);
+            P->TryGetNumberField(TEXT("amplitude"), Amplitude);
+            Kv.Add(TEXT("frequency"), FString::Printf(TEXT("%f"), Frequency));
+            Kv.Add(TEXT("amplitude"), FString::Printf(TEXT("%f"), Amplitude));
+            Out->SetNumberField(TEXT("frequency"), Frequency);
+            Out->SetNumberField(TEXT("amplitude"), Amplitude);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("landscape_noise"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleCreateLandscapePaintLayer(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("create_landscape_paint_layer"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("create_landscape_paint_layer"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            FString LayerName, LayerInfoPath, BlendMode = TEXT("WeightBlend");
+            if (!P->TryGetStringField(TEXT("layer_name"), LayerName) || LayerName.IsEmpty())
+                return TOptional<FString>(TEXT("'create_landscape_paint_layer' requires 'layer_name'."));
+            P->TryGetStringField(TEXT("layer_info_path"), LayerInfoPath);
+            P->TryGetStringField(TEXT("blend_mode"), BlendMode);
+            Kv.Add(TEXT("layer_name"), LayerName);
+            Kv.Add(TEXT("blend_mode"), BlendMode);
+            if (!LayerInfoPath.IsEmpty()) Kv.Add(TEXT("layer_info_path"), LayerInfoPath);
+            Out->SetStringField(TEXT("layer_name"), LayerName);
+            Out->SetStringField(TEXT("blend_mode"), BlendMode);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("create_landscape_paint_layer"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeLayerBlend(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("set_landscape_layer_blend"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("set_landscape_layer_blend"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            FString LayerName;
+            double Weight = 1.0;
+            if (!P->TryGetStringField(TEXT("layer_name"), LayerName) || LayerName.IsEmpty())
+                return TOptional<FString>(TEXT("'set_landscape_layer_blend' requires 'layer_name'."));
+            P->TryGetNumberField(TEXT("weight"), Weight);
+            // Clamp to the legal weight range so the metadata reflects reality.
+            const double Clamped = FMath::Clamp(Weight, 0.0, 1.0);
+            Kv.Add(TEXT("layer_name"), LayerName);
+            Kv.Add(TEXT("weight"), FString::Printf(TEXT("%f"), Clamped));
+            Out->SetStringField(TEXT("layer_name"), LayerName);
+            Out->SetNumberField(TEXT("weight"), Clamped);
+            Out->SetBoolField(TEXT("weight_clamped"), Clamped != Weight);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("set_landscape_layer_blend"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleApplyLandscapeMaterial(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("apply_landscape_material"));
@@ -412,9 +662,87 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAddLandscapeHole(
     return MakeLandscapeUnavailableResponse(TEXT("add_landscape_hole"));
 #endif
 }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAddLandscapeSpline(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("add_landscape_spline"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAddRoadSpline(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("add_road_spline"), P); }
-TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleCarveRiverTerrain(const TSharedPtr<FJsonObject>& P) { return LandscapeQueued(TEXT("carve_river_terrain"), P, TEXT("River carve uses Water + Landscape Brush Manager (see Sub-batch S).")); }
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAddLandscapeSpline(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("add_landscape_spline"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("add_landscape_spline"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+            if (!P->TryGetArrayField(TEXT("points"), Points) || !Points || Points->Num() < 2)
+                return TOptional<FString>(TEXT("'add_landscape_spline' requires 'points' (array of >=2 [x,y(,z)] entries)."));
+            double SegmentLength = 256.0;
+            P->TryGetNumberField(TEXT("segment_length"), SegmentLength);
+            Kv.Add(TEXT("point_count"), FString::FromInt(Points->Num()));
+            Kv.Add(TEXT("segment_length"), FString::Printf(TEXT("%f"), SegmentLength));
+            Out->SetNumberField(TEXT("point_count"), Points->Num());
+            Out->SetNumberField(TEXT("segment_length"), SegmentLength);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("add_landscape_spline"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAddRoadSpline(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("add_road_spline"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("add_road_spline"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+            if (!P->TryGetArrayField(TEXT("points"), Points) || !Points || Points->Num() < 2)
+                return TOptional<FString>(TEXT("'add_road_spline' requires 'points' (array of >=2 [x,y(,z)] entries)."));
+            FString MeshPath;
+            double RoadWidth = 600.0;
+            P->TryGetStringField(TEXT("road_mesh_path"), MeshPath);
+            P->TryGetNumberField(TEXT("road_width"), RoadWidth);
+            FString ResolvedMeshPath;
+            if (!MeshPath.IsEmpty())
+            {
+                if (UObject* MeshAsset = StaticLoadObject(UObject::StaticClass(), nullptr, *MeshPath))
+                {
+                    ResolvedMeshPath = MeshAsset->GetPathName();
+                }
+            }
+            Kv.Add(TEXT("point_count"), FString::FromInt(Points->Num()));
+            Kv.Add(TEXT("road_width"), FString::Printf(TEXT("%f"), RoadWidth));
+            if (!MeshPath.IsEmpty()) Kv.Add(TEXT("road_mesh_path"), MeshPath);
+            Out->SetNumberField(TEXT("point_count"), Points->Num());
+            Out->SetNumberField(TEXT("road_width"), RoadWidth);
+            if (!ResolvedMeshPath.IsEmpty()) Out->SetStringField(TEXT("road_mesh_path"), ResolvedMeshPath);
+            Out->SetBoolField(TEXT("mesh_resolved"), !ResolvedMeshPath.IsEmpty());
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("add_road_spline"));
+#endif
+}
+TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleCarveRiverTerrain(const TSharedPtr<FJsonObject>& P)
+{
+    if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("carve_river_terrain"));
+#if WITH_LANDSCAPE_MCP
+    return LandscapeMetaPersist(TEXT("carve_river_terrain"), P,
+        [&](ALandscape* /*L*/, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
+        {
+            FString WaterBodyActor;
+            double CarveDepth = 200.0, BankSlope = 0.0;
+            P->TryGetStringField(TEXT("water_body_actor"), WaterBodyActor);
+            P->TryGetNumberField(TEXT("carve_depth"), CarveDepth);
+            P->TryGetNumberField(TEXT("bank_slope"), BankSlope);
+            if (!WaterBodyActor.IsEmpty()) Kv.Add(TEXT("water_body_actor"), WaterBodyActor);
+            Kv.Add(TEXT("carve_depth"), FString::Printf(TEXT("%f"), CarveDepth));
+            Kv.Add(TEXT("bank_slope"), FString::Printf(TEXT("%f"), BankSlope));
+            Out->SetStringField(TEXT("water_body_actor"), WaterBodyActor);
+            Out->SetNumberField(TEXT("carve_depth"), CarveDepth);
+            Out->SetNumberField(TEXT("bank_slope"), BankSlope);
+            return TOptional<FString>();
+        });
+#else
+    return MakeLandscapeUnavailableResponse(TEXT("carve_river_terrain"));
+#endif
+}
 TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleAttachLandscapeRvt(const TSharedPtr<FJsonObject>& P)
 {
     if (!IsLandscapeAvailable()) return MakeLandscapeUnavailableResponse(TEXT("attach_landscape_rvt"));
