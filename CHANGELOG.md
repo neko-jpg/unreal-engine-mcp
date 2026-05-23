@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch W: Testing / Validation extensions (10 tasks.md items, issue #57)
+
+Adds a Testing / Validation handler class (route 39, `FEpicUnrealMCPTestingValidationCommands`) covering 8 remaining `[ ]` + 2 `[~]` items (UE Automation Test asset, Functional Test Actor spawn, Automation Test run + result fetch, Collision / Navigation / Performance Budget validators, Gameplay Screenshot Test, Python unit-test runner, Rust test runner). The Python / Rust runners proxy to the CLI tools at the bridge level so the AI can audit + iterate on the live test sweep.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 716` (was 706; +10).
+- `python -m pytest Python/tests/unit/test_testing_validation_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **15 passed**.
+---
+
 ## [2026-05-23] - Sub-batch V: Localization (10 tasks.md items, issue #58)
 
 Adds a Localization handler class (route 33, `FEpicUnrealMCPLocalizationCommands`) covering all 10 Localization items (Dashboard open, Culture add, Text Gather, PO Export / Import, String Table create / edit, Widget text localize, Dialogue wave localize, Font fallback config). The `create_string_table` route already existed in `data_table_tools` -- the new handler still owns the localization-side semantics so contracts remain consistent.

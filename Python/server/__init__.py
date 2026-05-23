@@ -64,6 +64,7 @@ def bootstrap():
     from server import mobile_xr_tools              # noqa: F401  Sub-batch T
     from server import source_control_tools         # noqa: F401  Sub-batch U
     from server import localization_tools           # noqa: F401  Sub-batch V
+    from server import testing_validation_tools     # noqa: F401  Sub-batch W
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

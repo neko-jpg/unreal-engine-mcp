@@ -421,6 +421,18 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("localize_widget_text"), 33},
         {TEXT("localize_dialogue_wave"), 33},
         {TEXT("configure_font_fallback"), 33},
+        // ---- Testing / Validation extensions (Sub-batch W, route 39, issue #57) ----
+        {TEXT("create_ue_automation_test"), 39},
+        {TEXT("spawn_functional_test_actor"), 39},
+        {TEXT("run_automation_test"), 39},
+        {TEXT("fetch_automation_test_results"), 39},
+        {TEXT("run_collision_validation"), 39},
+        {TEXT("run_navigation_validation"), 39},
+        {TEXT("run_performance_budget_validation"), 39},
+        {TEXT("run_gameplay_screenshot_test"), 39},
+        {TEXT("run_python_unit_test"), 39},
+        {TEXT("run_rust_test"), 39},
+
 
 
 

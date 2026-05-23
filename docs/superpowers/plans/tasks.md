@@ -1017,28 +1017,28 @@ Python/Rust蛛ｴ縺ｮ繝・せ繝医・縺ゅｊ縺ｾ縺吶・
 
 ```md
 ## Testing / Validation
-- [~] Python Unit Test
-- [~] Rust Test
-- [ ] UE Automation Test菴懈・
-- [ ] Functional Test Actor菴懈・
-- [ ] Automation Test螳溯｡・
-- [ ] Automation Test邨先棡蜿門ｾ・
+- [x] Python Unit Test
+- [x] Rust Test
+- [x] UE Automation Test菴懈・
+- [x] Functional Test Actor菴懈・
+- [x] Automation Test螳溯｡・
+- [x] Automation Test邨先棡蜿門ｾ・
 - [x] Map Check螳溯｡・
 - [x] Asset Validation螳溯｡・
 - [x] Blueprint Compile All
 - [x] Broken Reference讀懷・
 - [x] Missing Material讀懷・
 - [x] Missing Mesh讀懷・
-- [ ] Collision Validation
-- [ ] Navigation Validation
-- [ ] Performance Budget Validation
+- [x] Collision Validation
+- [x] Navigation Validation
+- [x] Performance Budget Validation
 - [x] FPS貂ｬ螳・
 - [x] Stat Unit蜿門ｾ・
 - [x] Stat GPU蜿門ｾ・
 - [x] Memory菴ｿ逕ｨ驥丞叙蠕・
 - [x] Unreal Insights Trace髢句ｧ・
 - [x] Unreal Insights Trace蛛懈ｭ｢
-- [ ] Gameplay Screenshot Test
+- [x] Gameplay Screenshot Test
 ```
 
 ---
