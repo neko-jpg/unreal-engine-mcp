@@ -94,6 +94,7 @@
 #include "Commands/EpicUnrealMCPTestingValidationCommands.h"
 #include "Commands/EpicUnrealMCPDataTableExtensionCommands.h"
 #include "Commands/EpicUnrealMCPMetaSoundCommands.h"
+#include "Commands/EpicUnrealMCPSequencerExtensionCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -370,6 +371,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPTestingValidationCommands>(39); // Testing / Validation extensions (Sub-batch W, route 39, issue #57)
     RegisterHandler<FEpicUnrealMCPDataTableExtensionCommands>(40); // Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54)
     RegisterHandler<FEpicUnrealMCPMetaSoundCommands>(34); // MetaSound / Audio extensions (Sub-batch Y, route 34, issue #50)
+    RegisterHandler<FEpicUnrealMCPSequencerExtensionCommands>(41); // Sequencer / Cinematics extensions (Sub-batch Z, route 41, issue #52)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

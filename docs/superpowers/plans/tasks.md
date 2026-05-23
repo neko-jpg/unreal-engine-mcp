@@ -843,7 +843,7 @@ Sequencer縺ｯLevel Sequence縺ｧ繧ｫ繝｡繝ｩ縲、ctor縲、udio縲、n
 ```md
 ## Sequencer / Cinematics
 - [x] Level Sequence菴懈・
-- [~] Level Sequence Actor驟咲ｽｮ
+- [x] Level Sequence Actor驟咲ｽｮ
 - [x] Actor Binding霑ｽ蜉
 - [x] Camera Cut Track霑ｽ蜉
 - [x] Transform Track霑ｽ蜉
@@ -860,11 +860,11 @@ Sequencer縺ｯLevel Sequence縺ｧ繧ｫ繝｡繝ｩ縲、ctor縲、udio縲、n
 - [x] Shot Track菴懈・
 - [x] Subsequence霑ｽ蜉
 - [x] Cine Camera菴懈・
-- [ ] Camera Rail騾｣謳ｺ
-- [ ] Camera Crane騾｣謳ｺ
-- [ ] Sequencer Render Preview
-- [ ] Take Recorder騾｣謳ｺ
-- [ ] Control Rig Track霑ｽ蜉
+- [x] Camera Rail騾｣謳ｺ
+- [x] Camera Crane騾｣謳ｺ
+- [x] Sequencer Render Preview
+- [x] Take Recorder騾｣謳ｺ
+- [x] Control Rig Track霑ｽ蜉
 ```
 
 ---

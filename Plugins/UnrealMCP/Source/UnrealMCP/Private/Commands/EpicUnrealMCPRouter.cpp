@@ -450,6 +450,14 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("set_metasound_parameter"), 34},
         {TEXT("bind_footstep_audio"), 34},
         {TEXT("configure_ui_sound"), 34},
+        // ---- Sequencer / Cinematics extensions (Sub-batch Z, route 41, issue #52) ----
+        {TEXT("spawn_camera_rail"), 41},
+        {TEXT("spawn_camera_crane"), 41},
+        {TEXT("sequencer_render_preview"), 41},
+        {TEXT("register_take_recorder_source"), 41},
+        {TEXT("add_control_rig_track"), 41},
+        {TEXT("spawn_level_sequence_actor"), 41},
+
 
 
 
