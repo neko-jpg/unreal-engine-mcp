@@ -90,6 +90,7 @@
 #include "Commands/EpicUnrealMCPWaterCommands.h"
 #include "Commands/EpicUnrealMCPMobileXrCommands.h"
 #include "Commands/EpicUnrealMCPSourceControlCommands.h"
+#include "Commands/EpicUnrealMCPLocalizationCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -362,6 +363,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPWaterCommands>(31); // Water System (Sub-batch S, route 31, issue #46)
     RegisterHandler<FEpicUnrealMCPMobileXrCommands>(38); // Mobile / XR (Sub-batch T, route 38, issue #59)
     RegisterHandler<FEpicUnrealMCPSourceControlCommands>(32); // Source Control / Multi-User (Sub-batch U, route 32, issue #60)
+    RegisterHandler<FEpicUnrealMCPLocalizationCommands>(33); // Localization (Sub-batch V, route 33, issue #58)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

@@ -410,6 +410,18 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("source_control_merge"), 32},
         {TEXT("multi_user_editing_start"), 32},
         {TEXT("multi_user_session_join"), 32},
+        // ---- Localization (Sub-batch V, route 33, issue #58) ----
+        {TEXT("open_localization_dashboard"), 33},
+        {TEXT("add_localization_culture"), 33},
+        {TEXT("run_text_gather"), 33},
+        {TEXT("export_po_files"), 33},
+        {TEXT("import_po_files"), 33},
+        {TEXT("create_string_table"), 33},
+        {TEXT("edit_string_table"), 33},
+        {TEXT("localize_widget_text"), 33},
+        {TEXT("localize_dialogue_wave"), 33},
+        {TEXT("configure_font_fallback"), 33},
+
 
 
 

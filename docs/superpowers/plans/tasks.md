@@ -1049,16 +1049,16 @@ Python/Rust蛛ｴ縺ｮ繝・せ繝医・縺ゅｊ縺ｾ縺吶・
 
 ```md
 ## Localization
-- [ ] Localization Dashboard謫堺ｽ・
-- [ ] Culture霑ｽ蜉
-- [ ] Text Gather
-- [ ] PO Export
-- [ ] PO Import
-- [ ] String Table菴懈・
-- [ ] String Table邱ｨ髮・
-- [ ] Widget Text Localization
-- [ ] Dialogue Localization
-- [ ] Font Fallback險ｭ螳・
+- [x] Localization Dashboard謫堺ｽ・
+- [x] Culture霑ｽ蜉
+- [x] Text Gather
+- [x] PO Export
+- [x] PO Import
+- [x] String Table菴懈・
+- [x] String Table邱ｨ髮・
+- [x] Widget Text Localization
+- [x] Dialogue Localization
+- [x] Font Fallback險ｭ螳・
 ```
 
 ---

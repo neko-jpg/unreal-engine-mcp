@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch V: Localization (10 tasks.md items, issue #58)
+
+Adds a Localization handler class (route 33, `FEpicUnrealMCPLocalizationCommands`) covering all 10 Localization items (Dashboard open, Culture add, Text Gather, PO Export / Import, String Table create / edit, Widget text localize, Dialogue wave localize, Font fallback config). The `create_string_table` route already existed in `data_table_tools` -- the new handler still owns the localization-side semantics so contracts remain consistent.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 706` (was 697; +9 net, +10 new handlers with 1 collision on the existing `create_string_table`).
+- `python -m pytest Python/tests/unit/test_localization_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **15 passed**.
+---
+
 ## [2026-05-23] - Sub-batch U: Source Control / Multi-User (13 tasks.md items, issue #60)
 
 Adds a Source Control handler class (route 32, `FEpicUnrealMCPSourceControlCommands`) covering all 13 Collaboration / Source Control items (Git + Perforce provider registration, Checkout / Checkin / Revert, file Lock acquire / release, changelist creation, Asset Diff + Blueprint Diff, Merge helper, Multi-User Editing start + Session join).
