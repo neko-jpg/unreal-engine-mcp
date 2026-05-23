@@ -442,6 +442,15 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("generate_quest_db_template"), 40},
         {TEXT("generate_dialogue_db_template"), 40},
         {TEXT("create_blueprint_datatable_reference_node"), 40},
+        // ---- MetaSound / Audio extensions (Sub-batch Y, route 34, issue #50) ----
+        {TEXT("edit_sound_cue_graph"), 34},
+        {TEXT("create_metasound_source"), 34},
+        {TEXT("create_metasound_patch"), 34},
+        {TEXT("add_metasound_graph_node"), 34},
+        {TEXT("set_metasound_parameter"), 34},
+        {TEXT("bind_footstep_audio"), 34},
+        {TEXT("configure_ui_sound"), 34},
+
 
 
 

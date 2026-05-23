@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch Y: MetaSound / Audio extensions (8 tasks.md items, issue #50)
+
+Adds a MetaSound handler class (route 34, `FEpicUnrealMCPMetaSoundCommands`) covering 7 remaining `[ ]` + 1 `[~]` audio items (Sound Cue Graph edit, MetaSound Source / Patch asset, MetaSound graph node add, MetaSound parameter set, Footstep audio binding via AnimNotify, UI Sound config via UCommonUI sound theme).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 732` (was 725; +7).
+- `python -m pytest Python/tests/unit/test_metasound_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **12 passed**.
+---
+
 ## [2026-05-23] - Sub-batch X: Data Tables / Data Assets extensions (9 tasks.md items, issue #54)
 
 Adds a Data Table extensions handler class (route 40, `FEpicUnrealMCPDataTableExtensionCommands`) covering 8 remaining `[ ]` + 1 `[~]` items (Row Struct CRUD via `UScriptStructFactory`, Data Asset property edit on `UPrimaryDataAsset`, Gameplay Tag Table CSV import via `UGameplayTagsManager`, Item / Enemy / Quest / Dialogue DB template generators, Blueprint Graph DataTable reference node).
