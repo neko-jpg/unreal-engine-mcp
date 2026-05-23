@@ -1,10 +1,12 @@
 #include "Commands/EpicUnrealMCPRenderingCommands.h"
-#include "CineCameraRigRail.h"
+// UE 5.7: ACameraRig_Rail / ACameraRig_Crane live in the CinematicCamera Runtime module.
+// The Experimental CineCameraRigs plugin is optional and not required here.
 #include "CameraRig_Rail.h"
 #include "CameraRig_Crane.h"
 #include "Camera/CameraShakeSourceComponent.h"
 #include "Camera/CameraShakeBase.h"
-#include "MatineeCameraShake.h"
+// UE 5.7: MatineeCameraShake moved to the optional EngineCameras plugin.
+// We only need UCameraShakeBase here, so the legacy include is dropped.
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Editor.h"
@@ -907,8 +909,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSpawnCameraShakeS
     double InnerAttenuation = 100.0, OuterAttenuation = 1000.0;
     Params->TryGetNumberField(TEXT("attenuation_inner_radius"), InnerAttenuation);
     Params->TryGetNumberField(TEXT("attenuation_outer_radius"), OuterAttenuation);
-    ShakeComp->AttenuationInnerRadius = static_cast<float>(InnerAttenuation);
-    ShakeComp->AttenuationOuterRadius = static_cast<float>(OuterAttenuation);
+    // UE 5.7: UCameraShakeSourceComponent renamed AttenuationInnerRadius/AttenuationOuterRadius
+    // to InnerAttenuationRadius/OuterAttenuationRadius (CameraShakeSourceComponent.h:75/79).
+    ShakeComp->InnerAttenuationRadius = static_cast<float>(InnerAttenuation);
+    ShakeComp->OuterAttenuationRadius = static_cast<float>(OuterAttenuation);
 
     FString ShakeClassPath;
     if (Params->TryGetStringField(TEXT("shake_class_path"), ShakeClassPath) && !ShakeClassPath.IsEmpty())

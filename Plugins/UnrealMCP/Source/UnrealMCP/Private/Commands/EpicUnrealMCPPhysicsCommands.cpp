@@ -369,12 +369,9 @@ namespace
 
     static ECollisionChannel ParseCollisionChannel(const FString& Name)
     {
-        // Use the official collision channel mapping from CollisionProfile.
-        FCollisionResponseTemplate Tmp;
-        if (UCollisionProfile::Get()->ReadChannelDisplayNames())
-        {
-            // Fallback to enum string lookup.
-        }
+        // UE 5.7: UCollisionProfile::ReadChannelDisplayNames() was removed (use the
+        // ChannelDisplayNames TArray directly via the manager APIs); for this parser
+        // we already fall back to the ECollisionChannel enum, so use it directly.
         const UEnum* EnumDef = StaticEnum<ECollisionChannel>();
         if (EnumDef)
         {
