@@ -187,17 +187,26 @@ def create_anim_transition_rule(
 
 
 @mcp.tool()
-def create_aim_offset(asset_path: str = "/Game/Anim", asset_name: str = "AO_New", skeleton_path: str = "") -> Dict[str, Any]:
-    """Queue UAimOffsetBlendSpace asset creation."""
-    try:
-        pass
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def create_aim_offset(
+    asset_path: str = "/Game/Anim",
+    asset_name: str = "AO_New",
+    skeleton_path: str = "",
+) -> Dict[str, Any]:
+    """Create a UAimOffsetBlendSpace asset, or fall back to metadata.
+
+    234-stubs W1 (#79) Part 3: the C++ handler uses the runtime-resolved
+    factory (UAimOffsetBlendSpaceFactoryNew). If unavailable, it falls
+    back to AnimMetaFallback on `skeleton_path`.
+    """
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
     try:
-        r = u.send_command("create_aim_offset", {"asset_path": asset_path, "asset_name": asset_name, "skeleton_path": skeleton_path})
+        r = u.send_command("create_aim_offset", {
+            "asset_path": asset_path,
+            "asset_name": asset_name,
+            "skeleton_path": skeleton_path,
+        })
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_aim_offset': {e}")
     return _envelope("create_aim_offset", r)
@@ -398,17 +407,32 @@ def set_retarget_chain(ik_rig_path: str, chain_name: str, start_bone: str, end_b
 
 
 @mcp.tool()
-def create_control_rig(asset_path: str = "/Game/Anim", asset_name: str = "CR_New", skeleton_path: str = "") -> Dict[str, Any]:
-    """Queue Control Rig blueprint creation."""
-    try:
-        pass
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def create_control_rig(
+    asset_path: str = "/Game/Anim",
+    asset_name: str = "CR_New",
+    skeleton_path: str = "",
+    skeletal_mesh_path: str = "",
+    host_asset_path: str = "",
+) -> Dict[str, Any]:
+    """Create a UControlRigBlueprint asset, or fall back to metadata.
+
+    234-stubs W1 (#79) Part 3: the C++ handler uses the runtime-resolved
+    factory (ControlRigBlueprintFactory in ControlRigEditor). If
+    unavailable, it falls back to AnimMetaFallback on host_asset_path,
+    skeleton_path, or skeletal_mesh_path (first non-empty wins).
+    """
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload = {
+        "asset_path": asset_path,
+        "asset_name": asset_name,
+    }
+    if skeleton_path: payload["skeleton_path"] = skeleton_path
+    if skeletal_mesh_path: payload["skeletal_mesh_path"] = skeletal_mesh_path
+    if host_asset_path: payload["host_asset_path"] = host_asset_path
     try:
-        r = u.send_command("create_control_rig", {"asset_path": asset_path, "asset_name": asset_name, "skeleton_path": skeleton_path})
+        r = u.send_command("create_control_rig", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'create_control_rig': {e}")
     return _envelope("create_control_rig", r)
@@ -482,19 +506,35 @@ def set_control_rig_constraint(
 
 
 @mcp.tool()
-def sequencer_control_rig_track(level_sequence_path: str, skeletal_actor: str, control_rig_path: str) -> Dict[str, Any]:
-    """Queue Sequencer Control Rig track binding."""
+def sequencer_control_rig_track(
+    level_sequence_path: str,
+    skeletal_actor: str = "",
+    control_rig_path: str = "",
+    binding_guid: str = "",
+    track_name: str = "ControlRigTrack",
+) -> Dict[str, Any]:
+    """Persist a Sequencer Control Rig track spec on the ULevelSequence.
+
+    234-stubs W1 (#79) Part 3: now executed via the C++ AnimMetaPersist
+    helper (LevelSequence host). The Sequencer-side replay is in a
+    follow-up PR.
+    """
     try:
         validate_string(level_sequence_path, "level_sequence_path")
-        validate_string(skeletal_actor, "skeletal_actor")
-        validate_string(control_rig_path, "control_rig_path")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload = {
+        "level_sequence_path": level_sequence_path,
+        "track_name": track_name,
+    }
+    if skeletal_actor: payload["skeletal_actor"] = skeletal_actor
+    if control_rig_path: payload["control_rig_path"] = control_rig_path
+    if binding_guid: payload["binding_guid"] = binding_guid
     try:
-        r = u.send_command("sequencer_control_rig_track", {"level_sequence_path": level_sequence_path, "skeletal_actor": skeletal_actor, "control_rig_path": control_rig_path})
+        r = u.send_command("sequencer_control_rig_track", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'sequencer_control_rig_track': {e}")
     return _envelope("sequencer_control_rig_track", r)
@@ -557,17 +597,42 @@ def set_morph_target(skeletal_mesh_path: str, morph_target: str, weight: float =
 
 
 @mcp.tool()
-def connect_metahuman(metahuman_blueprint_path: str, target_actor: str = "") -> Dict[str, Any]:
-    """Queue MetaHuman blueprint connection."""
-    try:
-        validate_string(metahuman_blueprint_path, "metahuman_blueprint_path")
-    except ValidationError as e:
-        return make_validation_error_response_from_exception(e)
+def connect_metahuman(
+    metahuman_blueprint_path: str = "",
+    target_actor: str = "",
+    host_asset_path: str = "",
+    groom_path: str = "",
+    identity_path: str = "",
+    face_archetype: str = "Default",
+    metahuman_id: str = "",
+) -> Dict[str, Any]:
+    """Persist a MetaHuman wiring spec onto the resolved host asset.
+
+    234-stubs W1 (#79) Part 3: now executed via AnimMetaPersist. Legacy
+    callers can pass `metahuman_blueprint_path` and it will be forwarded as
+    `metahuman_id`. `host_asset_path` is required by the C++ side and
+    defaults to the legacy `target_actor` if not given.
+    """
+    effective_host = host_asset_path or target_actor
+    effective_id = metahuman_id or metahuman_blueprint_path
+    if not effective_host:
+        return make_error_response("connect_metahuman: host_asset_path (or legacy target_actor) is required")
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload = {
+        "host_asset_path": effective_host,
+        "metahuman_id": effective_id,
+        "face_archetype": face_archetype,
+    }
+    if groom_path: payload["groom_path"] = groom_path
+    if identity_path: payload["identity_path"] = identity_path
+    if metahuman_blueprint_path: payload["metahuman_blueprint_path"] = metahuman_blueprint_path
+    if target_actor: payload["target_actor"] = target_actor
     try:
-        r = u.send_command("connect_metahuman", {"metahuman_blueprint_path": metahuman_blueprint_path, "target_actor": target_actor})
+        r = u.send_command("connect_metahuman", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'connect_metahuman': {e}")
     return _envelope("connect_metahuman", r)
+
+
