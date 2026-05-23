@@ -1,14 +1,12 @@
-name: YAML Lint (yamllint)
+name: Vale (documentation lint)
 
 on:
   push:
     paths:
-      - '**.yml'
-      - '**.yaml'
+      - '**/*.md'
   pull_request:
     paths:
-      - '**.yml'
-      - '**.yaml'
+      - '**/*.md'
 
 permissions:
   contents: read
@@ -18,14 +16,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  yamllint:
-    name: Lint YAML files
+  vale:
+    name: Lint Markdown prose
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: errata-ai/vale-action@v2.1.1
         with:
-          enable-cache: true
-      - run: uv tool install yamllint
-      - run: yamllint -c .yamllint .
+          files: __all__
+          onlyAnnotateModifiedLines: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

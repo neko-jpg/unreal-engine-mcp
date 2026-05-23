@@ -12,6 +12,7 @@ jobs:
   codegen-check:
     name: Codegen is up-to-date
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: Python

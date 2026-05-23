@@ -23,7 +23,7 @@ actionlint = "latest"
 lychee = "latest"
 mdbook = "latest"
 
-# 生产性
+# 生産性
 ripgrep = "latest"
 fd = "latest"
 bat = "latest"

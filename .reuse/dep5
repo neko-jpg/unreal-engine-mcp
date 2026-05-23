@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Unreal Engine MCP Bridge
+Upstream-Contact: Teppei Arai
+Source: https://github.com/T594165/UnrealEngineMCP
+
+Files: *
+Copyright: 2026 Teppei Arai
+License: MIT

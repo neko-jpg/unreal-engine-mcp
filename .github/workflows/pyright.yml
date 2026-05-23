@@ -1,0 +1,31 @@
+name: Pyright (Python type check)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pyright:
+    name: Type check (basedpyright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: Python/uv.lock
+      - run: uv sync --extra dev
+      - name: Run basedpyright
+        continue-on-error: true
+        run: uv run basedpyright server helpers

@@ -25,6 +25,7 @@ jobs:
   audit:
     name: Security audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: rust/scene-syncd
@@ -46,6 +47,7 @@ jobs:
   deny:
     name: License & advisory check (cargo-deny)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: rust/scene-syncd
@@ -57,3 +59,19 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo-deny check --all-features
+
+  udeps:
+    name: Unused dependency check (cargo-udeps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: rust/scene-syncd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-udeps
+      - run: cargo udeps --all-targets --all-features

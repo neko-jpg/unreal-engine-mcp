@@ -84,6 +84,31 @@ repos:
         pass_filenames: false
         additional_dependencies: ["bandit[toml]"]
 
+  # ── codespell: スペルミスチェック ──
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: ['--ignore-words-list=', '--skip=*.lock,*.svg,*.png,*.jpg,*.woff,*.woff2,*.ico']
+        additional_dependencies: ['tomli>=2']
+
+  # ── Vale: ドキュメント文章品質チェック ──
+  - repo: https://github.com/errata-ai/vale-pre-commit
+    rev: v3.0.7
+    hooks:
+      - id: vale
+        args: ['--config=.vale.ini', '--glob=*.md']
+        additional_dependencies: ['vale>=3.0']
+
+  # ── basedpyright: Python 型チェック（mypy と補完関係） ──
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: v1.28.5
+    hooks:
+      - id: basedpyright
+        args: [--project, Python/pyproject.toml]
+        files: ^Python/(server|helpers)/
+        pass_filenames: false
+
   # ── Gitleaks: シークレット漏洩チェック ──
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.0

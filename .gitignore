@@ -149,7 +149,6 @@ editor_output.txt
 history.txt
 output.txt
 screenshots/
-.antigravity/
 
 # Downloaded installers
 dotnet-install.ps1

@@ -12,6 +12,7 @@ jobs:
   lint:
     name: Lint (Ruff)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: Python
@@ -32,6 +33,7 @@ jobs:
   typecheck:
     name: Type check (mypy)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: Python
@@ -52,6 +54,7 @@ jobs:
   test-python:
     name: Test (pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: Python

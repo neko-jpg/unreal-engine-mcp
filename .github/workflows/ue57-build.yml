@@ -20,6 +20,7 @@ jobs:
   static-audit:
     name: Static audit (Build.cs probes + cpp queue grep)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +58,7 @@ jobs:
     name: RunUAT BuildPlugin (UE 5.7 self-hosted)
     needs: [static-audit]
     runs-on: [self-hosted, ue5.7, Win64]
+    timeout-minutes: 30
     if: ${{ contains(github.event.pull_request.labels.*.name, 'ue5.7-build') }}
     steps:
       - uses: actions/checkout@v4
