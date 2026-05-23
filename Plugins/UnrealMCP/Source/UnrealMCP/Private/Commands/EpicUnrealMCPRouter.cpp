@@ -328,6 +328,27 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("attach_network_profiler"), 37},
         {TEXT("create_network_component"), 37},
         {TEXT("set_blueprint_variable_replication"), 37},
+        // ---- Chaos / Physics extensions (Sub-batch Q, route 29, issue #51) ----
+        {TEXT("create_collision_channel"), 29},
+        {TEXT("create_object_channel"), 29},
+        {TEXT("create_trace_channel"), 29},
+        {TEXT("create_geometry_collection"), 29},
+        {TEXT("fracture_geometry_collection"), 29},
+        {TEXT("create_chaos_field"), 29},
+        {TEXT("configure_chaos_solver"), 29},
+        {TEXT("create_chaos_cache"), 29},
+        {TEXT("create_chaos_vehicle"), 29},
+        {TEXT("set_vehicle_wheel"), 29},
+        {TEXT("set_vehicle_suspension"), 29},
+        {TEXT("set_vehicle_engine_torque"), 29},
+        {TEXT("set_cloth_settings"), 29},
+        {TEXT("create_chaos_cloth_asset"), 29},
+        {TEXT("set_groom_physics"), 29},
+        {TEXT("set_ragdoll"), 29},
+        {TEXT("edit_physics_asset_body"), 29},
+        {TEXT("edit_physics_asset_constraint"), 29},
+        {TEXT("attach_chaos_visual_debugger"), 29},
+
 
 
 

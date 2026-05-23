@@ -85,6 +85,7 @@
 #include "Commands/EpicUnrealMCPFoliageCommands.h"
 #include "Commands/EpicUnrealMCPPCGCommands.h"
 #include "Commands/EpicUnrealMCPNetworkingCommands.h"
+#include "Commands/EpicUnrealMCPChaosCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -352,6 +353,7 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPFoliageCommands>(27); // Foliage / Vegetation (Sub-batch N, route 27, issue #44)
     RegisterHandler<FEpicUnrealMCPPCGCommands>(28); // PCG Framework (Sub-batch O, route 28, issue #45)
     RegisterHandler<FEpicUnrealMCPNetworkingCommands>(37); // Networking / Multiplayer (Sub-batch P, route 37, issue #41)
+    RegisterHandler<FEpicUnrealMCPChaosCommands>(29); // Chaos / Physics extensions (Sub-batch Q, route 29, issue #51)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

@@ -4,6 +4,16 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 ---
 
+## [2026-05-23] - Sub-batch Q: Chaos / Physics extensions (19 tasks.md items, issue #51)
+
+Adds a Chaos handler class (route 29, `FEpicUnrealMCPChaosCommands`) covering 19 remaining Physics / Chaos items (Collision/Object/Trace channel CRUD, Geometry Collection asset + fracture, Chaos Field actor, Chaos Solver, Chaos Cache, Chaos Vehicle wheel/suspension/engine, Cloth + Chaos Cloth asset, Groom Physics, Ragdoll, PhysicsAsset body/constraint edit, Chaos Visual Debugger attach).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 639` (was 620; +19).
+- `python -m pytest Python/tests/unit/test_chaos_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **24 passed**.
+---
+
 ## [2026-05-23] - Sub-batch P: Networking / Multiplayer (21 tasks.md items, issue #41)
 
 Adds a Networking handler class (route 37, `FEpicUnrealMCPNetworkingCommands`) covering the remaining 19 `[ ]` + 2 `[~]` Networking items (RPC Server / Client / Multicast funcs, Reliable / Unreliable toggle, RepNotify generation, Replicated variable enumeration, NetworkPrediction config, Dedicated / Listen server start, Client connect, Multi-PIE, OnlineSubsystem swap, Session create / find / join, Iris / Replication Graph config, Bandwidth + Network Profiler attach, generic NetworkComponent factory, Blueprint variable replication setter).
