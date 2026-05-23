@@ -42,4 +42,10 @@ private:
     TSharedPtr<FJsonObject> HandleSpawnCineCameraActor(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetCameraProperties(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSpawnPostProcessVolume(const TSharedPtr<FJsonObject>& Params);
+
+    // -- W1-7 Post Process / Camera residue (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleSpawnCameraShakeSource(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpawnCameraRigRail(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpawnCameraRigCrane(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetPostProcessOverride(const TSharedPtr<FJsonObject>& Params);
 };

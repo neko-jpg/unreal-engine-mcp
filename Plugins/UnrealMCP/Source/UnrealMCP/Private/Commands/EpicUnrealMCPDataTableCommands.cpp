@@ -7,6 +7,11 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
+#include "Engine/CurveTable.h"
+#include "Internationalization/StringTable.h"
+#include "Internationalization/StringTableCore.h"
+#include "Engine/DataAsset.h"
+#include "Engine/AssetManagerTypes.h"
 
 FEpicUnrealMCPDataTableCommands::FEpicUnrealMCPDataTableCommands()
 {
@@ -27,6 +32,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleCommand(const FSt
         {TEXT("update_data_table_row"), &FEpicUnrealMCPDataTableCommands::HandleUpdateDataTableRow},
         {TEXT("export_data_table_csv"), &FEpicUnrealMCPDataTableCommands::HandleExportDataTableCSV},
         {TEXT("export_data_table_json"), &FEpicUnrealMCPDataTableCommands::HandleExportDataTableJSON},
+        {TEXT("create_data_table_from_json"), &FEpicUnrealMCPDataTableCommands::HandleCreateDataTableFromJSON},
+        {TEXT("create_curve_table"), &FEpicUnrealMCPDataTableCommands::HandleCreateCurveTable},
+        {TEXT("create_string_table"), &FEpicUnrealMCPDataTableCommands::HandleCreateStringTable},
+        {TEXT("set_string_table_entry"), &FEpicUnrealMCPDataTableCommands::HandleSetStringTableEntry},
+        {TEXT("create_data_asset"), &FEpicUnrealMCPDataTableCommands::HandleCreateDataAsset},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -457,5 +467,241 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleExportDataTableJS
     Result->SetStringField(TEXT("table_path"), TablePath);
     Result->SetStringField(TEXT("json_content"), JSONContent);
     Result->SetNumberField(TEXT("row_count"), DataTable->GetRowMap().Num());
+    return Result;
+}
+
+// W1-B_DATATABLE_BEGIN
+// W1-B Data Tables residue (UE 5.7): JSON DataTable / CurveTable / StringTable /
+// SetStringTableEntry / CreateDataAsset.
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleCreateDataTableFromJSON(const TSharedPtr<FJsonObject>& Params)
+{
+    FString TablePath;
+    if (!Params->TryGetStringField(TEXT("table_path"), TablePath) || TablePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'table_path' parameter"));
+    FString RowStructPath;
+    if (!Params->TryGetStringField(TEXT("row_struct_path"), RowStructPath) || RowStructPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'row_struct_path' parameter"));
+    FString JsonContent;
+    if (!Params->TryGetStringField(TEXT("json_content"), JsonContent) || JsonContent.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'json_content' parameter"));
+
+    FString Error;
+    UScriptStruct* RowStruct = FindRowStruct(RowStructPath, Error);
+    if (!RowStruct)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(Error);
+
+    UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *TablePath);
+    bool bNewlyCreated = false;
+    if (!DataTable)
+    {
+        FString TableName = FPaths::GetBaseFilename(TablePath);
+        UPackage* Package = CreatePackage(*TablePath);
+        if (!Package)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for data table"));
+        DataTable = NewObject<UDataTable>(Package, FName(*TableName), RF_Public | RF_Standalone);
+        if (!DataTable)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create DataTable object"));
+        DataTable->RowStruct = RowStruct;
+        FAssetRegistryModule::AssetCreated(DataTable);
+        bNewlyCreated = true;
+    }
+    else
+    {
+        DataTable->RowStruct = RowStruct;
+    }
+
+    TArray<FString> Errors = DataTable->CreateTableFromJSONString(JsonContent);
+    if (Errors.Num() > 0)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("JSON import errors: %s"), *FString::Join(Errors, TEXT("; "))));
+    }
+    DataTable->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("table_path"), TablePath);
+    Result->SetStringField(TEXT("row_struct"), RowStruct->GetName());
+    Result->SetNumberField(TEXT("row_count"), DataTable->GetRowMap().Num());
+    Result->SetBoolField(TEXT("newly_created"), bNewlyCreated);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleCreateCurveTable(const TSharedPtr<FJsonObject>& Params)
+{
+    FString TablePath;
+    if (!Params->TryGetStringField(TEXT("table_path"), TablePath) || TablePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'table_path' parameter"));
+    FString CsvContent;
+    Params->TryGetStringField(TEXT("csv_content"), CsvContent);
+    FString InterpModeStr = TEXT("Linear");
+    Params->TryGetStringField(TEXT("interp_mode"), InterpModeStr);
+
+    ERichCurveInterpMode InterpMode = RCIM_Linear;
+    if (InterpModeStr.Equals(TEXT("Cubic"), ESearchCase::IgnoreCase)) InterpMode = RCIM_Cubic;
+    else if (InterpModeStr.Equals(TEXT("Constant"), ESearchCase::IgnoreCase)) InterpMode = RCIM_Constant;
+
+    UCurveTable* CurveTable = LoadObject<UCurveTable>(nullptr, *TablePath);
+    bool bNewlyCreated = false;
+    if (!CurveTable)
+    {
+        FString TableName = FPaths::GetBaseFilename(TablePath);
+        UPackage* Package = CreatePackage(*TablePath);
+        if (!Package)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for curve table"));
+        CurveTable = NewObject<UCurveTable>(Package, FName(*TableName), RF_Public | RF_Standalone);
+        if (!CurveTable)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create CurveTable object"));
+        FAssetRegistryModule::AssetCreated(CurveTable);
+        bNewlyCreated = true;
+    }
+
+    int32 RowCount = 0;
+    if (!CsvContent.IsEmpty())
+    {
+        TArray<FString> Errors = CurveTable->CreateTableFromCSVString(CsvContent, InterpMode);
+        if (Errors.Num() > 0)
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Curve CSV import errors: %s"), *FString::Join(Errors, TEXT("; "))));
+        }
+        RowCount = CurveTable->GetRowMap().Num();
+    }
+    CurveTable->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("table_path"), TablePath);
+    Result->SetStringField(TEXT("interp_mode"), InterpModeStr);
+    Result->SetNumberField(TEXT("row_count"), RowCount);
+    Result->SetBoolField(TEXT("newly_created"), bNewlyCreated);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleCreateStringTable(const TSharedPtr<FJsonObject>& Params)
+{
+    FString TablePath;
+    if (!Params->TryGetStringField(TEXT("table_path"), TablePath) || TablePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'table_path' parameter"));
+
+    UStringTable* Table = LoadObject<UStringTable>(nullptr, *TablePath);
+    bool bNewlyCreated = false;
+    if (!Table)
+    {
+        FString TableName = FPaths::GetBaseFilename(TablePath);
+        UPackage* Package = CreatePackage(*TablePath);
+        if (!Package)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for string table"));
+        Table = NewObject<UStringTable>(Package, FName(*TableName), RF_Public | RF_Standalone);
+        if (!Table)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create StringTable object"));
+        FAssetRegistryModule::AssetCreated(Table);
+        bNewlyCreated = true;
+    }
+
+    // Optional Namespace (defaults to TablePath if not provided).
+    FString Namespace;
+    Params->TryGetStringField(TEXT("namespace"), Namespace);
+    if (Namespace.IsEmpty())
+    {
+        Namespace = TablePath;
+    }
+
+    FStringTableRef MutableRef = Table->GetMutableStringTable();
+    MutableRef->SetNamespace(Namespace);
+
+    // Optional initial entries map
+    const TSharedPtr<FJsonObject>* EntriesObj = nullptr;
+    int32 EntriesAdded = 0;
+    if (Params->TryGetObjectField(TEXT("entries"), EntriesObj) && EntriesObj && (*EntriesObj).IsValid())
+    {
+        for (const auto& Pair : (*EntriesObj)->Values)
+        {
+            if (Pair.Value.IsValid() && Pair.Value->Type == EJson::String)
+            {
+                MutableRef->SetSourceString(Pair.Key, Pair.Value->AsString());
+                ++EntriesAdded;
+            }
+        }
+    }
+    Table->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("table_path"), TablePath);
+    Result->SetStringField(TEXT("namespace"), Namespace);
+    Result->SetNumberField(TEXT("entries_added"), EntriesAdded);
+    Result->SetBoolField(TEXT("newly_created"), bNewlyCreated);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleSetStringTableEntry(const TSharedPtr<FJsonObject>& Params)
+{
+    FString TablePath;
+    if (!Params->TryGetStringField(TEXT("table_path"), TablePath) || TablePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'table_path' parameter"));
+    FString Key;
+    if (!Params->TryGetStringField(TEXT("key"), Key) || Key.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'key' parameter"));
+    FString Value;
+    if (!Params->TryGetStringField(TEXT("value"), Value))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'value' parameter"));
+
+    UStringTable* Table = LoadObject<UStringTable>(nullptr, *TablePath);
+    if (!Table)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("StringTable not found: %s"), *TablePath));
+
+    FStringTableRef MutableRef = Table->GetMutableStringTable();
+    MutableRef->SetSourceString(Key, Value);
+    Table->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("table_path"), TablePath);
+    Result->SetStringField(TEXT("key"), Key);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPDataTableCommands::HandleCreateDataAsset(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+    FString ClassPath;
+    if (!Params->TryGetStringField(TEXT("class_path"), ClassPath) || ClassPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'class_path' parameter"));
+
+    UClass* AssetClass = LoadObject<UClass>(nullptr, *ClassPath);
+    if (!AssetClass)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset class not found: %s"), *ClassPath));
+    if (!AssetClass->IsChildOf(UDataAsset::StaticClass()))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Class is not UDataAsset-derived: %s"), *ClassPath));
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists at path: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for data asset"));
+
+    UDataAsset* NewAsset = NewObject<UDataAsset>(Package, AssetClass, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!NewAsset)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create DataAsset"));
+    FAssetRegistryModule::AssetCreated(NewAsset);
+    Package->MarkPackageDirty();
+
+    const bool bIsPrimary = AssetClass->IsChildOf(UPrimaryDataAsset::StaticClass());
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), AssetPath);
+    Result->SetStringField(TEXT("class_path"), ClassPath);
+    Result->SetBoolField(TEXT("is_primary"), bIsPrimary);
     return Result;
 }

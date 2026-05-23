@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
 
@@ -111,7 +111,8 @@ public class UnrealMCP : ModuleRules
 					"EditorWidgets",        // For editor widget utilities
 					"ApplicationCore",      // For SlateApplication window management
 					"WorkspaceMenuStructure", // For editor workspace access
-					"DataLayerEditor"      // For UE5.7 Data Layer editor operations
+					"DataLayerEditor",     // For UE5.7 Data Layer editor operations
+                    "SourceControl"        // W1-H: ISourceControlModule for status queries
 				}
 			);
 		}
@@ -154,6 +155,71 @@ public class UnrealMCP : ModuleRules
 		else
 		{
 			PublicDefinitions.Add("WITH_CESIUM=0");
+		}
+		// ----- Optional Niagara integration (Sub-batch I, route 21) -----
+		// Engine/Plugins/FX/Niagara ships with UE 5.7 by default but is gated as
+		// optional so the plugin still builds in environments that explicitly
+		// disable Niagara. When detected we link the Niagara + NiagaraEditor
+		// modules privately and define WITH_NIAGARA_MCP=1 so the gated headers
+		// in EpicUnrealMCPNiagaraCommands.cpp compile against real types.
+		bool bNiagaraFound = false;
+		string[] NiagaraProbePaths = new string[] {
+			System.IO.Path.Combine(EngineDirectory, "Plugins", "FX", "Niagara", "Niagara.uplugin"),
+		};
+		if (Target.ProjectFile != null)
+		{
+			string ProjectDir = System.IO.Path.GetDirectoryName(Target.ProjectFile.FullName);
+			System.Array.Resize(ref NiagaraProbePaths, NiagaraProbePaths.Length + 1);
+			NiagaraProbePaths[NiagaraProbePaths.Length - 1] = System.IO.Path.Combine(ProjectDir, "Plugins", "FX", "Niagara", "Niagara.uplugin");
+		}
+		foreach (string Probe in NiagaraProbePaths)
+		{
+			if (System.IO.File.Exists(Probe))
+			{
+				bNiagaraFound = true;
+				break;
+			}
+		}
+		if (bNiagaraFound)
+		{
+			PublicDefinitions.Add("WITH_NIAGARA_MCP=1");
+			PrivateDependencyModuleNames.Add("Niagara");
+			if (Target.bBuildEditor)
+			{
+				PrivateDependencyModuleNames.Add("NiagaraEditor");
+			}
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_NIAGARA_MCP=0");
+		}
+		// ----- Optional Landscape integration (Sub-batch J, route 25) -----
+		bool bLandscapeFound = false;
+		string LandscapeProbe = System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "Landscape", "Classes", "Landscape.h");
+		if (System.IO.File.Exists(LandscapeProbe)) { bLandscapeFound = true; }
+		if (bLandscapeFound)
+		{
+			PublicDefinitions.Add("WITH_LANDSCAPE_MCP=1");
+			PrivateDependencyModuleNames.Add("Landscape");
+			if (Target.bBuildEditor)
+			{
+				PrivateDependencyModuleNames.Add("LandscapeEditor");
+			}
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_LANDSCAPE_MCP=0");
+		}
+		// ----- Optional Animation / Rigging integration (Sub-batch K, route 35) -----
+		bool bControlRigFound = System.IO.File.Exists(System.IO.Path.Combine(EngineDirectory, "Plugins", "Animation", "ControlRig", "ControlRig.uplugin"));
+		bool bIkRigFound = System.IO.File.Exists(System.IO.Path.Combine(EngineDirectory, "Plugins", "Animation", "IKRig", "IKRig.uplugin"));
+		if (bControlRigFound || bIkRigFound)
+		{
+			PublicDefinitions.Add("WITH_ANIM_RIGGING_MCP=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_ANIM_RIGGING_MCP=0");
 		}
 	}
 }

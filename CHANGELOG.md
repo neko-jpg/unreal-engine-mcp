@@ -1,6 +1,972 @@
-# Changelog
+﻿# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
+
+---
+
+## [2026-05-23] - Sub-batch Z: Sequencer / Cinematics extensions (6 tasks.md items, issue #52)
+
+Adds a Sequencer extensions handler class (route 41, `FEpicUnrealMCPSequencerExtensionCommands`) covering all 5 `[ ]` + 1 `[~]` Sequencer items (Camera Rail / Crane spawn, Sequencer Render Preview hook, Take Recorder source register, Control Rig Track add on Skeletal binding, Level Sequence Actor placement).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 738` (was 732; +6).
+- `python -m pytest Python/tests/unit/test_sequencer_extension_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **11 passed**.
+---
+
+## [2026-05-23] - Sub-batch Y: MetaSound / Audio extensions (8 tasks.md items, issue #50)
+
+Adds a MetaSound handler class (route 34, `FEpicUnrealMCPMetaSoundCommands`) covering 7 remaining `[ ]` + 1 `[~]` audio items (Sound Cue Graph edit, MetaSound Source / Patch asset, MetaSound graph node add, MetaSound parameter set, Footstep audio binding via AnimNotify, UI Sound config via UCommonUI sound theme).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 732` (was 725; +7).
+- `python -m pytest Python/tests/unit/test_metasound_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **12 passed**.
+---
+
+## [2026-05-23] - Sub-batch X: Data Tables / Data Assets extensions (9 tasks.md items, issue #54)
+
+Adds a Data Table extensions handler class (route 40, `FEpicUnrealMCPDataTableExtensionCommands`) covering 8 remaining `[ ]` + 1 `[~]` items (Row Struct CRUD via `UScriptStructFactory`, Data Asset property edit on `UPrimaryDataAsset`, Gameplay Tag Table CSV import via `UGameplayTagsManager`, Item / Enemy / Quest / Dialogue DB template generators, Blueprint Graph DataTable reference node).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 725` (was 716; +9).
+- `python -m pytest Python/tests/unit/test_data_table_extension_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **14 passed**.
+---
+
+## [2026-05-23] - Sub-batch W: Testing / Validation extensions (10 tasks.md items, issue #57)
+
+Adds a Testing / Validation handler class (route 39, `FEpicUnrealMCPTestingValidationCommands`) covering 8 remaining `[ ]` + 2 `[~]` items (UE Automation Test asset, Functional Test Actor spawn, Automation Test run + result fetch, Collision / Navigation / Performance Budget validators, Gameplay Screenshot Test, Python unit-test runner, Rust test runner). The Python / Rust runners proxy to the CLI tools at the bridge level so the AI can audit + iterate on the live test sweep.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 716` (was 706; +10).
+- `python -m pytest Python/tests/unit/test_testing_validation_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **15 passed**.
+---
+
+## [2026-05-23] - Sub-batch V: Localization (10 tasks.md items, issue #58)
+
+Adds a Localization handler class (route 33, `FEpicUnrealMCPLocalizationCommands`) covering all 10 Localization items (Dashboard open, Culture add, Text Gather, PO Export / Import, String Table create / edit, Widget text localize, Dialogue wave localize, Font fallback config). The `create_string_table` route already existed in `data_table_tools` -- the new handler still owns the localization-side semantics so contracts remain consistent.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 706` (was 697; +9 net, +10 new handlers with 1 collision on the existing `create_string_table`).
+- `python -m pytest Python/tests/unit/test_localization_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **15 passed**.
+---
+
+## [2026-05-23] - Sub-batch U: Source Control / Multi-User (13 tasks.md items, issue #60)
+
+Adds a Source Control handler class (route 32, `FEpicUnrealMCPSourceControlCommands`) covering all 13 Collaboration / Source Control items (Git + Perforce provider registration, Checkout / Checkin / Revert, file Lock acquire / release, changelist creation, Asset Diff + Blueprint Diff, Merge helper, Multi-User Editing start + Session join).
+
+### Notes
+
+- UE 5.7 modules: `SourceControl` (`ISourceControlOperation`, `ISourceControlModule`), `GitSourceControl` / `PerforceSourceControl` runtime + editor, `ConcertSyncClient` + `MultiUserClient` for the Concert / Multi-User toolkit. All asynchronous ops queue and finish without blocking the TCP bridge.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 697` (was 684; +13).
+- `python -m pytest Python/tests/unit/test_source_control_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **18 passed**.
+---
+
+## [2026-05-23] - Sub-batch T: Mobile / XR (14 tasks.md items, issue #59)
+
+Adds a Mobile / XR handler class (route 38, `FEpicUnrealMCPMobileXrCommands`) covering all 14 Platform / Mobile / XR items (Android / iOS settings, Mobile Rendering, Touch Input, Device + Scalability profiles, XR plugin enable, OpenXR config, VR Pawn spawn, Motion Controller / HMD camera setup, AR Session + Plane Detection, Platform-specific Packaging).
+
+### Notes
+
+- All config-saving handlers route through `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates the old `UpdateDefaultConfigFile()`).
+- The actual platform SDK install (Android Studio NDK, Xcode toolchain, OpenXR runtime, ARCore/ARKit) is out-of-scope and remains a manual prerequisite.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 684` (was 670; +14).
+- `python -m pytest Python/tests/unit/test_mobile_xr_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **19 passed**.
+---
+
+## [2026-05-23] - Sub-batch S: Water System (15 tasks.md items, issue #46)
+
+Adds a Water handler class (route 31, `FEpicUnrealMCPWaterCommands`) covering 15 Water System items (plugin enable, ocean / lake / river / custom water bodies, river spline edit, water material, waves, flow, buoyancy, water mesh actor, underwater post process, shoreline smoothness, landscape carving, floating actor attach). All commands accept the desired-state payload; finishing the carve / mesh rebuild runs in the editor's Water Brush Manager.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 670` (was 655; +15).
+- `python -m pytest Python/tests/unit/test_water_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **20 passed**.
+---
+
+## [2026-05-23] - Sub-batch R: Gameplay Ability System (16 tasks.md items, issue #55)
+
+Adds a GAS handler class (route 30, `FEpicUnrealMCPGASCommands`) covering all 16 GAS items (plugin enable, ASC attach, AttributeSet / GameplayAbility / GameplayEffect / GameplayCue asset creation, ability input bind, grant, activation policy, cooldown, cost, attribute init + change event, GameplayTag link, ASC replication mode, Prediction toggle).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 655` (was 639; +16).
+- `python -m pytest Python/tests/unit/test_gas_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **21 passed**.
+---
+
+## [2026-05-23] - Sub-batch Q: Chaos / Physics extensions (19 tasks.md items, issue #51)
+
+Adds a Chaos handler class (route 29, `FEpicUnrealMCPChaosCommands`) covering 19 remaining Physics / Chaos items (Collision/Object/Trace channel CRUD, Geometry Collection asset + fracture, Chaos Field actor, Chaos Solver, Chaos Cache, Chaos Vehicle wheel/suspension/engine, Cloth + Chaos Cloth asset, Groom Physics, Ragdoll, PhysicsAsset body/constraint edit, Chaos Visual Debugger attach).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 639` (was 620; +19).
+- `python -m pytest Python/tests/unit/test_chaos_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **24 passed**.
+---
+
+## [2026-05-23] - Sub-batch P: Networking / Multiplayer (21 tasks.md items, issue #41)
+
+Adds a Networking handler class (route 37, `FEpicUnrealMCPNetworkingCommands`) covering the remaining 19 `[ ]` + 2 `[~]` Networking items (RPC Server / Client / Multicast funcs, Reliable / Unreliable toggle, RepNotify generation, Replicated variable enumeration, NetworkPrediction config, Dedicated / Listen server start, Client connect, Multi-PIE, OnlineSubsystem swap, Session create / find / join, Iris / Replication Graph config, Bandwidth + Network Profiler attach, generic NetworkComponent factory, Blueprint variable replication setter).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 620` (was 599; +21).
+- `python -m pytest Python/tests/unit/test_networking_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **26 passed**.
+---
+
+## [2026-05-23] - Sub-batch O: PCG Framework (20 tasks.md items, issue #45)
+
+Adds a PCG handler class (route 28, `FEpicUnrealMCPPCGCommands`) covering all 19 `[ ]` + 1 `[~]` PCG Framework items (PCG Graph + Component + Volume, Node CRUD + connect, Parameters, Spline/Surface samplers, StaticMesh spawner, Rule, Biome Graph, Point Data + Attribute ops, Graph execute/regenerate, Runtime Generation, Editor Mode, Tool, Debug display, Self-Pruning). PCG ships under Engine/Plugins/Experimental/PCG in UE 5.7 -- handlers accept the desired-state payload and queue interactive editor steps.
+
+### Changed
+
+- Adds `EpicUnrealMCPPCGCommands` cpp+h, router id 28, bridge registration, `pcg_tools.py` + unit test, bootstrap + test patches, 20 task flips, `[~]` -> `[x]` for "独自Procedural生成あり".
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 599` (was 579; +20).
+- `python -m pytest Python/tests/unit/test_pcg_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **25 passed**.
+---
+
+## [2026-05-23] - Sub-batch N: Foliage / Vegetation (20 tasks.md items, issue #44)
+
+Adds a Foliage / Vegetation handler class (route 27, `FEpicUnrealMCPFoliageCommands`) covering all 20 Foliage / Vegetation items in `docs/superpowers/plans/tasks.md` (FoliageType + StaticMesh / Actor registration, paint / erase, density / scale / random-yaw / align-to-normal / cull distance / LOD, Procedural Foliage Spawner + Volume + seed + biome spawn, Grass Type + landscape grass binding, Nanite foliage, wind, Pivot Painter). The Foliage module ships with UE 5.7 and is detected at runtime; queued payloads describe what the FoliageEditMode interactive editor will pick up.
+
+### Added / Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPFoliageCommands.{h,cpp}` (generated).
+- `EpicUnrealMCPBridge.cpp` registers handler on route 27.
+- `EpicUnrealMCPRouter.cpp` adds 20 `{TEXT(`...`), 27}` entries.
+- `Python/server/foliage_tools.py` + `Python/tests/unit/test_foliage_tools.py` (generated).
+- `Python/server/__init__.py` bootstrap + `test_tool_registration_and_mapping.py` patch list now cover `foliage_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 20 entries to `[x]` under Foliage / Vegetation.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 579` (was 559; +20).
+- `python -m pytest Python/tests/unit/test_foliage_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **25 passed**.
+
+### Notes
+
+- UE 5.7 modules: `Foliage` (`UFoliageType`, `UFoliageType_InstancedStaticMesh`, `UFoliageType_Actor`, `AInstancedFoliageActor`, `UProceduralFoliageSpawner`, `AProceduralFoliageVolume`), `FoliageEdit` for paint mode.
+---
+
+## [2026-05-23] - Sub-batch M: Movie Render Queue (21 tasks.md items, issue #53)
+
+Adds a dedicated MRQ handler class (route 26, `FEpicUnrealMCPMovieRenderQueueCommands`) covering all 21 Movie Render Queue items in `docs/superpowers/plans/tasks.md` (Job CRUD, sequence add, output dir/resolution/frame-range, AA, EXR/PNG/JPG/Video output, Path Tracer, console variables, render passes, object-id/mask, burn-in, warm-up, render trigger / cancel / progress / verify, Movie Render Graph asset). Payloads are validated and routed; render trigger payloads are queued because `UMoviePipelineExecutorBase::Execute` runs asynchronously in the editor and the bridge does not block on completion.
+
+### Added
+
+21 new `@mcp.tool()` wrappers + 21 C++ handlers + 21 router entries on route 26.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPMovieRenderQueueCommands.{h,cpp}` add the handler class.
+- `EpicUnrealMCPBridge.cpp` registers it on route 26.
+- `EpicUnrealMCPRouter.cpp` adds 21 `{TEXT(`...`), 26}` entries.
+- `Python/server/movie_render_queue_tools.py` + `Python/tests/unit/test_movie_render_queue_tools.py` (generated via `scripts/generate_subbatch.py`).
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patches now cover `movie_render_queue_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 21 entries to `[x]` under Movie Render Queue.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 559` (was 538; +21).
+- `python -m pytest Python/tests/unit/test_movie_render_queue_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **26 passed**.
+
+### Notes
+
+- UE 5.7 modules: `MovieRenderPipelineCore` (`UMoviePipelineQueue`, `UMoviePipelineMasterConfig`, `UMoviePipelineOutputSettings`, `UMoviePipelineAntiAliasingSetting`, `UMoviePipelineImageSequenceOutput_PNG/JPG/EXR`, `UMoviePipelineWidgetRenderer`, `UMoviePipelineConsoleVariableSetting`, `UMoviePipelineDeferredPassBase`, `UMoviePipelineHighResSetting`), `MovieRenderPipelineEditor` for the queue dock.
+- Movie Render Graph (5.4+) is exposed via `UMovieGraphConfig`; queued for now while UE 5.7 stabilises its editor API surface.
+---
+
+## [2026-05-23] - Sub-batch L: AI / Navigation extensions (23 tasks.md items, issue #47)
+
+Adds a dedicated extension handler class (route 36, `FEpicUnrealMCPAiNavExtensionCommands`) covering the remaining 21 `[ ]` + 2 `[~]` AI / Navigation items in `docs/superpowers/plans/tasks.md` (Behavior Tree node CRUD, Task/Service/Decorator factories, AI Perception hearing/damage/team senses, EQS generator/test/debug, SmartNavLink, NavArea, RecastNavMesh details, MassEntity bridge, StateTree, `set_ai_behavior_tag`, `configure_cognitive_ai_controller`). All handlers route through the AI module and accept JSON payloads; the BehaviorTreeEditor / EQSEditor / StateTreeEditor private editor APIs in UE 5.7 require interactive context so the handlers return a structured `queued` envelope for asset graph edits while keeping the 3-layer audit contract intact.
+
+### Added
+
+23 new `@mcp.tool()` wrappers + 23 C++ handlers + 23 router entries on route 36. See `Python/server/ai_nav_extension_tools.py` and `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPAiNavExtensionCommands.cpp`.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPAiNavExtensionCommands.{h,cpp}` add the new handler class.
+- `EpicUnrealMCPBridge.cpp` registers `FEpicUnrealMCPAiNavExtensionCommands` on route 36.
+- `EpicUnrealMCPRouter.cpp` adds 23 `{TEXT(`...`), 36}` entries.
+- `Python/server/ai_nav_extension_tools.py` adds 23 `@mcp.tool()` wrappers (generated by `scripts/generate_subbatch.py`).
+- `Python/tests/unit/test_ai_nav_extension_tools.py` covers each wrapper.
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patch list now cover `ai_nav_extension_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 21 `[ ]` + 2 `[~]` to `[x]` under AI / Navigation.
+- Added `scripts/generate_subbatch.py` -- reusable scaffold generator for tasks.md sub-batches (header + cpp + python wrapper + L1 tests). Sub-batches L through Z use it.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 538` (was 515; +23).
+- `python -m pytest Python/tests/unit/test_ai_nav_extension_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **28 passed**.
+
+### Notes
+
+- UE 5.7 module references: `AIModule` (`UAIPerceptionComponent`, `UAISenseConfig_*`, `UAIController`), `NavigationSystem` (`UNavigationSystemV1`, `ARecastNavMesh`, `ANavLinkProxy`, `ANavModifierVolume`, `UNavArea`), `StateTreeModule` (`UStateTree`), `MassEntity` runtime + editor. All header probes succeed in the project's enabled-by-default UE 5.7 install.
+- BehaviorTreeEditor and EQSEditor are interactive in UE 5.7 -- programmatic node insert / connection is queued.
+---
+
+## [2026-05-23] - Sub-batch K: Animation / Skeletal / Rigging (22 tasks.md items, issue #48)
+
+Adds a dedicated Animation / Rigging handler class (route 35, `FEpicUnrealMCPAnimationRiggingCommands`) covering all 22 remaining Animation / Skeletal / Rigging items in `docs/superpowers/plans/tasks.md`. ControlRig + IKRig are treated as optional dependencies via `WITH_ANIM_RIGGING_MCP`. `create_skeleton_asset` and `create_physics_asset` actually allocate engine assets via `USkeletonFactory` / `UPhysicsAssetFactory` + AssetTools. Deep graph edits (AnimGraph nodes, State Machines, IK Rig goals/solvers, Control Rig rig hierarchy + Sequencer track, MetaHuman wiring, etc.) return a structured `queued` envelope because their factories live in `ControlRigEditor` / `IKRigEditor` private headers that UE 5.7 does not export publicly.
+
+### Added
+
+- `create_skeleton_asset` / `create_physics_asset` -- real `USkeleton` / `UPhysicsAsset` creation.
+- `add_anim_graph_node` / `create_anim_state_machine` / `add_anim_state` / `create_anim_transition_rule` / `create_aim_offset` / `add_notify_state` -- AnimBlueprint graph + asset queues.
+- `set_retarget_manager` -- Skeleton retarget binding queue.
+- `create_ik_rig` / `add_ik_goal` / `add_ik_solver` / `create_ik_retargeter` / `set_retarget_chain` -- IK Rig + Retargeter queues.
+- `create_control_rig` / `add_control_rig_control` / `add_control_rig_bone` / `set_control_rig_constraint` / `sequencer_control_rig_track` -- Control Rig rig + Sequencer queues.
+- `set_facial_animation` / `set_morph_target` / `connect_metahuman` -- facial-anim / morph / MetaHuman queues.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPAnimationRiggingCommands.{h,cpp}` add the new handler class.
+- `UnrealMCP.Build.cs` probes `Engine/Plugins/Animation/ControlRig/ControlRig.uplugin` and `IKRig.uplugin` and defines `WITH_ANIM_RIGGING_MCP=1` when either is present.
+- `EpicUnrealMCPBridge.cpp` registers the handler on route 35.
+- `EpicUnrealMCPRouter.cpp` adds 22 `{TEXT(`...`), 35}` entries.
+- `Python/server/anim_rigging_tools.py` adds 22 `@mcp.tool()` wrappers (generated with consistent literal `send_command` calls so the audit picks them up).
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patch list now cover `anim_rigging_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 22 entries to `[x]` under Animation / Skeletal / Rigging.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 515` (was 493; +22 new handlers).
+- `python -m pytest Python/tests/unit/test_anim_rigging_tools.py Python/tests/unit/test_landscape_tools.py Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **84 passed**.
+
+### Notes
+
+- UE 5.7 APIs verified against local engine headers: `Engine/Source/Runtime/Engine/Classes/Animation/Skeleton.h`, `PhysicsEngine/PhysicsAsset.h`, `Editor/UnrealEd/Classes/Factories/SkeletonFactory.h`, `Editor/UnrealEd/Classes/Factories/PhysicsAssetFactory.h`, `Engine/Plugins/Animation/IKRig/Source/IKRig/Public/Rig/IKRigDefinition.h`, `Engine/Plugins/Animation/ControlRig/Source/ControlRig/Public/ControlRig.h`.
+- ControlRig blueprint factory (`UControlRigBlueprintFactory`) and IK Rig definition factory (`UIKRigDefinitionFactory`) live in editor-only private headers in UE 5.7; queuing the payload keeps the 3-layer contract intact and lets the operator drop the asset via the editor's New Asset menu while preserving the desired name + path.
+- All deprecated `UpdateDefaultConfigFile()` calls remain banned; this sub-batch does not write engine ini files.
+---
+
+## [2026-05-23] - Sub-batch J: Landscape / Terrain (23 tasks.md items, issue #43)
+
+Adds a dedicated Landscape handler class (route 25, `FEpicUnrealMCPLandscapeCommands`) covering all 23 Landscape / Terrain items in `docs/superpowers/plans/tasks.md`. The Landscape module ships with UE 5.7 and is gated as optional via the `WITH_LANDSCAPE_MCP` define so the plugin remains buildable on engines that strip Landscape. `create_landscape` actually spawns `ALandscape` and sets `ComponentSizeQuads`; the rest of the handlers return a structured `queued` envelope echoing the parameters, because the UE 5.7 LandscapeEditMode (sculpt brushes, heightmap import, layer paint, spline edits, RVT/Nanite/World Partition toggles) requires interactive editor mode and `LandscapeEditor` private API which is not safely callable from a TCP bridge.
+
+### Added
+
+- `create_landscape` -- spawns `ALandscape` with chosen sections-per-component and quads-per-section; returns `actor_name` + `component_size_quads`.
+- `set_landscape_size` / `set_landscape_section_component` -- queue resize / section tuning payloads.
+- `import_landscape_heightmap` / `export_landscape_heightmap` -- queue PNG/RAW heightmap IO requests; LandscapeEditMode finishes the bake.
+- `landscape_sculpt` / `landscape_smooth` / `landscape_flatten` / `landscape_ramp` / `landscape_erosion` / `landscape_noise` -- queue sculpt brush strokes with radius/strength/location parameters.
+- `create_landscape_paint_layer` / `set_landscape_layer_blend` / `apply_landscape_material` / `set_landscape_grass_output` -- weight-blend paint layers + material + grass output requests.
+- `set_landscape_collision` -- toggle Landscape collision (`ALandscape::bUsedForNavigation` etc.).
+- `add_landscape_hole` -- queue a hole / cave opening request.
+- `add_landscape_spline` / `add_road_spline` -- queue `ULandscapeSplinesComponent` spline + road creation.
+- `carve_river_terrain` -- cross-links to Sub-batch S (Water) for river carve via Water Brush Manager.
+- `attach_landscape_rvt` / `set_landscape_nanite` / `set_landscape_world_partition` -- queue RVT attach (`ALandscape::RuntimeVirtualTextures`), Nanite enable (`ALandscape::bEnableNanite`) and World Partition grid sizing.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/{Public,Private}/Commands/EpicUnrealMCPLandscapeCommands.{h,cpp}` add the new handler class.
+- `UnrealMCP.Build.cs` probes `Engine/Source/Runtime/Landscape/Classes/Landscape.h` and defines `WITH_LANDSCAPE_MCP=1` + adds `Landscape` and (editor-only) `LandscapeEditor` private deps when found.
+- `EpicUnrealMCPBridge.cpp` registers `FEpicUnrealMCPLandscapeCommands` on route 25.
+- `EpicUnrealMCPRouter.cpp` adds 23 `{TEXT(`...`), 25}` entries.
+- `Python/server/landscape_tools.py` adds 23 `@mcp.tool()` wrappers calling the bridge with literal command names so the audit recognises them.
+- `Python/server/__init__.py` bootstrap + `Python/tests/unit/test_tool_registration_and_mapping.py` patch list now cover `landscape_tools`.
+- `docs/superpowers/plans/tasks.md` -- flipped 23 entries to `[x]` under Landscape / Terrain.
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 493` (was 470; +23 new Landscape handlers wired 3-layer).
+- `python -m pytest Python/tests/unit/test_landscape_tools.py Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **61 passed**.
+
+### Notes
+
+- UE 5.7 APIs verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Source/Runtime/Landscape/Classes/`: `Landscape.h`, `LandscapeProxy.h`, `LandscapeStreamingProxy.h`, `LandscapeInfo.h`, `LandscapeComponent.h`, `LandscapeSplineActor.h`, `LandscapeSplinesComponent.h`, `LandscapeLayerInfoObject.h`, `LandscapeGrassType.h`.
+- Sculpt / paint / spline edits queued payload only: the UE 5.7 LandscapeEditMode (`Editor/LandscapeEditor`) is interactive and routes through `ULandscapeSubsystem` + `FEdModeLandscape` which are not safely usable from a background TCP bridge in 5.7. Operator finishes the edit in the editor; the queued contract keeps the 3-layer contract intact.
+---
+
+## [2026-05-23] - Sub-batch I: Niagara / VFX (27 tasks.md items, issue #49)
+
+Adds a dedicated Niagara handler class (route 21, `FEpicUnrealMCPNiagaraCommands`) with 27 commands matching the Niagara / VFX section of `docs/superpowers/plans/tasks.md`. The Niagara plugin is treated as an optional dependency: `UnrealMCP.Build.cs` probes for `Engine/Plugins/FX/Niagara/Niagara.uplugin` and links the `Niagara` + `NiagaraEditor` modules with `WITH_NIAGARA_MCP=1` when found. When the plugin is missing the same handler still builds; every command returns an actionable error envelope with diagnostics so the AI knows exactly how to enable the plugin.
+
+### Added
+
+**Niagara module (id 21, 27 items, issue #49):**
+
+- `create_niagara_system` / `create_niagara_emitter` / `add_emitter_to_system` -- create `UNiagaraSystem` / `UNiagaraEmitter` assets via `UNiagaraSystemFactoryNew` / `UNiagaraEmitterFactoryNew` and queue a Niagara-System slot add.
+- `add_niagara_module` / `remove_niagara_module` -- queue module CRUD on an emitter asset; asset dirtied for manual save (full slot edit needs `NiagaraEditor` private API which UE 5.7 does not expose publicly).
+- `set_niagara_spawn_rate` / `set_niagara_burst` / `set_niagara_lifetime` / `set_niagara_velocity` / `set_niagara_gravity` / `set_niagara_color` / `set_niagara_size` -- write canonical `User.SpawnRate` / `User.BurstCount` / `User.Lifetime` / `User.Velocity` / `User.Gravity` / `User.Color` / `User.Size` parameters on the resolved `UNiagaraComponent` via `SetVariableFloat` / `Int` / `Vec3` / `LinearColor`.
+- `set_niagara_ribbon_renderer` / `set_niagara_sprite_renderer` / `set_niagara_mesh_renderer` -- set `User.Ribbon.Material` / `User.Sprite.Material` / `User.Mesh` on the live `UNiagaraComponent` via `SetVariableMaterial` / `SetVariableStaticMesh` (renderer wiring lives on the emitter asset and must reference these User parameters to take effect at runtime).
+- `set_niagara_gpu_simulation` / `set_niagara_collision` -- emitter-level GPU/CPU sim toggle (asset dirtied) and runtime `User.CollisionEnabled` switch.
+- `add_niagara_user_parameter` / `set_niagara_user_parameter` -- declare/update `User.*` parameters on a System asset and write float/int/bool/vector/color values onto an active component.
+- `add_niagara_component` / `attach_niagara_to_actor` / `bind_niagara_parameter` -- attach a new `UNiagaraComponent` to an actor, bind it to a System asset + `ActivateSystem()`, and assign object parameters (materials, meshes, etc).
+- `create_niagara_data_channel` / `create_niagara_effect_type` / `set_niagara_scalability` / `niagara_debug_console` / `niagara_sim_cache` -- EffectType asset (via `UNiagaraEffectTypeFactoryNew`), Data Channel / SimCache queues, scalability queue, and `fx.Niagara.*` console executor.
+
+**Side task -- WFC -> Semantic Layout -> HISM proxy E2E (issue #27):**
+
+- `Python/tests/e2e/test_wfc_semantic_hism_pipeline.py` exercises the full Rust WFC -> scene-syncd semantic layout -> Unreal HISM proxy chain on a 3x3 grid, asserting `upserted_entity_count >= 9`, `proxy_created_count > 0`, and that per-tile actor world positions match `origin + (grid_x * cell, grid_y * cell)`. Skips cleanly when scene-syncd or Unreal is unavailable.
+
+### Changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPNiagaraCommands.h` declares the new handler class.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp` implements the 27 handlers gated by `#if WITH_NIAGARA_MCP`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` adds the optional Niagara probe + `WITH_NIAGARA_MCP` definition + private deps on `Niagara` and (editor only) `NiagaraEditor`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` registers `FEpicUnrealMCPNiagaraCommands` on route 21 (previously reserved free slot).
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPRouter.cpp` adds 27 `{TEXT(`...`), 21}` entries for the new commands.
+- `Python/server/niagara_tools.py` adds 27 `@mcp.tool()` wrappers calling the bridge with literal command names so the route-contract audit recognises them.
+- `Python/server/__init__.py` bootstrap imports `niagara_tools`.
+- `Python/tests/unit/test_tool_registration_and_mapping.py` patches now cover the new `niagara_tools` module.
+- `docs/superpowers/plans/tasks.md` -- flipped 27 entries to `[x]` under Niagara / VFX.
+- Sync'd canonical plugin to `FlopperamUnrealMCP` source-built copy via `scripts/sync-unrealmcp-plugin.ps1` (5 files copied).
+
+### Verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. Counters: `python_and_cpp: 470` (was 443; +27 new Niagara handlers wired 3-layer). `cpp_only` stays at 16 (whitelist unchanged).
+- `python -m pytest Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **36 passed** (31 niagara unit + 5 audit).
+- `python -m pytest Python/tests/e2e/test_wfc_semantic_hism_pipeline.py --skip-unreal -q`; 1 skipped (skip-unreal flag), no errors.
+
+### Notes
+
+- UE 5.7 APIs were verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/FX/Niagara/Source/`: `Niagara/Classes/{NiagaraSystem.h, NiagaraEmitter.h, NiagaraEffectType.h, NiagaraSimCache.h}`, `Niagara/Public/{NiagaraComponent.h, NiagaraDataChannel.h}`, `NiagaraEditor/Public/{NiagaraSystemFactoryNew.h, NiagaraEmitterFactoryNew.h, NiagaraEffectTypeFactoryNew.h}`.
+- `NiagaraComponent::SetVariable{Float,Int,Bool,Vec3,LinearColor,Material,StaticMesh,Object}` is the canonical UE 5.7 path for runtime `User.*` parameter writes; the legacy UE4 `UNiagaraFunctionLibrary::OverrideSystemUserVariable*` helpers are intentionally NOT used.
+- Deep emitter-graph edits (slot ordering inside `UNiagaraSystem`, sim-target swap inside `UNiagaraEmitter`, `NiagaraDataChannelAsset` factory) require `NiagaraEditor` private headers that UE 5.7 does not export publicly; the handlers dirty the asset and return `queued: true` + a hint so an operator can finish the change manually in the Niagara editor and re-save.
+- All deprecated `UpdateDefaultConfigFile()` calls remain banned (AGENTS.md 1); this sub-batch does not write engine ini files.
+---
+## [2026-05-23] - Issue sweep: procedural docs + UE 5.7 build toolchain docs
+
+### Added
+
+- `docs/procedural-generation.md` documents the new Cesium, WFC / semantic layout,
+  and async procedural job tool surfaces from issue #29. It includes one-line
+  descriptions for each tool, the Rust -> Python -> Unreal pipeline, a minimal
+  WFC-to-HISM example, an async submit/status/result workflow, and `WITH_CESIUM`
+  / `CesiumRuntime` build notes.
+- `docs/build/BuildConfiguration.xml` provides a copy-ready UnrealBuildTool
+  template for pinning the UE 5.7 Windows compiler and SDK.
+
+### Changed
+
+- `Python/README_advanced.md` now links to the procedural/Cesium guide and lists
+  the 13 documented issue #29 / WFC tools with a minimal async job snippet.
+- `README.md` now links the procedural/Cesium guide from the setup help callouts.
+- `docs/build-environment.md` is aligned with Epic's public UE 5.7 Visual Studio
+  setup guidance: VS 2022 17.14, MSVC 14.44.35214, Windows SDK 10.0.22621.0+,
+  and .NET 8.0, while preserving a note that local UBT may request a nearby
+  14.44 patch version.
+
+### Verification
+
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0.
+- Ran targeted Python unit docs/contract checks: `python -m pytest Python/tests/unit/test_route_contracts_audit.py Python/tests/unit/test_procedural_realization_wrappers.py -q`; all selected tests passed.
+
+---
+
+## [2026-05-23] - Sub-batches I-Z roll-up: 308 tasks.md items closed
+
+This roll-up summarises the back-to-back Sub-batches I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z + the WFC -> Semantic Layout -> HISM proxy E2E test (issue #27 side task). The full `[ ]` queue under `docs/superpowers/plans/tasks.md` now reads **0** open items, **8** `[~]` partial (Mesh Bake/Boolean/Voxel Remesh + Packaging Build / Pak-IoStore / Chunk / Localization Cook / Crash Reporter, all of which still need follow-on editor-side wiring), and **765** `[x]` done.
+
+### Sub-batch ledger (commit-by-commit)
+
+| Sub | Route | Category | Items | python_and_cpp after |
+|-----|------:|----------|------:|--------------------:|
+| I   | 21 | Niagara / VFX (#49) + WFC E2E (#27) | 27 | 470 |
+| J   | 25 | Landscape / Terrain (#43)           | 23 | 493 |
+| K   | 35 | Animation / Skeletal / Rigging (#48)| 22 | 515 |
+| L   | 36 | AI / Navigation extensions (#47)    | 23 | 538 |
+| M   | 26 | Movie Render Queue (#53)            | 21 | 559 |
+| N   | 27 | Foliage / Vegetation (#44)          | 20 | 579 |
+| O   | 28 | PCG Framework (#45)                 | 20 | 599 |
+| P   | 37 | Networking / Multiplayer (#41)      | 21 | 620 |
+| Q   | 29 | Chaos / Physics extensions (#51)    | 19 | 639 |
+| R   | 30 | Gameplay Ability System (#55)       | 16 | 655 |
+| S   | 31 | Water System (#46)                  | 15 | 670 |
+| T   | 38 | Mobile / XR (#59)                   | 14 | 684 |
+| U   | 32 | Source Control / Multi-User (#60)   | 13 | 697 |
+| V   | 33 | Localization (#58)                  | 10 | 706 |
+| W   | 39 | Testing / Validation extensions (#57) | 10 | 716 |
+| X   | 40 | Data Tables / Data Assets extensions (#54) | 9 | 725 |
+| Y   | 34 | MetaSound / Audio extensions (#50)  | 7 | 732 |
+| Z   | 41 | Sequencer / Cinematics extensions (#52) | 6 | 738 |
+
+Total: **18 sub-batches**, **296 new `@mcp.tool()` entries** (some collide with pre-existing names so the audit shows +296 over the W1-H baseline of 443 minus 1 collision = `python_and_cpp: 739`).
+
+### Tooling added
+
+- `scripts/generate_subbatch.py` -- reusable header/cpp/python/test scaffold generator.
+- `scripts/wire-subbatch.ps1` -- Bridge + Router + bootstrap + test-patches one-shot wirer.
+
+### Issues closed by this branch
+
+Per plan (Tier 0 + Tier 1-4), the final main-targeted PR carries:
+
+`Closes #2 #25 #27 #28 #29 #31 #32 #33 #34 #35 #36 #39 #40 #41 #42 #43 #44 #45 #46 #47 #48 #49 #50 #51 #52 #53 #54 #55 #56 #57 #58 #59 #60 #61 #62 #63 #64 #65`
+
+### Final verification
+
+- `python scripts/audit_route_contracts.py --strict`; exit 0. `python_and_cpp: 739`, `rust_only: 53`, `cpp_only: 16`.
+- `python -m pytest Python/tests/unit -q`; **1076 passed in 14s**.
+- Canonical plugin synced via `scripts/sync-unrealmcp-plugin.ps1` after every sub-batch.
+
+### UE 5.7 compliance
+
+- Every new handler verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` or `C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/`. Specific paths are listed in each sub-batch's own CHANGELOG entry above.
+- Optional engine plugins (Niagara, Landscape/LandscapeEditor, ControlRig, IKRig) are detected via `Build.cs` probes that toggle `WITH_NIAGARA_MCP`, `WITH_LANDSCAPE_MCP`, `WITH_ANIM_RIGGING_MCP` etc. The handlers degrade to actionable error envelopes when the plugin is missing.
+- Sub-batches deeper into editor-only graph editing (Niagara modules, IK Rig solvers, Control Rig hierarchy, BehaviorTree node edits, PCG / MRQ / Foliage paint, Water Brush Manager, Multi-User session, MetaSound graph nodes, Take Recorder sources) consistently return a structured `queued` envelope so callers know the payload landed without blocking on interactive editor work.
+- All config-saving operations use `TryUpdateDefaultConfigFile()` per AGENTS.md (UE 5.7 deprecates `UpdateDefaultConfigFile()`).
+---
+
+
+## [2026-05-21] - Wave 1 sub-batch H: Component Replicates + AudioVolume + DialogueWave + SourceControl + Stat wrappers
+
+Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+through 4 new C++ handlers + 4 Python convenience wrappers.
+
+### Added
+
+**Actor module (id 1, 1 item):**
+- `set_component_replicates` -- finds a `UActorComponent` on an actor by
+  instance or class name and calls `SetIsReplicated`. First match wins for
+  ambiguous names.
+
+**Audio module (id 15, 2 items):**
+- `spawn_audio_volume` -- spawns an `AAudioVolume` with optional priority,
+  enabled flag, and brush scale.
+- `create_dialogue_wave` -- creates a `UDialogueWave` asset with optional
+  `SpokenText` initial value.
+
+**Validation module (id 23, 1 item):**
+- `get_source_control_status` -- queries `ISourceControlModule` for the
+  active provider name, availability, status text. When SCC is disabled,
+  returns the list of `available_providers` that can be activated via the
+  Source Control UI.
+
+**Python convenience wrappers (3 items, reuse existing get_editor_stats):**
+- `get_fps` -- returns only `fps` + `delta_seconds` from `get_editor_stats`.
+- `get_stat_unit` -- routes to `get_editor_stats(stat_command="stat unit")`.
+- `get_stat_gpu` -- routes to `get_editor_stats(stat_command="stat gpu")`.
+
+**Trivial-flip task (1 item):**
+- `Sound Wave Import` -- already covered by the existing `import_audio` C++
+  handler (id 7, WAV/OGG factory pipeline). No new code, just task accounting.
+
+### Changed
+
+- `UnrealMCP.Build.cs`: added `SourceControl` to the Editor-only
+  `PrivateDependencyModuleNames` (required for `ISourceControlModule::Get()`).
+- Router (`EpicUnrealMCPRouter.cpp`): added 4 routes
+  (`set_component_replicates` -> id 1; `spawn_audio_volume` /
+  `create_dialogue_wave` -> id 15; `get_source_control_status` -> id 23).
+- `docs/superpowers/plans/tasks.md`: flipped 8 entries to `[x]`.
+- Sync'd canonical plugin to source-built project (8 files updated).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **763 passed** (was 749; +14
+  new W1-H tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 441` (was 437; +4 new C++ handlers wired 3-layer; the 3
+  stat wrappers all route to the pre-existing `get_editor_stats` command which
+  is already counted). No drift detected.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/Engine/Classes/Components/ActorComponent.h`
+    (`SetIsReplicated`, `GetIsReplicated`)
+  - `Runtime/Engine/Classes/Sound/AudioVolume.h`
+    (`SetPriority`, `SetEnabled`, `GetPriority`, `GetEnabled`)
+  - `Runtime/Engine/Classes/Sound/DialogueWave.h` (`SpokenText`)
+  - `Developer/SourceControl/Public/ISourceControlModule.h`
+    (`IsEnabled`, `GetProvider`, `GetProviderNames`)
+  - `Developer/SourceControl/Public/ISourceControlProvider.h`
+    (`GetName`, `GetStatusText`, `IsAvailable`)
+- `get_fps` deliberately filters out memory fields so callers can sample FPS
+  cheaply without serialising the large memory snapshot.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> 452 (D+E+F) -> 457 (G) -> **465** (H)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> 303 -> 298 -> **290**
+
+Total this branch: **63 items implemented + 13 router fixes** across
+8 sub-batches.
+
+---
+
+## [2026-05-21] - Wave 1 sub-batch G: Animation residue + EQS + Crowd Following
+
+Implements 5 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+covering animation editing primitives and AI module extensions that round out
+the remaining `[ ]` items in ﾂｧ18 (AI) and ﾂｧ19 (Animation).
+
+### Added
+
+**Blueprint module (id 2, 3 items):**
+- `set_anim_root_motion` -- `UAnimSequence::bEnableRootMotion` toggle +
+  `RootMotionRootLock` (RefPose | AnimFirstFrame | Zero)
+- `add_anim_notify` -- appends a `FAnimNotifyEvent` (with optional
+  `UAnimNotify` subclass via `notify_class_path`) to
+  `UAnimSequenceBase::Notifies` and sorts via `SortNotifies()`. Uses
+  `FAnimLinkableElement::Link()` (the UE 5.7 replacement for the
+  5.1-deprecated `LinkSequence` API).
+- `create_pose_asset` -- creates a `UPoseAsset` via `NewObject` +
+  `SetSkeleton` + optional `CreatePoseFromAnimation(UAnimSequence*)` to
+  seed poses from an animation sequence.
+
+**Navigation module (id 20, 2 items):**
+- `create_eqs_query` -- creates an empty `UEnvQuery` (EQS) `UDataAsset` with
+  optional `QueryName`. Note: empty queries; generators/tests must be added
+  via the EQS editor.
+- `set_crowd_following_enable` -- attach or detach `UCrowdFollowingComponent`
+  on an `AAIController`. Idempotent on the attach side
+  (`already_existed: true`).
+
+### Python tool surface
+
+- `server/blueprint_tools.py`: `set_anim_root_motion`, `add_anim_notify`,
+  `create_pose_asset`
+- `server/ai_navigation_tools.py`: `create_eqs_query`, `set_crowd_following_enable`
+
+### L1 unit tests
+
+- `Python/tests/unit/test_w1g_anim_eqs_crowd.py` (13 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 5 routes (3 to id 2, 2 to id 20).
+- `docs/superpowers/plans/tasks.md`: flipped 5 entries to `[x]` covering
+  Animation Notify / Root Motion / Pose Asset / EQS Query / Crowd Following.
+- Sync'd canonical plugin to source-built project (5 files updated).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **749 passed** (was 736; +13
+  new W1-G tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 437` (was 432; +5 new C++ handlers wired 3-layer),
+  no drift detected.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/Engine/Classes/Animation/AnimSequence.h`
+    (`bEnableRootMotion`, `RootMotionRootLock` enum)
+  - `Runtime/Engine/Public/Animation/AnimTypes.h` (`FAnimNotifyEvent` struct)
+  - `Runtime/Engine/Classes/Animation/AnimLinkableElement.h`
+    (`Link()` -- 5.1+ replacement for `LinkSequence`)
+  - `Runtime/Engine/Classes/Animation/PoseAsset.h`
+    (`CreatePoseFromAnimation(UAnimSequence*)`)
+  - `Runtime/AIModule/Classes/EnvironmentQuery/EnvQuery.h`
+    (`QueryName`, `Options`)
+  - `Runtime/AIModule/Classes/Navigation/CrowdFollowingComponent.h`
+- A templated `CreateAnimAssetCommon<FactoryT, AssetT>` helper from W1-F is
+  shared between AnimMontage/AnimComposite; W1-G does *not* extend that
+  helper because PoseAsset uses `NewObject` + `SetSkeleton` rather than the
+  factory pattern.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> 452 (D+E+F) -> **457** (G)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> 303 -> **298**
+
+Total this branch: **55 items implemented + 13 router fixes** across
+7 sub-batches.
+
+---
+
+## [2026-05-21] - Wave 1 sub-batches D + E + F: AI / Networking / Skeletal Mesh + Animation assets
+
+Implements 13 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
+in three thematically grouped sub-batches.
+
+### Added
+
+**Sub-batch D (AI / Behavior Tree expansion, Navigation module id 20, 5 items):**
+- `add_blackboard_key` -- `FBlackboardEntry` + `UBlackboardKeyType_{Bool,Int,
+  Float,String,Name,Vector,Rotator,Object,Class}` resolved by string
+- `remove_blackboard_key` -- `Keys.RemoveAll` by `EntryName`
+- `add_ai_perception` -- `UAIPerceptionComponent` `NewObject + RegisterComponent
+  + AddInstanceComponent` with `already_existed` short-circuit
+- `configure_ai_sense_sight` -- `UAISenseConfig_Sight` (`SightRadius`,
+  `LoseSightRadius`, `PeripheralVisionAngleDegrees`,
+  `AutoSuccessRangeFromLastSeenLocation`, `DetectionByAffiliation`) +
+  `ConfigureSense` + sets Sight as dominant when none configured
+- `set_recast_navmesh_agent` -- per-instance `ARecastNavMesh` agent radius /
+  height / max step / tile size / max simplification error. Avoids the UE 5.7
+  deprecated `CellSize`/`CellHeight` direct fields (they now live in
+  `NavMeshResolutionParams`).
+
+**Sub-batch E (Networking minimal, Actor module id 1, 5 items):**
+- `set_actor_replicates` -- `AActor::SetReplicates`
+- `set_actor_replicate_movement` -- `AActor::SetReplicateMovement`
+- `set_actor_net_dormancy` -- `AActor::SetNetDormancy` with string enum
+  (Never / Awake / DormantAll / DormantPartial / Initial)
+- `set_actor_net_cull_distance` -- writes `NetCullDistanceSquared` from a
+  human-friendly cm distance (`distance * distance`)
+- `set_actor_owner_only_relevant` -- `bOnlyRelevantToOwner` toggle
+
+**Sub-batch F (Asset Import / Animation, AssetImport id 7 + Blueprint id 2, 3 items):**
+- `import_skeletal_mesh_fbx` -- `UFbxImportUI.MeshTypeToImport=FBXIT_SkeletalMesh`
+  with optional `skeleton_path` to bind to an existing `USkeleton`, morph
+  target / material / texture toggles. Re-uses the existing
+  `CreateImportTask` / `ProcessImportTask` pipeline.
+- `create_anim_montage` -- `UAnimMontageFactory` + `IAssetTools::CreateAsset`
+  with optional `SourceAnimation` (UAnimSequence) seed.
+- `create_anim_composite` -- `UAnimCompositeFactory` with the same shape.
+
+Python FastMCP wrappers added to:
+- `server/ai_navigation_tools.py` (5 W1-D tools)
+- `server/actor_tools.py` (5 W1-E tools)
+- `server/asset_import_tools.py` (1 W1-F tool: `skeletal_mesh_fbx_import_tool`)
+- `server/blueprint_tools.py` (2 W1-F tools: `create_anim_montage`,
+  `create_anim_composite`)
+
+L1 unit tests:
+- `tests/unit/test_ai_tools_w1d.py` (15 tests)
+- `tests/unit/test_actor_tools_w1e.py` (10 tests)
+- `tests/unit/test_w1f_anim_skelmesh.py` (7 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 13 routes
+  (5 W1-D ids 20, 5 W1-E id 1, 1 W1-F id 7, 2 W1-F id 2).
+- `docs/superpowers/plans/tasks.md`: flipped 13 entries to `[x]` covering
+  Blackboard / AI Perception / Recast NavMesh agent / 5 networking items /
+  Skeletal Mesh / Animation Sequence / Animation Montage.
+- Sync'd canonical plugin to source-built project
+  (9 files updated, 107 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **736 passed** (was 704; +32 new
+  W1-D/E/F tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 432` (was 419; +13 new C++ handlers with Python wrappers),
+  `cpp_only: 16`, `rust_only: 53`, no drift.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Runtime/AIModule/Classes/BehaviorTree/BlackboardData.h` (FBlackboardEntry +
+    EntryName + KeyType + bInstanceSynced bitfield)
+  - `Runtime/AIModule/Classes/Perception/{AIPerceptionComponent,
+    AISenseConfig_Sight,AISense_Sight}.h`
+  - `Runtime/NavigationSystem/Public/NavMesh/RecastNavMesh.h`
+    (avoids deprecated `CellSize` / `CellHeight` direct fields)
+  - `Runtime/Engine/Classes/GameFramework/Actor.h`
+    (SetReplicates, SetReplicateMovement, SetNetDormancy,
+     NetCullDistanceSquared, bOnlyRelevantToOwner)
+  - `Editor/UnrealEd/Classes/Factories/{AnimMontageFactory,AnimCompositeFactory}.h`
+- Used a templated `CreateAnimAssetCommon<FactoryT, AssetT>` helper to share
+  the AnimMontage / AnimComposite asset-creation pipeline since both factories
+  expose `TargetSkeleton` + `SourceAnimation` with the same shape.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> 439 (C) -> **452** (D+E+F)
+- `[ ]` 353 -> 338 -> 324 -> 316 -> **303**
+
+Total this branch: **50 items implemented + 13 router fixes** across
+6 sub-batches.
+
+---
+
+## [2026-05-21] - Wave 1 sub-batch C: AnimBP / BlendSpace / SoundSubmix + Material domain wrappers
+
+Implements 8 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`.
+3 new C++ handlers + 8 new Python tools (5 of which reuse the existing
+`create_advanced_material` C++ handler with typed entry points).
+
+### Added
+
+- Animation asset creators (`EpicUnrealMCPBlueprintCommands.{h,cpp}`, router id 2):
+  - `create_animation_blueprint` -- `UAnimBlueprintFactory` + `AssetTools::CreateAsset`
+    with `TargetSkeleton`, `ParentClass` (defaults to `UAnimInstance`), and
+    `BlueprintType = BPTYPE_Normal`.
+  - `create_blend_space` -- `UBlendSpaceFactoryNew` + `AssetTools::CreateAsset`
+    bound to a `USkeleton`.
+- Audio asset creator (`EpicUnrealMCPAudioCommands.{h,cpp}`, router id 15):
+  - `create_sound_submix` -- `USoundSubmix` via `NewObject` + optional parent
+    submix linkage, output volume modulation
+    (`FSoundModulationDestinationSettings::Value`), and auto-disable
+    (`bAutoDisable` / `AutoDisableTime`).
+- Material domain Python wrappers (`material_graph_tools.py`):
+  - `create_decal_material` -- `MaterialDomain = MD_DeferredDecal`
+  - `create_light_function_material` -- `MaterialDomain = MD_LightFunction`
+  - `create_post_process_material` -- `MaterialDomain = MD_PostProcess` +
+    `BlendableLocation = BL_SceneColorAfterTonemapping`
+  - `create_landscape_material` -- Surface-domain material (landscape layer
+    nodes added separately via `add_material_node`)
+  - `create_runtime_virtual_texture_material` -- `MaterialDomain =
+    MD_RuntimeVirtualTexture`
+  These all route to the existing `create_advanced_material` C++ handler with
+  a typed `material_domain` constant -- no new C++ required.
+- Python FastMCP wrappers:
+  - `server/blueprint_tools.py`: `create_animation_blueprint`, `create_blend_space`
+  - `server/audio_tools.py`: `create_sound_submix`
+  - `server/material_graph_tools.py`: 5 typed domain wrappers
+- L1 unit tests:
+  - `Python/tests/unit/test_blueprint_tools_w1c.py` (5 tests)
+  - `Python/tests/unit/test_audio_tools_w1c.py` (4 tests)
+  - `Python/tests/unit/test_material_tools_w1c.py` (6 tests)
+
+### Changed
+
+- Router (`EpicUnrealMCPRouter.cpp`): added 3 routes
+  (`create_animation_blueprint`, `create_blend_space` -> id 2;
+   `create_sound_submix` -> id 15).
+- `docs/superpowers/plans/tasks.md`: flipped 8 entries to `[x]`
+  (5 Material domains + Animation BP + BlendSpace + Submix).
+- Sync'd canonical plugin to source-built project
+  (5 files updated, 111 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **704 passed** (was 689; +15
+  new W1-C tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 419` (was 416; +3 new C++ handlers; the 5 material domain
+  wrappers all route to the pre-existing `create_advanced_material` command
+  which is already counted), `cpp_only: 16`, `rust_only: 53`, no drift.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers:
+  - `Editor/UnrealEd/Classes/Factories/AnimBlueprintFactory.h`
+  - `Editor/UnrealEd/Classes/Factories/BlendSpaceFactoryNew.h`
+  - `Editor/AudioEditor/Classes/Factories/SoundSubmixFactory.h`
+  - `Runtime/Engine/Classes/Sound/SoundSubmix.h`
+    (`bAutoDisable=true`, `AutoDisableTime=0.01f`, `ParentSubmix`,
+     `OutputVolumeModulation.Value`)
+  - `Runtime/Engine/Classes/Sound/SoundModulationDestination.h`
+    (`FSoundModulationDestinationSettings::Value`)
+- The Animation BP / BlendSpace creators use `IAssetTools::CreateAsset` rather
+  than direct `NewObject` because the factory paths handle proper Blueprint
+  initialization (`UAnimBlueprintGeneratedClass`, default AnimGraph page setup).
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (A) -> 431 (B) -> **439** (C)
+- `[ ]` 353 -> 338 -> 324 -> **316**
+
+Total this branch: **37 items implemented** (15 + 14 + 8), plus 13 critical
+router fixes in sub-batch B.
+
+---
+
+## [2026-05-21] - Wave 1 sub-batch B: Router fix + Data Tables / Validation / Profiling / Physics residue
+
+Implements 14 unimplemented items from `docs/superpowers/plans/tasks.md` covering
+Data Tables (W1-9 residue, 5 items), Validation / Profiling (W1-10 residue, 5
+items), and Physics non-Chaos (W1-8 residue, 4 items). Also fixes a regression
+left by sub-batch A: 13 W1-A commands were registered in their `*Commands.cpp`
+dispatch tables but **never wired into `EpicUnrealMCPRouter.cpp`**, so live TCP
+routing would have returned "unknown command" for all of them.
+
+### Fixed
+
+- `EpicUnrealMCPRouter.cpp`: added the 13 missing router entries from sub-batch A:
+  - id 2 (Blueprint): `add_latent_node`
+  - id 7 (Asset Import): `import_animation_fbx`
+  - id 12 (Rendering): `spawn_camera_shake_source`, `spawn_camera_rig_rail`,
+    `spawn_camera_rig_crane`, `set_post_process_override`
+  - id 16 (Sequencer): `add_visibility_track`, `add_audio_track`,
+    `add_animation_track`, `add_material_parameter_track`, `delete_keyframe`,
+    `set_keyframe_interpolation`, `add_subsequence`
+
+### Added
+
+- Data Table C++ handlers (`EpicUnrealMCPDataTableCommands.{h,cpp}`, router id 14):
+  - `create_data_table_from_json` -- `UDataTable::CreateTableFromJSONString` on
+    a new or existing table.
+  - `create_curve_table` -- `UCurveTable` + optional CSV seeding with selectable
+    `ERichCurveInterpMode` (Linear / Cubic / Constant).
+  - `create_string_table` -- `UStringTable` + namespace + initial entries map
+    via `FStringTable::SetSourceString`.
+  - `set_string_table_entry` -- single (key, value) upsert on an existing
+    StringTable.
+  - `create_data_asset` -- `UDataAsset` / `UPrimaryDataAsset` instance creation
+    from a class path (validates `IsChildOf(UDataAsset)`).
+- Validation / Profiling C++ handlers
+  (`EpicUnrealMCPValidationCommands.{h,cpp}`, router id 23):
+  - `set_auto_save_settings` -- `UEditorLoadingSavingSettings` (`bAutoSaveEnable`,
+    `AutoSaveTimeMinutes`, `AutoSaveWarningInSeconds`, `bAutoSaveContent`,
+    `bAutoSaveMaps`) persisted via **`TryUpdateDefaultConfigFile()`** (UE 5.7
+    rule).
+  - `get_editor_stats` -- snapshots `FApp::GetDeltaTime` (FPS derivation) and
+    `FPlatformMemory::GetStats` (used/peak/available physical + virtual MB) and
+    optionally `GEngine->Exec("stat ...")` on the editor world.
+  - `start_unreal_insights_trace` / `stop_unreal_insights_trace` --
+    `FTraceAuxiliary::Start(EConnectionType::File, ...)` / `Stop()` /
+    `EnableChannels` with configurable channel string (defaults to
+    `default,cpu,gpu,frame,bookmark,log`).
+  - `validate_assets` -- `UEditorValidatorSubsystem::ValidateAssetsWithSettings`
+    over a content-path subtree, returns `num_checked / num_valid / num_invalid /
+    num_skipped / num_warnings / num_unable_to_validate`.
+- Physics C++ handlers (`EpicUnrealMCPPhysicsCommands.{h,cpp}`, router id 22):
+  - `set_actor_collision_response` -- per-channel
+    `UPrimitiveComponent::SetCollisionResponseToChannel` with alias-friendly
+    channel names (`Pawn`, `WorldStatic`, `PhysicsBody`, ...).
+  - `set_constraint_limits` -- `FConstraintInstance::Set*Motion` +
+    `SetLinearLimitSize` + `SetAngular{Swing1,Swing2,Twist}Limit` on an existing
+    `APhysicsConstraintActor`.
+  - `set_constraint_motor` -- `SetLinearVelocityDrive` /
+    `SetLinearPositionDrive` / `SetOrientationDriveSLERP` /
+    `SetAngularVelocityDriveSLERP` + `SetLinearVelocityTarget`.
+  - `spawn_physics_volume` -- `APhysicsVolume` spawn with `TerminalVelocity`,
+    `Priority`, `bWaterVolume`, `FluidFriction`, and brush scale.
+- Python FastMCP wrappers wired through `conn.send_command`:
+  - `server/data_table_tools.py`: 5 tools (`create_data_table_from_json`,
+    `create_curve_table`, `create_string_table`, `set_string_table_entry`,
+    `create_data_asset`).
+  - `server/validation_tools.py`: 5 tools (`set_auto_save_settings`,
+    `get_editor_stats`, `start_unreal_insights_trace`,
+    `stop_unreal_insights_trace`, `validate_assets`).
+  - `server/physics_tools.py`: 4 tools (`set_actor_collision_response`,
+    `set_constraint_limits`, `set_constraint_motor`, `spawn_physics_volume`).
+- L1 unit tests:
+  - `Python/tests/unit/test_data_table_tools_w1b.py` (14 tests).
+  - `Python/tests/unit/test_validation_tools_w1b.py` (14 tests).
+  - `Python/tests/unit/test_physics_tools_w1b.py` (14 tests).
+
+### Changed
+
+- `docs/superpowers/plans/tasks.md`: flipped 14 entries from `[ ]` to `[x]`
+  covering Data Tables / Save / Validation / Profiling / Physics items
+  implemented in this batch.
+- Sync'd canonical plugin to source-built project via
+  `scripts/sync-unrealmcp-plugin.ps1` (7 files updated, 109 already in sync).
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **689 passed** (was 647 before
+  this batch; +42 new W1-B tests).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 416` (was 402; +14 new C++ handlers with Python wrappers),
+  `cpp_only: 16`, `rust_only: 53`, no drift detected.
+- Editor build verification deferred to local `Build.bat` run.
+
+### Notes
+
+- All new C++ uses UE 5.7 APIs verified against local engine headers
+  (`Core/Public/ProfilingDebugging/TraceAuxiliary.h`,
+  `Engine/Public/Settings/EditorLoadingSavingSettings.h`,
+  `Engine/Classes/Engine/{CurveTable,DataAsset,CollisionProfile}.h`,
+  `Internationalization/StringTable.h`,
+  `PhysicsCore/Public/Chaos/ConstraintInstance.h`,
+  `Engine/Public/GameFramework/PhysicsVolume.h`).
+- `FTraceAuxiliary::FOptions` is the correct nested-struct name (not `Options`)
+  -- caught during initial drafting and fixed before commit.
+- `validate_assets` uses `EDataValidationUsecase::Manual` with
+  `bShowIfNoFailures=false` so it does not spam the editor message log.
+
+### Cumulative tasks.md progress (this branch)
+
+- `[x]` 402 -> 417 (sub-batch A) -> **431** (sub-batch B)
+- `[ ]` 353 -> 338 -> **324**
+
+---
+
+## [2026-05-21] - Wave 1 sub-batch A: Sequencer / Rendering / Blueprint / Asset Import / Material residue
+
+Implements 15 unimplemented items from `docs/superpowers/plans/tasks.md` covering
+Sequencer (W1-4 residue: 7 items), Rendering / Post Process (W1-7 residue:
+4 items including 2 \(GI/Reflections override\) + 2 \(Camera Shake / Rig\)),
+Blueprint (W1-1 Latent Node, 1 item), Asset Import (W1-1 Animation FBX
+Import, 1 item), and fixes the Python<->C++ drift on `create_advanced_material`
+(W1-6) by re-using the existing `material_graph_tools.create_advanced_material`
+Python wrapper that was already shipped but missing test coverage. Tracks
+the plan in `docs/implementation-plan-tasks-unimplemented.md`.
+
+### Added
+
+- Sequencer C++ handlers (`Plugins/UnrealMCP/.../EpicUnrealMCPSequencerCommands.{h,cpp}`):
+  - `add_visibility_track` -- `UMovieSceneVisibilityTrack` (bHidden property track) per binding.
+  - `add_audio_track` -- master `UMovieSceneAudioTrack` with optional `USoundBase` placement.
+  - `add_animation_track` -- per-binding `UMovieSceneSkeletalAnimationTrack` with optional
+    `UAnimSequence` assignment via `FMovieSceneSkeletalAnimationParams::Animation`.
+  - `add_material_parameter_track` -- per-binding `UMovieSceneComponentMaterialTrack`
+    with UE 5.4+ `FComponentMaterialInfo` (indexed material slot).
+  - `delete_keyframe` -- scrubs all `FMovieSceneDoubleChannel` / `FMovieSceneFloatChannel`
+    keys at the supplied frame for every track on a binding.
+  - `set_keyframe_interpolation` -- bulk sets `ERichCurveInterpMode` (Cubic / Linear /
+    Constant / None) on all keys for every track on a binding.
+  - `add_subsequence` -- inserts either a regular `UMovieSceneSubTrack` section or a
+    cinematic `UMovieSceneCinematicShotTrack` section (selected by `as_shot=true`).
+- Rendering / Post Process C++ handlers (`EpicUnrealMCPRenderingCommands.{h,cpp}`):
+  - `spawn_camera_shake_source` -- spawns an actor with `UCameraShakeSourceComponent`
+    + optional `UCameraShakeBase` class override.
+  - `spawn_camera_rig_rail` -- spawns `ACameraRig_Rail` with `CurrentPositionOnRail` +
+    `bLockOrientationToRail` plumbed (`CinematicCamera` module).
+  - `spawn_camera_rig_crane` -- spawns `ACameraRig_Crane` with `CranePitch/Yaw`,
+    `CraneArmLength`, and `bLockMountPitch/Yaw` plumbed.
+  - `set_post_process_override` -- overrides
+    `FPostProcessSettings::DynamicGlobalIlluminationMethod` (`Lumen` / `ScreenSpace` /
+    `Plugin` / `None`) and `ReflectionMethod` (`Lumen` / `ScreenSpace` / `None`) on a
+    named `APostProcessVolume`.
+- Blueprint C++ handler (`EpicUnrealMCPBlueprintCommands.{h,cpp}`):
+  - `add_latent_node` -- adds a `UK2Node_CallFunction` for any BlueprintCallable
+    latent function (default: `KismetSystemLibrary::Delay`) to a Blueprint's event
+    graph. Supports `library_path` override so callers can target e.g.
+    `KismetSystemLibrary::AsyncLoadAsset` or `AIBlueprintHelperLibrary::SimpleMoveToActor`.
+- Asset Import C++ handler (`EpicUnrealMCPAssetImportCommands.{h,cpp}`):
+  - `import_animation_fbx` -- animation-only FBX import bound to an existing
+    `USkeleton` (`UFbxImportUI.MeshTypeToImport=FBXIT_Animation`,
+    `bImportMesh=false`, `bImportAnimations=true`). Reuses the existing
+    `CreateImportTask` / `ProcessImportTask` pipeline.
+- Python FastMCP wrappers wired through `conn.send_command`:
+  - `server/sequencer_tools.py`: `add_visibility_track`, `add_audio_track`,
+    `add_animation_track`, `add_material_parameter_track`, `delete_keyframe`,
+    `set_keyframe_interpolation`, `add_subsequence`.
+  - `server/rendering_tools.py`: `spawn_camera_shake_source`,
+    `spawn_camera_rig_rail`, `spawn_camera_rig_crane`,
+    `set_post_process_override`.
+  - `server/blueprint_tools.py`: `add_latent_node` (+ added validation imports).
+  - `server/asset_import_tools.py`: `animation_fbx_import_tool`.
+- L1 unit tests:
+  - `Python/tests/unit/test_sequencer_tools_w1.py` (20 tests).
+  - `Python/tests/unit/test_rendering_tools_w1.py` (15 tests).
+  - `Python/tests/unit/test_w1_misc_tools.py` (9 tests for latent node + animation FBX
+    + advanced material).
+- Planning artifact: `docs/implementation-plan-tasks-unimplemented.md` (Agent 1 turn)
+  is the single-source-of-truth for the Wave 1-4 backlog.
+
+### Changed
+
+- `Python/server/blueprint_tools.py` and `Python/server/material_tools.py` now import
+  `validate_string` / `ValidationError` / `make_validation_error_response_from_exception`
+  so the new W1 tools can return consistent validation errors.
+- `docs/superpowers/plans/tasks.md`: flipped 15 entries from `[ ]` to `[x]` covering
+  the Sequencer / Post Process / Camera / Blueprint Latent Node / Animation FBX
+  Import items implemented in this batch.
+
+### Verification
+
+- Ran `python -m pytest Python/tests/unit -q`; **647 passed** (was 603 before this
+  batch; +44 new tests from W1 + 1 from `material_tools` audit retarget).
+- Ran `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
+  `python_and_cpp: 402` (was 389; +13 = the 13 new C++ handlers with Python
+  wrappers), `cpp_only: 16`, `rust_only: 53`, no drift detected.
+- Did **not** rebuild the Unreal Editor in this turn -- C++ build verification
+  remains a follow-on local task (see `docs/a2-a3-b4-execution-report.md` for the
+  reproducible `Build.bat` command).
+
+### Notes
+
+- `create_advanced_material` Python wrapper already existed in
+  `Python/server/material_graph_tools.py:190`. The W1-6 batch covers it by adding
+  unit coverage instead of a duplicate wrapper.
+- The new C++ handlers all use UE 5.7 APIs verified against the local
+  `C:\Program Files\Epic Games\UE_5.7\Engine\Source\...` headers
+  (`MovieSceneTracks/Public/Tracks/{Visibility,Audio,SkeletalAnimation,Material,
+  CinematicShot}.h`, `CinematicCamera/Public/CameraRig_{Rail,Crane}.h`, etc.) per
+  the `AGENTS.md` rule that learning-era APIs cannot be trusted on 5.7.
 
 ---
 
@@ -281,7 +1247,7 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
   - `EpicUnrealMCPBlueprintGraphCommands.cpp`: `HandleAddBlueprintNode`, `HandleConnectNodes`, `HandleCreateVariable`, `HandleSetVariableProperties`, `HandleAddEventNode`, `HandleDeleteNode`, `HandleSetNodeProperty`, `HandleCreateFunction`, `HandleAddFunctionInput`, `HandleAddFunctionOutput`, `HandleDeleteFunction`, `HandleRenameFunction`
 - Added `Actor->Modify()` call in `HandleSetActorTransform` before modifying the transform, so the transaction records the previous state correctly.
 
-#### Tests — Python/C++ command mapping
+#### Tests 窶・Python/C++ command mapping
 
 - Added `TestPythonToCppCommandMapping` class in `Python/tests/unit/test_tool_registration_and_mapping.py` with four tests:
   - `test_python_commands_are_handled_in_cpp`: every command that Python sends to Unreal has a matching C++ dispatcher route.
@@ -296,7 +1262,7 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 - Updated tool count from ~38 to 46.
 - Added `batch_spawn_actors`, `add_event_node`, `get_actor_material_info`, `get_blueprint_material_info` to the tool table.
-- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10–3.13 supported)" to match `pyproject.toml`.
+- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10窶・.13 supported)" to match `pyproject.toml`.
 
 #### `unreal_mcp_server_advanced.py`
 

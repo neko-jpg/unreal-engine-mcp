@@ -1,4 +1,4 @@
-#include "EpicUnrealMCPBridge.h"
+﻿#include "EpicUnrealMCPBridge.h"
 #include "MCPServerRunnable.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
@@ -77,6 +77,24 @@
 #include "Commands/EpicUnrealMCPVroidCommands.h"
 #include "Commands/EpicUnrealMCPCesiumCommands.h"
 #include "Commands/EpicUnrealMCPProceduralCommands.h"
+#include "Commands/EpicUnrealMCPNiagaraCommands.h"
+#include "Commands/EpicUnrealMCPLandscapeCommands.h"
+#include "Commands/EpicUnrealMCPAnimationRiggingCommands.h"
+#include "Commands/EpicUnrealMCPAiNavExtensionCommands.h"
+#include "Commands/EpicUnrealMCPMovieRenderQueueCommands.h"
+#include "Commands/EpicUnrealMCPFoliageCommands.h"
+#include "Commands/EpicUnrealMCPPCGCommands.h"
+#include "Commands/EpicUnrealMCPNetworkingCommands.h"
+#include "Commands/EpicUnrealMCPChaosCommands.h"
+#include "Commands/EpicUnrealMCPGASCommands.h"
+#include "Commands/EpicUnrealMCPWaterCommands.h"
+#include "Commands/EpicUnrealMCPMobileXrCommands.h"
+#include "Commands/EpicUnrealMCPSourceControlCommands.h"
+#include "Commands/EpicUnrealMCPLocalizationCommands.h"
+#include "Commands/EpicUnrealMCPTestingValidationCommands.h"
+#include "Commands/EpicUnrealMCPDataTableExtensionCommands.h"
+#include "Commands/EpicUnrealMCPMetaSoundCommands.h"
+#include "Commands/EpicUnrealMCPSequencerExtensionCommands.h"
 #include "Commands/EpicUnrealMCPPhysicsCommands.h"
 #include "Commands/EpicUnrealMCPValidationCommands.h"
 #include "Commands/EpicUnrealMCPInstanceCommands.h"
@@ -333,10 +351,27 @@ void UEpicUnrealMCPBridge::RegisterHandlers()
     RegisterHandler<FEpicUnrealMCPCesiumCommands>(18);           // Cesium
     RegisterHandler<FEpicUnrealMCPProceduralCommands>(19);       // Procedural generation + request_cognitive_processing (Phase 4 trim)
     RegisterHandler<FEpicUnrealMCPNavigationCommands>(20);       // NavAI + Spline (Phase 3)
-    // Route 21 is intentionally reserved for the next handler split.
+    RegisterHandler<FEpicUnrealMCPNiagaraCommands>(21);          // Niagara / VFX (Sub-batch I)
     RegisterHandler<FEpicUnrealMCPPhysicsCommands>(22);          // Collision / physics body / forces / constraints (Phase 4)
     RegisterHandler<FEpicUnrealMCPValidationCommands>(23);       // compile_all_blueprints / run_map_check / find_broken_references (Phase 4)
-    RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
+    RegisterHandler<FEpicUnrealMCPInstanceCommands>(24);
+    RegisterHandler<FEpicUnrealMCPLandscapeCommands>(25);         // Landscape / Terrain (Sub-batch J)         // Draft Proxy + InstanceSet HISM/ISM (Phase 4)
+    RegisterHandler<FEpicUnrealMCPAnimationRiggingCommands>(35); // Animation / Skeletal / Rigging (Sub-batch K)
+    RegisterHandler<FEpicUnrealMCPAiNavExtensionCommands>(36);   // AI / Navigation extensions (Sub-batch L)
+    RegisterHandler<FEpicUnrealMCPMovieRenderQueueCommands>(26); // Movie Render Queue (Sub-batch M)
+    RegisterHandler<FEpicUnrealMCPFoliageCommands>(27); // Foliage / Vegetation (Sub-batch N, route 27, issue #44)
+    RegisterHandler<FEpicUnrealMCPPCGCommands>(28); // PCG Framework (Sub-batch O, route 28, issue #45)
+    RegisterHandler<FEpicUnrealMCPNetworkingCommands>(37); // Networking / Multiplayer (Sub-batch P, route 37, issue #41)
+    RegisterHandler<FEpicUnrealMCPChaosCommands>(29); // Chaos / Physics extensions (Sub-batch Q, route 29, issue #51)
+    RegisterHandler<FEpicUnrealMCPGASCommands>(30); // Gameplay Ability System (Sub-batch R, route 30, issue #55)
+    RegisterHandler<FEpicUnrealMCPWaterCommands>(31); // Water System (Sub-batch S, route 31, issue #46)
+    RegisterHandler<FEpicUnrealMCPMobileXrCommands>(38); // Mobile / XR (Sub-batch T, route 38, issue #59)
+    RegisterHandler<FEpicUnrealMCPSourceControlCommands>(32); // Source Control / Multi-User (Sub-batch U, route 32, issue #60)
+    RegisterHandler<FEpicUnrealMCPLocalizationCommands>(33); // Localization (Sub-batch V, route 33, issue #58)
+    RegisterHandler<FEpicUnrealMCPTestingValidationCommands>(39); // Testing / Validation extensions (Sub-batch W, route 39, issue #57)
+    RegisterHandler<FEpicUnrealMCPDataTableExtensionCommands>(40); // Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54)
+    RegisterHandler<FEpicUnrealMCPMetaSoundCommands>(34); // MetaSound / Audio extensions (Sub-batch Y, route 34, issue #50)
+    RegisterHandler<FEpicUnrealMCPSequencerExtensionCommands>(41); // Sequencer / Cinematics extensions (Sub-batch Z, route 41, issue #52)
 }
 
 UEpicUnrealMCPBridge::UEpicUnrealMCPBridge()

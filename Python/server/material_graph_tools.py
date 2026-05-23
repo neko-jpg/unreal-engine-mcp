@@ -217,3 +217,174 @@ def create_advanced_material(
     except Exception as e:
         logger.error(f"create_advanced_material error: {e}")
         return make_error_response(str(e))
+
+# W1-C Material domain convenience wrappers (UE 5.7)
+# These thin wrappers reuse the existing create_advanced_material C++ handler
+# but expose typed entry points for each MaterialDomain. Keeps callers
+# from having to memorize the magic domain strings.
+
+
+@mcp.tool()
+def create_decal_material(name: str, package_path: str = "/Game/Materials/") -> Dict[str, Any]:
+    """Create a Material with MaterialDomain = DeferredDecal (UE 5.7)."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_advanced_material",
+            {"name": name, "package_path": package_path, "material_domain": "DeferredDecal"},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_decal_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_light_function_material(name: str, package_path: str = "/Game/Materials/") -> Dict[str, Any]:
+    """Create a Material with MaterialDomain = LightFunction (UE 5.7)."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_advanced_material",
+            {"name": name, "package_path": package_path, "material_domain": "LightFunction"},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_light_function_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_post_process_material(name: str, package_path: str = "/Game/Materials/") -> Dict[str, Any]:
+    """Create a Material with MaterialDomain = PostProcess (UE 5.7).
+
+    BlendableLocation defaults to SceneColorAfterTonemapping (set by C++ handler).
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_advanced_material",
+            {"name": name, "package_path": package_path, "material_domain": "PostProcess"},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_post_process_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_landscape_material(name: str, package_path: str = "/Game/Materials/") -> Dict[str, Any]:
+    """Create a Material intended for Landscape painting (UE 5.7).
+
+    Note: This creates a Surface-domain material; landscape layer nodes
+    (UMaterialExpressionLandscapeLayerBlend, etc.) must be added separately
+    via add_material_node / connect_material_nodes for full functionality.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_advanced_material",
+            {"name": name, "package_path": package_path, "material_domain": "Landscape"},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_landscape_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_runtime_virtual_texture_material(name: str, package_path: str = "/Game/Materials/") -> Dict[str, Any]:
+    """Create a Material with MaterialDomain = RuntimeVirtualTexture (UE 5.7)."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_advanced_material",
+            {"name": name, "package_path": package_path, "material_domain": "VirtualTexture"},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_runtime_virtual_texture_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_substrate_material(
+    name: str,
+    package_path: str = "/Game/Materials/",
+    base_color = None,
+    metallic = None,
+    roughness = None,
+    specular = None,
+) -> Dict[str, Any]:
+    """Create a Substrate-based Material (UE 5.7).
+
+    Creates a Surface-domain Material whose Front Material input is wired to a
+    UMaterialExpressionSubstrateSlabBSDF expression. Optional inputs let the
+    caller seed the Slab BSDF DefaultValue properties for DiffuseAlbedo
+    (base_color RGB), F0 (metallic, specular), and Roughness without having to
+    add separate parameter nodes.
+
+    Requires r.Substrate=1 to be enabled in the rendering settings.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        params: Dict[str, Any] = {
+            "name": name,
+            "package_path": package_path,
+        }
+        if base_color is not None:
+            params["base_color"] = list(base_color)
+        if metallic is not None:
+            params["metallic"] = float(metallic)
+        if roughness is not None:
+            params["roughness"] = float(roughness)
+        if specular is not None:
+            params["specular"] = float(specular)
+        response = unreal.send_command("create_substrate_material", params)
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_substrate_material error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def create_layered_material(
+    name: str,
+    package_path: str = "/Game/Materials/",
+) -> Dict[str, Any]:
+    """Create a Material Layers stack (UE 5.7).
+
+    Generates three coordinated assets in package_path:
+      - {name}_Layer : UMaterialFunctionMaterialLayer
+      - {name}_Blend : UMaterialFunctionMaterialLayerBlend
+      - {name}       : UMaterial with bUseMaterialAttributes=true
+
+    The actual layer-to-host wiring (Material Layers parameter, layer/blend
+    assignments) happens through Material Instances or the Material editor.
+    This command produces the three asset endpoints that the wiring step needs.
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "create_layered_material",
+            {"name": name, "package_path": package_path},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"create_layered_material error: {exc}")
+        return make_error_response(str(exc))
+

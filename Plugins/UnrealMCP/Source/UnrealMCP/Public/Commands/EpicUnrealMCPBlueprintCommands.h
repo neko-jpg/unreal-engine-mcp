@@ -84,4 +84,17 @@ private:
     TSharedPtr<FJsonObject> HandleGetBlueprintDebugInfo(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleBlueprintDiff(const TSharedPtr<FJsonObject>& Params);
 
+    // -- W1-1 Blueprint residue (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleAddLatentNode(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-C Animation asset creators (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleCreateAnimationBlueprint(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreateBlendSpace(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-F Animation asset creators 2 (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleCreateAnimMontage(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreateAnimComposite(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-G Animation residue (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleSetAnimRootMotion(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddAnimNotify(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreatePoseAsset(const TSharedPtr<FJsonObject>& Params);
+
 };

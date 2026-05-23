@@ -9,6 +9,11 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
+#include "Sound/SoundSubmix.h"
+#include "Sound/AudioVolume.h"
+#include "Sound/DialogueWave.h"
+#include "Editor.h"
+#include "EngineUtils.h"
 #include "Sound/AmbientSound.h"
 #include "Components/AudioComponent.h"
 #include "UObject/Package.h"
@@ -34,6 +39,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleCommand(const FString
         {TEXT("create_sound_class"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundClass},
         {TEXT("create_sound_mix"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundMix},
         {TEXT("spawn_ambient_sound"), &FEpicUnrealMCPAudioCommands::HandleSpawnAmbientSound},
+        {TEXT("create_sound_submix"), &FEpicUnrealMCPAudioCommands::HandleCreateSoundSubmix},  // W1-C
+        {TEXT("spawn_audio_volume"),   &FEpicUnrealMCPAudioCommands::HandleSpawnAudioVolume},   // W1-H
+        {TEXT("create_dialogue_wave"), &FEpicUnrealMCPAudioCommands::HandleCreateDialogueWave}, // W1-H
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -399,4 +407,153 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleSpawnAmbientSound(con
     ResultObj->SetStringField(TEXT("actor_name"), AmbientSound->GetName());
     ResultObj->SetStringField(TEXT("sound_path"), SoundPath);
     return ResultObj;
+}
+
+// W1-C_SUBMIX_BEGIN
+// W1-C SoundSubmix asset creation (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleCreateSoundSubmix(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for SoundSubmix"));
+
+    USoundSubmix* Submix = NewObject<USoundSubmix>(Package, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!Submix)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create SoundSubmix object"));
+
+    // Optional parent submix linkage.
+    FString ParentSubmixPath;
+    if (Params->TryGetStringField(TEXT("parent_submix_path"), ParentSubmixPath) && !ParentSubmixPath.IsEmpty())
+    {
+        if (USoundSubmix* Parent = LoadObject<USoundSubmix>(nullptr, *ParentSubmixPath))
+        {
+            Submix->ParentSubmix = Parent;
+        }
+    }
+
+    // Optional output / gain config.
+    double OutputVolume = -1.0;
+    if (Params->TryGetNumberField(TEXT("output_volume_db"), OutputVolume))
+    {
+        Submix->OutputVolumeModulation.Value = static_cast<float>(OutputVolume);
+    }
+    bool bAutoDisable = false;
+    if (Params->TryGetBoolField(TEXT("auto_disable"), bAutoDisable))
+    {
+        Submix->bAutoDisable = bAutoDisable;
+    }
+    double AutoDisableTime = -1.0;
+    if (Params->TryGetNumberField(TEXT("auto_disable_time"), AutoDisableTime) && AutoDisableTime >= 0.0)
+    {
+        Submix->AutoDisableTime = static_cast<float>(AutoDisableTime);
+    }
+
+    Package->MarkPackageDirty();
+    FAssetRegistryModule::AssetCreated(static_cast<UObject*>(Submix));
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), Submix->GetPathName());
+    if (!ParentSubmixPath.IsEmpty())
+        Result->SetStringField(TEXT("parent_submix_path"), ParentSubmixPath);
+    return Result;
+}
+
+// W1-H_AUDIO_BEGIN
+// W1-H AudioVolume + DialogueWave (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleSpawnAudioVolume(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor world available"));
+
+    FVector Location(0, 0, 0);
+    const TArray<TSharedPtr<FJsonValue>>* LocArr = nullptr;
+    if (Params->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() >= 3)
+    {
+        Location.X = (*LocArr)[0]->AsNumber();
+        Location.Y = (*LocArr)[1]->AsNumber();
+        Location.Z = (*LocArr)[2]->AsNumber();
+    }
+
+    FActorSpawnParameters Spawn;
+    Spawn.Name = FName(*ActorName);
+    Spawn.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+    AAudioVolume* Volume = World->SpawnActor<AAudioVolume>(AAudioVolume::StaticClass(), Location, FRotator::ZeroRotator, Spawn);
+    if (!Volume)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn AAudioVolume"));
+    Volume->SetActorLabel(ActorName);
+
+    double Priority = 0.0;
+    if (Params->TryGetNumberField(TEXT("priority"), Priority))
+        Volume->SetPriority(static_cast<float>(Priority));
+    bool bEnabled = true;
+    if (Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+        Volume->SetEnabled(bEnabled);
+
+    const TArray<TSharedPtr<FJsonValue>>* ScaleArr = nullptr;
+    if (Params->TryGetArrayField(TEXT("scale"), ScaleArr) && ScaleArr && ScaleArr->Num() >= 3)
+    {
+        FVector Scale(
+            (*ScaleArr)[0]->AsNumber(),
+            (*ScaleArr)[1]->AsNumber(),
+            (*ScaleArr)[2]->AsNumber());
+        Volume->SetActorRelativeScale3D(Scale);
+    }
+
+    Volume->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetNumberField(TEXT("priority"), Volume->GetPriority());
+    Result->SetBoolField(TEXT("enabled"), Volume->GetEnabled());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPAudioCommands::HandleCreateDialogueWave(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+
+    if (LoadObject<UObject>(nullptr, *AssetPath))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists: %s"), *AssetPath));
+
+    FString AssetName = FPaths::GetBaseFilename(AssetPath);
+    UPackage* Package = CreatePackage(*AssetPath);
+    if (!Package)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create package for DialogueWave"));
+
+    UDialogueWave* DialogueWave = NewObject<UDialogueWave>(Package, FName(*AssetName), RF_Public | RF_Standalone);
+    if (!DialogueWave)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UDialogueWave"));
+
+    FString SpokenText;
+    if (Params->TryGetStringField(TEXT("spoken_text"), SpokenText))
+    {
+        DialogueWave->SpokenText = SpokenText;
+    }
+
+    FAssetRegistryModule::AssetCreated(static_cast<UObject*>(DialogueWave));
+    Package->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), DialogueWave->GetPathName());
+    if (!SpokenText.IsEmpty())
+        Result->SetStringField(TEXT("spoken_text"), SpokenText);
+    return Result;
 }

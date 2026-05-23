@@ -72,6 +72,10 @@ var/
 .installed.cfg
 *.egg
 
+# Documentation build templates
+!docs/build/
+!docs/build/BuildConfiguration.xml
+
 # Python virtual environments
 venv/
 ENV/

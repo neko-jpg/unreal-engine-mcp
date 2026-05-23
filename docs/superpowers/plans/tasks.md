@@ -1,119 +1,119 @@
-## 1. Project / Editor 基本操作
+﻿## 1. Project / Editor 蝓ｺ譛ｬ謫堺ｽ・
 
-Unreal Editor自体にはProject Settings、Plugin管理、Editor Preference、World Settingsなどがありますが、現MCPはほぼ「レベル内のActorやAsset操作」に寄っています。UE公式ドキュメントでも、プロジェクト設定・制作パイプライン・エディタ自動化は独立した領域として扱われています。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-7-documentation?utm_source=chatgpt.com "Unreal Engine 5.7 Documentation"))
+Unreal Editor閾ｪ菴薙↓縺ｯProject Settings縲￣lugin邂｡逅・・ditor Preference縲仝orld Settings縺ｪ縺ｩ縺後≠繧翫∪縺吶′縲∫樟MCP縺ｯ縺ｻ縺ｼ縲後Ξ繝吶Ν蜀・・Actor繧Бsset謫堺ｽ懊阪↓蟇・▲縺ｦ縺・∪縺吶６E蜈ｬ蠑上ラ繧ｭ繝･繝｡繝ｳ繝医〒繧ゅ√・繝ｭ繧ｸ繧ｧ繧ｯ繝郁ｨｭ螳壹・蛻ｶ菴懊ヱ繧､繝励Λ繧､繝ｳ繝ｻ繧ｨ繝・ぅ繧ｿ閾ｪ蜍募喧縺ｯ迢ｬ遶九＠縺滄伜沺縺ｨ縺励※謇ｱ繧上ｌ縺ｦ縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-7-documentation?utm_source=chatgpt.com "Unreal Engine 5.7 Documentation"))
 
 ```md
 ## Project / Editor Control
-- [x] プロジェクト設定の読み取り
-- [x] プロジェクト設定の変更
-- [x] Default Map設定
-- [x] Game Default Map設定
-- [x] Editor Startup Map設定
-- [x] Project Description / Version / Company情報編集
-- [x] Plugin有効化 / 無効化
-- [x] Plugin一覧取得
-- [x] Engine Scalability設定
-- [x] Rendering設定変更
-- [x] Physics設定変更
-- [x] Input設定変更
-- [x] Collision設定変更
-- [x] AI System設定変更
-- [x] Navigation System設定変更
-- [x] Packaging設定変更
-- [x] Maps & Modes設定変更
-- [x] World Settings取得
-- [x] World Settings変更
-- [x] Editor Utility Widget作成
-- [x] Editor Utility Blueprint作成
-- [x] Editor Python Script実行
-- [x] Editor Commandlet実行
-- [x] Undo / Redo制御
-- [x] Dirty Asset一覧取得
+- [x] 繝励Ο繧ｸ繧ｧ繧ｯ繝郁ｨｭ螳壹・隱ｭ縺ｿ蜿悶ｊ
+- [x] 繝励Ο繧ｸ繧ｧ繧ｯ繝郁ｨｭ螳壹・螟画峩
+- [x] Default Map險ｭ螳・
+- [x] Game Default Map險ｭ螳・
+- [x] Editor Startup Map險ｭ螳・
+- [x] Project Description / Version / Company諠・ｱ邱ｨ髮・
+- [x] Plugin譛牙柑蛹・/ 辟｡蜉ｹ蛹・
+- [x] Plugin荳隕ｧ蜿門ｾ・
+- [x] Engine Scalability險ｭ螳・
+- [x] Rendering險ｭ螳壼､画峩
+- [x] Physics險ｭ螳壼､画峩
+- [x] Input險ｭ螳壼､画峩
+- [x] Collision險ｭ螳壼､画峩
+- [x] AI System險ｭ螳壼､画峩
+- [x] Navigation System險ｭ螳壼､画峩
+- [x] Packaging險ｭ螳壼､画峩
+- [x] Maps & Modes險ｭ螳壼､画峩
+- [x] World Settings蜿門ｾ・
+- [x] World Settings螟画峩
+- [x] Editor Utility Widget菴懈・
+- [x] Editor Utility Blueprint菴懈・
+- [x] Editor Python Script螳溯｡・
+- [x] Editor Commandlet螳溯｡・
+- [x] Undo / Redo蛻ｶ蠕｡
+- [x] Dirty Asset荳隕ｧ蜿門ｾ・
 - [x] Save All
-- [x] 特定Asset保存
-- [x] Editorログ取得
-- [x] PIE開始
-- [x] PIE停止
-- [x] Standalone Game起動
-- [x] Simulate開始
-- [x] Viewport操作
-- [x] カメラ位置取得
-- [x] カメラ位置設定
+- [x] 迚ｹ螳哂sset菫晏ｭ・
+- [x] Editor繝ｭ繧ｰ蜿門ｾ・
+- [x] PIE髢句ｧ・
+- [x] PIE蛛懈ｭ｢
+- [x] Standalone Game襍ｷ蜍・
+- [x] Simulate髢句ｧ・
+- [x] Viewport謫堺ｽ・
+- [x] 繧ｫ繝｡繝ｩ菴咲ｽｮ蜿門ｾ・
+- [x] 繧ｫ繝｡繝ｩ菴咲ｽｮ險ｭ螳・
 ```
 
 ---
 
-## 2. Level / World / Map管理
+## 2. Level / World / Map邂｡逅・
 
-今のMCPはActorをレベルに置くのは強いです。ただし、**レベルそのものを作る・保存する・Sublevelに分ける・World Partitionで管理する**部分が弱いです。World Partitionは大規模ワールドをグリッドセルで分割・ストリーミングするUEの中核機能です。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/world-partition-builder-commandlet-reference "World Partition Builder Commandlet Reference | Unreal Engine 5.7 Documentation | Epic Developer Community"))
+莉翫・MCP縺ｯActor繧偵Ξ繝吶Ν縺ｫ鄂ｮ縺上・縺ｯ蠑ｷ縺・〒縺吶ゅ◆縺縺励・*繝ｬ繝吶Ν縺昴・繧ゅ・繧剃ｽ懊ｋ繝ｻ菫晏ｭ倥☆繧九・Sublevel縺ｫ蛻・￠繧九・World Partition縺ｧ邂｡逅・☆繧・*驛ｨ蛻・′蠑ｱ縺・〒縺吶８orld Partition縺ｯ螟ｧ隕乗ｨ｡繝ｯ繝ｼ繝ｫ繝峨ｒ繧ｰ繝ｪ繝・ラ繧ｻ繝ｫ縺ｧ蛻・牡繝ｻ繧ｹ繝医Μ繝ｼ繝溘Φ繧ｰ縺吶ｋUE縺ｮ荳ｭ譬ｸ讖溯・縺ｧ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/world-partition-builder-commandlet-reference "World Partition Builder Commandlet Reference | Unreal Engine 5.7 Documentation | Epic Developer Community"))
 
 ```md
 ## Level / Map Management
-- [x] 新規Level作成
-- [x] Level保存
-- [x] Level読み込み
-- [x] Level複製
-- [x] Levelリネーム
-- [x] Level削除
-- [x] Persistent Level管理
-- [x] Sublevel追加
-- [x] Sublevel削除
-- [x] Sublevel表示 / 非表示
-- [x] Sublevelロード / アンロード
-- [x] Level Streaming Volume作成
-- [x] Level Streaming設定
-- [x] World Partition有効化
-- [x] World Partition Grid設定
-- [x] World Partition Cell情報取得
-- [x] World Partition Cellロード
-- [x] World Partition Cellアンロード
-- [x] Data Layer作成
-- [x] Data LayerにActor追加
-- [x] Data LayerからActor削除
-- [x] Data Layer有効 / 無効切替
-- [x] HLOD Layer作成
-- [x] HLOD生成
-- [x] HLOD再ビルド
-- [x] One File Per Actor設定
-- [x] Level Bounds管理
-- [x] World Origin Rebasing設定
+- [x] 譁ｰ隕臭evel菴懈・
+- [x] Level菫晏ｭ・
+- [x] Level隱ｭ縺ｿ霎ｼ縺ｿ
+- [x] Level隍・｣ｽ
+- [x] Level繝ｪ繝阪・繝
+- [x] Level蜑企勁
+- [x] Persistent Level邂｡逅・
+- [x] Sublevel霑ｽ蜉
+- [x] Sublevel蜑企勁
+- [x] Sublevel陦ｨ遉ｺ / 髱櫁｡ｨ遉ｺ
+- [x] Sublevel繝ｭ繝ｼ繝・/ 繧｢繝ｳ繝ｭ繝ｼ繝・
+- [x] Level Streaming Volume菴懈・
+- [x] Level Streaming險ｭ螳・
+- [x] World Partition譛牙柑蛹・
+- [x] World Partition Grid險ｭ螳・
+- [x] World Partition Cell諠・ｱ蜿門ｾ・
+- [x] World Partition Cell繝ｭ繝ｼ繝・
+- [x] World Partition Cell繧｢繝ｳ繝ｭ繝ｼ繝・
+- [x] Data Layer菴懈・
+- [x] Data Layer縺ｫActor霑ｽ蜉
+- [x] Data Layer縺九ｉActor蜑企勁
+- [x] Data Layer譛牙柑 / 辟｡蜉ｹ蛻・崛
+- [x] HLOD Layer菴懈・
+- [x] HLOD逕滓・
+- [x] HLOD蜀阪ン繝ｫ繝・
+- [x] One File Per Actor險ｭ螳・
+- [x] Level Bounds邂｡逅・
+- [x] World Origin Rebasing險ｭ螳・
 ```
 
 ---
 
-## 3. Content Browser / Asset管理
+## 3. Content Browser / Asset邂｡逅・
 
-ここがかなり大きな穴です。  
-今は既存Assetを参照して使うことはできますが、**Content Browserを本格操作する機能がない**。広くUEを使うなら、ここは最優先級です。素材を取り込めないエディタ自動化は、冷蔵庫のない料理人です。気合いだけで飢えます。
+縺薙％縺後°縺ｪ繧雁､ｧ縺阪↑遨ｴ縺ｧ縺吶・ 
+莉翫・譌｢蟄連sset繧貞盾辣ｧ縺励※菴ｿ縺・％縺ｨ縺ｯ縺ｧ縺阪∪縺吶′縲・*Content Browser繧呈悽譬ｼ謫堺ｽ懊☆繧区ｩ溯・縺後↑縺・*縲ょｺ・￥UE繧剃ｽｿ縺・↑繧峨√％縺薙・譛蜆ｪ蜈育ｴ壹〒縺吶らｴ譚舌ｒ蜿悶ｊ霎ｼ繧√↑縺・お繝・ぅ繧ｿ閾ｪ蜍募喧縺ｯ縲∝・阡ｵ蠎ｫ縺ｮ縺ｪ縺・侭逅・ｺｺ縺ｧ縺吶よｰ怜粋縺・□縺代〒鬟｢縺医∪縺吶・
 
 ```md
 ## Content Browser / Asset Management
-- [x] フォルダ作成
-- [x] フォルダ削除
-- [x] Asset一覧取得
-- [x] Asset検索
-- [x] Assetパス解決
-- [x] Asset移動
-- [x] Assetコピー
-- [x] Asset複製
-- [x] Assetリネーム
-- [x] Asset削除
-- [x] Asset保存
-- [x] Assetロード
-- [x] Assetアンロード
-- [x] Assetメタデータ取得
-- [x] Assetメタデータ編集
-- [x] Assetタグ付け
-- [x] Redirector検出
+- [x] 繝輔か繝ｫ繝菴懈・
+- [x] 繝輔か繝ｫ繝蜑企勁
+- [x] Asset荳隕ｧ蜿門ｾ・
+- [x] Asset讀懃ｴ｢
+- [x] Asset繝代せ隗｣豎ｺ
+- [x] Asset遘ｻ蜍・
+- [x] Asset繧ｳ繝斐・
+- [x] Asset隍・｣ｽ
+- [x] Asset繝ｪ繝阪・繝
+- [x] Asset蜑企勁
+- [x] Asset菫晏ｭ・
+- [x] Asset繝ｭ繝ｼ繝・
+- [x] Asset繧｢繝ｳ繝ｭ繝ｼ繝・
+- [x] Asset繝｡繧ｿ繝・・繧ｿ蜿門ｾ・
+- [x] Asset繝｡繧ｿ繝・・繧ｿ邱ｨ髮・
+- [x] Asset繧ｿ繧ｰ莉倥￠
+- [x] Redirector讀懷・
 - [x] Redirector Fixup
-- [x] 未使用Asset検出
-- [x] 参照関係取得
-- [x] 依存Asset一覧取得
-- [x] Asset Reference Viewer相当
-- [x] Asset Audit相当
-- [x] Primary Asset Label作成
-- [x] Asset Manager設定
-- [x] Asset Registry検索
+- [x] 譛ｪ菴ｿ逕ｨAsset讀懷・
+- [x] 蜿ら・髢｢菫ょ叙蠕・
+- [x] 萓晏ｭ連sset荳隕ｧ蜿門ｾ・
+- [x] Asset Reference Viewer逶ｸ蠖・
+- [x] Asset Audit逶ｸ蠖・
+- [x] Primary Asset Label菴懈・
+- [x] Asset Manager險ｭ螳・
+- [x] Asset Registry讀懃ｴ｢
 - [x] Bulk Rename
 - [x] Bulk Move
 - [x] Bulk Delete
@@ -123,8 +123,8 @@ Unreal Editor自体にはProject Settings、Plugin管理、Editor Preference、W
 
 ## 4. Asset Import / Export
 
-広くUEを使うなら、これは絶対に必要です。  
-現状は「既にUE内にあるアセットを使う」前提が強いです。外部素材の取り込みが弱い。
+蠎・￥UE繧剃ｽｿ縺・↑繧峨√％繧後・邨ｶ蟇ｾ縺ｫ蠢・ｦ√〒縺吶・ 
+迴ｾ迥ｶ縺ｯ縲梧里縺ｫUE蜀・↓縺ゅｋ繧｢繧ｻ繝・ヨ繧剃ｽｿ縺・榊燕謠舌′蠑ｷ縺・〒縺吶ょ､夜Κ邏譚舌・蜿悶ｊ霎ｼ縺ｿ縺悟ｼｱ縺・・
 
 ```md
 ## Asset Import / Export
@@ -137,20 +137,20 @@ Unreal Editor自体にはProject Settings、Plugin管理、Editor Preference、W
 - [x] Texture Import JPG
 - [x] Texture Import EXR
 - [x] Texture Import HDR
-- [x] Normal Map Import設定
-- [x] ORM / Packed Texture設定
+- [x] Normal Map Import險ｭ螳・
+- [x] ORM / Packed Texture險ｭ螳・
 - [x] WAV Import
 - [x] MP3 / OGG Import
-- [ ] Animation FBX Import
+- [x] Animation FBX Import
 - [x] Alembic Import
 - [x] Datasmith Import
 - [x] Reimport
-- [x] Import設定Preset
-- [x] Import時のScale / Axis / Collision設定
-- [x] LOD付きStatic Mesh Import
-- [x] Nanite有効化Import
-- [x] Material自動生成Import
-- [x] Texture圧縮設定
+- [x] Import險ｭ螳啀reset
+- [x] Import譎ゅ・Scale / Axis / Collision險ｭ螳・
+- [x] LOD莉倥″Static Mesh Import
+- [x] Nanite譛牙柑蛹蜂mport
+- [x] Material閾ｪ蜍慕函謌蝕mport
+- [x] Texture蝨ｧ邵ｮ險ｭ螳・
 - [x] Asset Export
 - [x] Level Export
 - [x] Mesh Export
@@ -161,32 +161,32 @@ Unreal Editor自体にはProject Settings、Plugin管理、Editor Preference、W
 
 ## 5. Static Mesh / Mesh Editing
 
-現状はStaticMeshActorを置けます。  
-でも、Static Mesh Assetそのものを編集する機能はほぼありません。
+迴ｾ迥ｶ縺ｯStaticMeshActor繧堤ｽｮ縺代∪縺吶・ 
+縺ｧ繧ゅヾtatic Mesh Asset縺昴・繧ゅ・繧堤ｷｨ髮・☆繧区ｩ溯・縺ｯ縺ｻ縺ｼ縺ゅｊ縺ｾ縺帙ｓ縲・
 
 ```md
 ## Static Mesh / Mesh Editing
-- [x] Static Mesh Actor配置
-- [x] Static Mesh Asset詳細取得
-- [x] Static Mesh Collision生成
-- [x] Collision Complexity設定
-- [x] Simple Collision追加
-- [x] UCX Collision Import制御
-- [x] LOD生成
-- [x] LOD設定変更
-- [x] Nanite有効 / 無効
-- [x] Nanite Fallback設定
-- [x] Lightmap UV生成
-- [x] Lightmap Resolution設定
-- [x] Mesh Bounds編集
-- [x] Socket追加
-- [x] Socket削除
-- [x] Socket Transform変更
-- [x] Pivot変更
+- [x] Static Mesh Actor驟咲ｽｮ
+- [x] Static Mesh Asset隧ｳ邏ｰ蜿門ｾ・
+- [x] Static Mesh Collision逕滓・
+- [x] Collision Complexity險ｭ螳・
+- [x] Simple Collision霑ｽ蜉
+- [x] UCX Collision Import蛻ｶ蠕｡
+- [x] LOD逕滓・
+- [x] LOD險ｭ螳壼､画峩
+- [x] Nanite譛牙柑 / 辟｡蜉ｹ
+- [x] Nanite Fallback險ｭ螳・
+- [x] Lightmap UV逕滓・
+- [x] Lightmap Resolution險ｭ螳・
+- [x] Mesh Bounds邱ｨ髮・
+- [x] Socket霑ｽ蜉
+- [x] Socket蜑企勁
+- [x] Socket Transform螟画峩
+- [x] Pivot螟画峩
 - [x] Mesh Merge
 - [x] Mesh Simplify
 - [~] Mesh Bake
-- [x] Modeling Mode機能呼び出し
+- [x] Modeling Mode讖溯・蜻ｼ縺ｳ蜃ｺ縺・
 - [x] Poly Edit
 - [~] Boolean
 - [x] Remesh
@@ -198,915 +198,915 @@ Unreal Editor自体にはProject Settings、Plugin管理、Editor Preference、W
 
 ---
 
-## 6. Blueprint 基本機能の不足
+## 6. Blueprint 蝓ｺ譛ｬ讖溯・縺ｮ荳崎ｶｳ
 
-Blueprint Graph操作はかなり強いです。  
-ただし、Blueprint Editor全体から見ると、まだ未対応が多いです。
+Blueprint Graph謫堺ｽ懊・縺九↑繧雁ｼｷ縺・〒縺吶・ 
+縺溘□縺励。lueprint Editor蜈ｨ菴薙°繧芽ｦ九ｋ縺ｨ縲√∪縺譛ｪ蟇ｾ蠢懊′螟壹＞縺ｧ縺吶・
 
 ```md
 ## Blueprint - Missing / Partial
-- [x] Blueprint作成
-- [x] Component追加
-- [x] Graph Node追加
-- [x] Node接続
-- [x] Blueprint Interface作成
-- [x] Blueprint Interface実装
-- [x] Blueprint Macro Library作成
-- [x] Blueprint Function Library作成
-- [x] Enum作成
-- [x] Struct作成
-- [x] User Defined Struct編集
-- [x] User Defined Enum編集
-- [x] Blueprint継承関係変更
-- [x] Parent Class変更
-- [x] Blueprint Class Settings編集
-- [x] Blueprint Class Defaults編集
-- [x] Blueprint Component Defaults編集
-- [x] Construction Script詳細編集
-- [x] Event Dispatcher作成
+- [x] Blueprint菴懈・
+- [x] Component霑ｽ蜉
+- [x] Graph Node霑ｽ蜉
+- [x] Node謗･邯・
+- [x] Blueprint Interface菴懈・
+- [x] Blueprint Interface螳溯｣・
+- [x] Blueprint Macro Library菴懈・
+- [x] Blueprint Function Library菴懈・
+- [x] Enum菴懈・
+- [x] Struct菴懈・
+- [x] User Defined Struct邱ｨ髮・
+- [x] User Defined Enum邱ｨ髮・
+- [x] Blueprint邯呎価髢｢菫ょ､画峩
+- [x] Parent Class螟画峩
+- [x] Blueprint Class Settings邱ｨ髮・
+- [x] Blueprint Class Defaults邱ｨ髮・
+- [x] Blueprint Component Defaults邱ｨ髮・
+- [x] Construction Script隧ｳ邏ｰ邱ｨ髮・
+- [x] Event Dispatcher菴懈・
 - [x] Event Dispatcher Binding
-- [x] Timeline Curve編集
-- [ ] Latent Node制御
-- [x] Macro作成
-- [x] Collapsed Graph作成
-- [x] コメントノード作成
-- [x] Reroute Node整理
-- [x] Graph自動整列
+- [x] Timeline Curve邱ｨ髮・
+- [x] Latent Node蛻ｶ蠕｡
+- [x] Macro菴懈・
+- [x] Collapsed Graph菴懈・
+- [x] 繧ｳ繝｡繝ｳ繝医ヮ繝ｼ繝我ｽ懈・
+- [x] Reroute Node謨ｴ逅・
+- [x] Graph閾ｪ蜍墓紛蛻・
 - [x] Blueprint Diff
-- [x] Blueprint Debug情報取得
-- [x] Breakpoint設定
-- [x] Watch変数設定
-- [ ] Blueprint Profiler連携
+- [x] Blueprint Debug諠・ｱ蜿門ｾ・
+- [x] Breakpoint險ｭ螳・
+- [x] Watch螟画焚險ｭ螳・
+- [x] Blueprint Profiler騾｣謳ｺ
 ```
 
 ---
 
 ## 7. Gameplay Framework
 
-ここは未実装寄りです。  
-UEのGameplay Frameworkは、GameMode、GameState、PlayerController、PlayerState、Pawn、Cameraなどを含むゲーム構築の根幹です。公式でもこれらはコアシステムとして説明されています。([Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine?utm_source=chatgpt.com "Gameplay Framework in Unreal engine"))
+縺薙％縺ｯ譛ｪ螳溯｣・ｯ・ｊ縺ｧ縺吶・ 
+UE縺ｮGameplay Framework縺ｯ縲；ameMode縲；ameState縲￣layerController縲￣layerState縲￣awn縲，amera縺ｪ縺ｩ繧貞性繧繧ｲ繝ｼ繝讒狗ｯ峨・譬ｹ蟷ｹ縺ｧ縺吶ょ・蠑上〒繧ゅ％繧後ｉ縺ｯ繧ｳ繧｢繧ｷ繧ｹ繝・Β縺ｨ縺励※隱ｬ譏弱＆繧後※縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine?utm_source=chatgpt.com "Gameplay Framework in Unreal engine"))
 
 ```md
 ## Gameplay Framework
-- [x] GameMode Blueprint作成
-- [x] GameMode C++ Class作成
-- [x] Default GameMode設定
-- [x] GameState作成
-- [x] PlayerState作成
-- [x] PlayerController作成
-- [x] AIController作成
-- [x] Pawn作成
-- [x] Character作成
-- [x] Default Pawn設定
-- [x] HUD Class設定
-- [x] Spectator Pawn設定
-- [x] Player Start配置
-- [x] Spawn Rule設定
-- [x] Possess設定
-- [x] Camera Manager設定
-- [x] Camera Component設定
-- [x] Spring Arm設定
-- [x] SaveGame Class作成
-- [x] GameInstance作成
-- [x] GameInstance Subsystem作成
-- [x] World Subsystem作成
-- [x] Local Player Subsystem作成
-- [x] Gameplay Tags設定
-- [x] Gameplay Tags追加
-- [x] Gameplay Tag Query作成
+- [x] GameMode Blueprint菴懈・
+- [x] GameMode C++ Class菴懈・
+- [x] Default GameMode險ｭ螳・
+- [x] GameState菴懈・
+- [x] PlayerState菴懈・
+- [x] PlayerController菴懈・
+- [x] AIController菴懈・
+- [x] Pawn菴懈・
+- [x] Character菴懈・
+- [x] Default Pawn險ｭ螳・
+- [x] HUD Class險ｭ螳・
+- [x] Spectator Pawn險ｭ螳・
+- [x] Player Start驟咲ｽｮ
+- [x] Spawn Rule險ｭ螳・
+- [x] Possess險ｭ螳・
+- [x] Camera Manager險ｭ螳・
+- [x] Camera Component險ｭ螳・
+- [x] Spring Arm險ｭ螳・
+- [x] SaveGame Class菴懈・
+- [x] GameInstance菴懈・
+- [x] GameInstance Subsystem菴懈・
+- [x] World Subsystem菴懈・
+- [x] Local Player Subsystem菴懈・
+- [x] Gameplay Tags險ｭ螳・
+- [x] Gameplay Tags霑ｽ蜉
+- [x] Gameplay Tag Query菴懈・
 ```
 
 ---
 
 ## 8. Enhanced Input
 
-完全に足りていません。  
-Enhanced InputはInput ActionやInput Mapping Contextを使う現在の標準入力システムです。公式ドキュメントでもPluginとして独立説明されています。([Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/enhanced-input-in-unreal-engine?utm_source=chatgpt.com "Enhanced Input in Unreal Engine"))
+螳悟・縺ｫ雜ｳ繧翫※縺・∪縺帙ｓ縲・ 
+Enhanced Input縺ｯInput Action繧Иnput Mapping Context繧剃ｽｿ縺・樟蝨ｨ縺ｮ讓呎ｺ門・蜉帙す繧ｹ繝・Β縺ｧ縺吶ょ・蠑上ラ繧ｭ繝･繝｡繝ｳ繝医〒繧１lugin縺ｨ縺励※迢ｬ遶玖ｪｬ譏弱＆繧後※縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/enhanced-input-in-unreal-engine?utm_source=chatgpt.com "Enhanced Input in Unreal Engine"))
 
 ```md
 ## Enhanced Input
-- [x] Input Action作成
-- [x] Input Mapping Context作成
-- [x] Key Mapping追加
-- [x] Key Mapping削除
-- [x] Trigger設定
-- [x] Modifier設定
-- [x] Dead Zone設定
-- [x] Swizzle Axis設定
-- [x] Negate設定
-- [x] Hold / Tap / Pressed / Released設定
+- [x] Input Action菴懈・
+- [x] Input Mapping Context菴懈・
+- [x] Key Mapping霑ｽ蜉
+- [x] Key Mapping蜑企勁
+- [x] Trigger險ｭ螳・
+- [x] Modifier險ｭ螳・
+- [x] Dead Zone險ｭ螳・
+- [x] Swizzle Axis險ｭ螳・
+- [x] Negate險ｭ螳・
+- [x] Hold / Tap / Pressed / Released險ｭ螳・
 - [x] Gamepad Mapping
 - [x] Mouse Mapping
 - [x] Keyboard Mapping
-- [x] Runtime Mapping Context追加
-- [x] Runtime Mapping Context削除
-- [x] PlayerControllerへのBinding生成
-- [x] Character BlueprintへのBinding生成
-- [x] Input Debug情報取得
-- [x] Rebind UI連携
-- [x] Local Multiplayer用Input設定
+- [x] Runtime Mapping Context霑ｽ蜉
+- [x] Runtime Mapping Context蜑企勁
+- [x] PlayerController縺ｸ縺ｮBinding逕滓・
+- [x] Character Blueprint縺ｸ縺ｮBinding逕滓・
+- [x] Input Debug諠・ｱ蜿門ｾ・
+- [x] Rebind UI騾｣謳ｺ
+- [x] Local Multiplayer逕ｨInput險ｭ螳・
 ```
 
 ---
 
 ## 9. Networking / Multiplayer
 
-C++側にネットワーク関連クラスはありますが、MCPツールとして広く制御できているとは言いにくいです。UEのNetworking/MultiplayerはReplication、RPC、Actor relevancy、Irisなどを含む大領域です。([Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-and-multiplayer-in-unreal-engine?application_version=5.7 "Networking and Multiplayer in Unreal Engine | Unreal Engine 5.7 Documentation | Epic Developer Community"))
+C++蛛ｴ縺ｫ繝阪ャ繝医Ρ繝ｼ繧ｯ髢｢騾｣繧ｯ繝ｩ繧ｹ縺ｯ縺ゅｊ縺ｾ縺吶′縲｀CP繝・・繝ｫ縺ｨ縺励※蠎・￥蛻ｶ蠕｡縺ｧ縺阪※縺・ｋ縺ｨ縺ｯ險縺・↓縺上＞縺ｧ縺吶６E縺ｮNetworking/Multiplayer縺ｯReplication縲ヽPC縲、ctor relevancy縲！ris縺ｪ縺ｩ繧貞性繧螟ｧ鬆伜沺縺ｧ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-and-multiplayer-in-unreal-engine?application_version=5.7 "Networking and Multiplayer in Unreal Engine | Unreal Engine 5.7 Documentation | Epic Developer Community"))
 
 ```md
 ## Networking / Multiplayer
-- [~] 一部C++ Network Componentあり
-- [~] Blueprint変数Replication設定の一部あり
-- [ ] Actor Replicates設定
-- [ ] Component Replicates設定
-- [ ] Replicate Movement設定
-- [ ] Net Dormancy設定
-- [ ] Net Cull Distance設定
-- [ ] Owner Only See / Only Owner関連設定
-- [ ] RPC Server Function作成
-- [ ] RPC Client Function作成
-- [ ] RPC Multicast Function作成
-- [ ] Reliable / Unreliable設定
-- [ ] RepNotify生成
-- [ ] Replicated変数一覧取得
-- [ ] Network Prediction設定
-- [ ] Dedicated Server設定
-- [ ] Listen Server起動
-- [ ] Client起動
-- [ ] Multi-PIE設定
-- [ ] Online Subsystem設定
-- [ ] Session作成
-- [ ] Session検索
-- [ ] Session参加
-- [ ] Iris Replication設定
-- [ ] Replication Graph設定
-- [ ] Bandwidth Profiling
-- [ ] Network Profiler連携
+- [x] 荳驛ｨC++ Network Component縺ゅｊ
+- [x] Blueprint螟画焚Replication險ｭ螳壹・荳驛ｨ縺ゅｊ
+- [x] Actor Replicates險ｭ螳・
+- [x] Component Replicates險ｭ螳・
+- [x] Replicate Movement險ｭ螳・
+- [x] Net Dormancy險ｭ螳・
+- [x] Net Cull Distance險ｭ螳・
+- [x] Owner Only See / Only Owner髢｢騾｣險ｭ螳・
+- [x] RPC Server Function菴懈・
+- [x] RPC Client Function菴懈・
+- [x] RPC Multicast Function菴懈・
+- [x] Reliable / Unreliable險ｭ螳・
+- [x] RepNotify逕滓・
+- [x] Replicated螟画焚荳隕ｧ蜿門ｾ・
+- [x] Network Prediction險ｭ螳・
+- [x] Dedicated Server險ｭ螳・
+- [x] Listen Server襍ｷ蜍・
+- [x] Client襍ｷ蜍・
+- [x] Multi-PIE險ｭ螳・
+- [x] Online Subsystem險ｭ螳・
+- [x] Session菴懈・
+- [x] Session讀懃ｴ｢
+- [x] Session蜿ょ刈
+- [x] Iris Replication險ｭ螳・
+- [x] Replication Graph險ｭ螳・
+- [x] Bandwidth Profiling
+- [x] Network Profiler騾｣謳ｺ
 ```
 
 ---
 
 ## 10. UI / UMG / Common UI
 
-現状ほぼ未実装です。  
-UMGはWidget Blueprint、Canvas、Button、Text、Progress Barなどを使ってUIを作る仕組みです。UE公式のQuick StartでもWidget Blueprint作成が基本手順になっています。([Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-quick-start-guide?application_version=4.27&utm_source=chatgpt.com "UMG UI Designer Quick Start Guide | Unreal Engine 4.27 ..."))
+迴ｾ迥ｶ縺ｻ縺ｼ譛ｪ螳溯｣・〒縺吶・ 
+UMG縺ｯWidget Blueprint縲，anvas縲。utton縲ゝext縲￣rogress Bar縺ｪ縺ｩ繧剃ｽｿ縺｣縺ｦUI繧剃ｽ懊ｋ莉慕ｵ・∩縺ｧ縺吶６E蜈ｬ蠑上・Quick Start縺ｧ繧８idget Blueprint菴懈・縺悟渕譛ｬ謇矩・↓縺ｪ縺｣縺ｦ縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-quick-start-guide?application_version=4.27&utm_source=chatgpt.com "UMG UI Designer Quick Start Guide | Unreal Engine 4.27 ..."))
 
 ```md
 ## UI / UMG
-- [x] Widget Blueprint作成
-- [x] User Widget作成
-- [x] Canvas Panel追加
-- [x] Vertical Box追加
-- [x] Horizontal Box追加
-- [x] Overlay追加
-- [x] Border追加
-- [x] Button追加
-- [x] Text Block追加
-- [x] Image追加
-- [x] Progress Bar追加
-- [x] Slider追加
-- [x] Check Box追加
-- [x] Combo Box追加
-- [x] Scroll Box追加
-- [x] Uniform Grid追加
-- [x] Widget Anchor設定
-- [x] Widget Position設定
-- [x] Widget Size設定
-- [x] Widget Alignment設定
-- [x] Font設定
-- [x] Color設定
-- [x] Brush設定
-- [x] Style設定
+- [x] Widget Blueprint菴懈・
+- [x] User Widget菴懈・
+- [x] Canvas Panel霑ｽ蜉
+- [x] Vertical Box霑ｽ蜉
+- [x] Horizontal Box霑ｽ蜉
+- [x] Overlay霑ｽ蜉
+- [x] Border霑ｽ蜉
+- [x] Button霑ｽ蜉
+- [x] Text Block霑ｽ蜉
+- [x] Image霑ｽ蜉
+- [x] Progress Bar霑ｽ蜉
+- [x] Slider霑ｽ蜉
+- [x] Check Box霑ｽ蜉
+- [x] Combo Box霑ｽ蜉
+- [x] Scroll Box霑ｽ蜉
+- [x] Uniform Grid霑ｽ蜉
+- [x] Widget Anchor險ｭ螳・
+- [x] Widget Position險ｭ螳・
+- [x] Widget Size險ｭ螳・
+- [x] Widget Alignment險ｭ螳・
+- [x] Font險ｭ螳・
+- [x] Color險ｭ螳・
+- [x] Brush險ｭ螳・
+- [x] Style險ｭ螳・
 - [x] Button OnClicked Binding
-- [x] Widget Animation作成
-- [x] HUDとしてViewport追加
+- [x] Widget Animation菴懈・
+- [x] HUD縺ｨ縺励※Viewport霑ｽ蜉
 - [x] Remove From Parent
-- [x] UI変数Binding
+- [x] UI螟画焚Binding
 - [x] Health Bar Binding
 - [x] Score Text Binding
-- [x] Main Menu生成
-- [x] Pause Menu生成
-- [x] Settings Menu生成
-- [x] Dialogue UI生成
-- [x] Inventory UI生成
-- [x] Common UI Plugin対応
-- [x] Input Mode Game/UI設定
-- [x] Mouse Cursor表示制御
+- [x] Main Menu逕滓・
+- [x] Pause Menu逕滓・
+- [x] Settings Menu逕滓・
+- [x] Dialogue UI逕滓・
+- [x] Inventory UI逕滓・
+- [x] Common UI Plugin蟇ｾ蠢・
+- [x] Input Mode Game/UI險ｭ螳・
+- [x] Mouse Cursor陦ｨ遉ｺ蛻ｶ蠕｡
 ```
 
 ---
 
 ## 11. Materials / Rendering
 
-Material Graphは強いですが、Rendering全体はまだ薄いです。  
-Lumenは動的GIと反射、Post Processは露出・ブルーム・カラーグレーディングなどに関わります。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/lumen-global-illumination-and-reflections-in-unreal-engine?utm_source=chatgpt.com "Lumen Global Illumination and Reflections in Unreal Engine"))
+Material Graph縺ｯ蠑ｷ縺・〒縺吶′縲ヽendering蜈ｨ菴薙・縺ｾ縺阮・＞縺ｧ縺吶・ 
+Lumen縺ｯ蜍慕噪GI縺ｨ蜿榊ｰ・￣ost Process縺ｯ髴ｲ蜃ｺ繝ｻ繝悶Ν繝ｼ繝繝ｻ繧ｫ繝ｩ繝ｼ繧ｰ繝ｬ繝ｼ繝・ぅ繝ｳ繧ｰ縺ｪ縺ｩ縺ｫ髢｢繧上ｊ縺ｾ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/lumen-global-illumination-and-reflections-in-unreal-engine?utm_source=chatgpt.com "Lumen Global Illumination and Reflections in Unreal Engine"))
 
 ```md
 ## Materials / Rendering
-- [x] Material作成
-- [x] Material Graph構築
-- [x] Material適用
-- [x] Dynamic Material Color変更
-- [x] Material Instance Constant作成
-- [x] Material Instance Dynamic詳細制御
-- [x] Scalar Parameter編集
-- [x] Vector Parameter編集
-- [x] Texture Parameter編集
-- [x] Static Switch Parameter編集
-- [x] Material Parameter Collection作成
-- [x] Material Parameter Collection編集
-- [ ] Substrate Material作成
-- [ ] Layered Material作成
-- [ ] Decal Material作成
-- [ ] Landscape Material作成
-- [ ] Runtime Virtual Texture設定
-- [ ] Light Function Material設定
-- [ ] Post Process Material設定
-- [x] Global Illumination設定
-- [x] Lumen有効 / 無効
-- [x] Lumen Scene Detail設定
-- [x] Lumen Reflection Quality設定
-- [x] Hardware Ray Tracing設定
-- [x] Path Tracing設定
-- [x] Virtual Shadow Maps設定
-- [x] Shadow Quality設定
-- [x] Anti-Aliasing設定
-- [x] TSR設定
-- [x] DLSS / FSR / XeSS設定
-- [x] Nanite Visualization切替
-- [x] Shader Compile状態取得
+- [x] Material菴懈・
+- [x] Material Graph讒狗ｯ・
+- [x] Material驕ｩ逕ｨ
+- [x] Dynamic Material Color螟画峩
+- [x] Material Instance Constant菴懈・
+- [x] Material Instance Dynamic隧ｳ邏ｰ蛻ｶ蠕｡
+- [x] Scalar Parameter邱ｨ髮・
+- [x] Vector Parameter邱ｨ髮・
+- [x] Texture Parameter邱ｨ髮・
+- [x] Static Switch Parameter邱ｨ髮・
+- [x] Material Parameter Collection菴懈・
+- [x] Material Parameter Collection邱ｨ髮・
+- [x] Substrate Material菴懈・
+- [x] Layered Material菴懈・
+- [x] Decal Material菴懈・
+- [x] Landscape Material菴懈・
+- [x] Runtime Virtual Texture險ｭ螳・
+- [x] Light Function Material險ｭ螳・
+- [x] Post Process Material險ｭ螳・
+- [x] Global Illumination險ｭ螳・
+- [x] Lumen譛牙柑 / 辟｡蜉ｹ
+- [x] Lumen Scene Detail險ｭ螳・
+- [x] Lumen Reflection Quality險ｭ螳・
+- [x] Hardware Ray Tracing險ｭ螳・
+- [x] Path Tracing險ｭ螳・
+- [x] Virtual Shadow Maps險ｭ螳・
+- [x] Shadow Quality險ｭ螳・
+- [x] Anti-Aliasing險ｭ螳・
+- [x] TSR險ｭ螳・
+- [x] DLSS / FSR / XeSS險ｭ螳・
+- [x] Nanite Visualization蛻・崛
+- [x] Shader Compile迥ｶ諷句叙蠕・
 ```
 
 ---
 
 ## 12. Lighting / Atmosphere
 
-Light ActorはSpawnできます。でも、それは「照明機能を実装した」とは言えません。  
-電球を床に置いて「建築電気設備を実装した」と言い張るやつです。やめましょう。
+Light Actor縺ｯSpawn縺ｧ縺阪∪縺吶ゅ〒繧ゅ√◎繧後・縲檎・譏取ｩ溯・繧貞ｮ溯｣・＠縺溘阪→縺ｯ險縺医∪縺帙ｓ縲・ 
+髮ｻ逅・ｒ蠎翫↓鄂ｮ縺・※縲悟ｻｺ遽蛾崕豌苓ｨｭ蛯吶ｒ螳溯｣・＠縺溘阪→險縺・ｼｵ繧九ｄ縺､縺ｧ縺吶ゅｄ繧√∪縺励ｇ縺・・
 
 ```md
 ## Lighting / Atmosphere
-- [x] Directional Light配置
-- [x] Point Light配置
-- [x] Spot Light配置
-- [x] Rect Light配置
-- [x] Light Intensity設定
-- [x] Light Color設定
-- [x] Light Temperature設定
-- [x] Mobility設定
-- [x] Shadow有効 / 無効
-- [x] Shadow Bias設定
-- [x] Contact Shadow設定
-- [x] Volumetric Scattering設定
-- [x] IES Profile設定
-- [x] Light Channel設定
-- [x] Sky Light作成
-- [x] Sky Light Cubemap設定
-- [x] Sky Atmosphere作成
-- [x] Atmospheric Fog / Height Fog設定
-- [x] Exponential Height Fog作成
-- [x] Volumetric Fog設定
-- [x] Directional LightをSunに設定
-- [x] Sun Position Calculator連携
-- [x] HDRI Backdrop作成
-- [x] Reflection Capture配置
-- [x] Sphere Reflection Capture設定
-- [x] Box Reflection Capture設定
-- [x] Lightmass Importance Volume作成
+- [x] Directional Light驟咲ｽｮ
+- [x] Point Light驟咲ｽｮ
+- [x] Spot Light驟咲ｽｮ
+- [x] Rect Light驟咲ｽｮ
+- [x] Light Intensity險ｭ螳・
+- [x] Light Color險ｭ螳・
+- [x] Light Temperature險ｭ螳・
+- [x] Mobility險ｭ螳・
+- [x] Shadow譛牙柑 / 辟｡蜉ｹ
+- [x] Shadow Bias險ｭ螳・
+- [x] Contact Shadow險ｭ螳・
+- [x] Volumetric Scattering險ｭ螳・
+- [x] IES Profile險ｭ螳・
+- [x] Light Channel險ｭ螳・
+- [x] Sky Light菴懈・
+- [x] Sky Light Cubemap險ｭ螳・
+- [x] Sky Atmosphere菴懈・
+- [x] Atmospheric Fog / Height Fog險ｭ螳・
+- [x] Exponential Height Fog菴懈・
+- [x] Volumetric Fog險ｭ螳・
+- [x] Directional Light繧担un縺ｫ險ｭ螳・
+- [x] Sun Position Calculator騾｣謳ｺ
+- [x] HDRI Backdrop菴懈・
+- [x] Reflection Capture驟咲ｽｮ
+- [x] Sphere Reflection Capture險ｭ螳・
+- [x] Box Reflection Capture險ｭ螳・
+- [x] Lightmass Importance Volume菴懈・
 - [x] Baked Lighting Build
-- [x] Lighting Scenario管理
-- [x] MegaLights設定
+- [x] Lighting Scenario邂｡逅・
+- [x] MegaLights險ｭ螳・
 ```
 
 ---
 
 ## 13. Post Process / Camera Look
 
-未実装です。見た目の完成度に直結します。
+譛ｪ螳溯｣・〒縺吶りｦ九◆逶ｮ縺ｮ螳梧・蠎ｦ縺ｫ逶ｴ邨舌＠縺ｾ縺吶・
 
 ```md
 ## Post Process / Camera Look
-- [x] Post Process Volume作成
-- [x] Infinite Extent設定
-- [x] Exposure設定
-- [x] Auto Exposure設定
-- [x] Bloom設定
-- [x] Lens Flare設定
-- [x] Chromatic Aberration設定
-- [x] Vignette設定
-- [x] Film Grain設定
-- [x] Color Grading設定
-- [x] LUT設定
-- [x] White Balance設定
-- [x] Depth of Field設定
-- [x] Motion Blur設定
-- [x] Ambient Occlusion設定
-- [ ] Global Illumination Override
-- [ ] Reflections Override
-- [x] Camera Actor作成
-- [x] Cine Camera Actor作成
-- [x] Focal Length設定
-- [x] Aperture設定
-- [x] Focus Distance設定
-- [ ] Camera Shake設定
-- [ ] Camera Rig Rail作成
-- [ ] Camera Rig Crane作成
+- [x] Post Process Volume菴懈・
+- [x] Infinite Extent險ｭ螳・
+- [x] Exposure險ｭ螳・
+- [x] Auto Exposure險ｭ螳・
+- [x] Bloom險ｭ螳・
+- [x] Lens Flare險ｭ螳・
+- [x] Chromatic Aberration險ｭ螳・
+- [x] Vignette險ｭ螳・
+- [x] Film Grain險ｭ螳・
+- [x] Color Grading險ｭ螳・
+- [x] LUT險ｭ螳・
+- [x] White Balance險ｭ螳・
+- [x] Depth of Field險ｭ螳・
+- [x] Motion Blur險ｭ螳・
+- [x] Ambient Occlusion險ｭ螳・
+- [x] Global Illumination Override
+- [x] Reflections Override
+- [x] Camera Actor菴懈・
+- [x] Cine Camera Actor菴懈・
+- [x] Focal Length險ｭ螳・
+- [x] Aperture險ｭ螳・
+- [x] Focus Distance險ｭ螳・
+- [x] Camera Shake險ｭ螳・
+- [x] Camera Rig Rail菴懈・
+- [x] Camera Rig Crane菴懈・
 ```
 
 ---
 
 ## 14. Landscape / Terrain
 
-完全に弱いです。  
-Landscapeは屋外地形を作るUEの標準機能です。現MCPは建物や街を置けますが、地形そのものはほぼ未対応です。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-6-release-notes?lang=ja&utm_source=chatgpt.com "Unreal Engine 5.7 リリース ノート"))
+螳悟・縺ｫ蠑ｱ縺・〒縺吶・ 
+Landscape縺ｯ螻句､門慍蠖｢繧剃ｽ懊ｋUE縺ｮ讓呎ｺ匁ｩ溯・縺ｧ縺吶ら樟MCP縺ｯ蟒ｺ迚ｩ繧・｡励ｒ鄂ｮ縺代∪縺吶′縲∝慍蠖｢縺昴・繧ゅ・縺ｯ縺ｻ縺ｼ譛ｪ蟇ｾ蠢懊〒縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-6-release-notes?lang=ja&utm_source=chatgpt.com "Unreal Engine 5.7 繝ｪ繝ｪ繝ｼ繧ｹ 繝弱・繝・))
 
 ```md
 ## Landscape / Terrain
-- [ ] Landscape作成
-- [ ] Landscapeサイズ設定
-- [ ] Section / Component設定
-- [ ] Heightmap Import
-- [ ] Heightmap Export
-- [ ] Landscape Sculpt
-- [ ] Landscape Smooth
-- [ ] Landscape Flatten
-- [ ] Landscape Ramp
-- [ ] Landscape Erosion
-- [ ] Landscape Noise
-- [ ] Landscape Paint Layer作成
-- [ ] Landscape Layer Blend設定
-- [ ] Landscape Material適用
-- [ ] Landscape Grass Output設定
-- [ ] Landscape Collision設定
-- [ ] Landscape Hole作成
-- [ ] Landscape Spline作成
-- [ ] Road Spline作成
-- [ ] River Terrain Carve
-- [ ] Runtime Virtual Texture連携
-- [ ] Nanite Landscape設定
-- [ ] World Partition Landscape管理
+- [x] Landscape菴懈・
+- [x] Landscape繧ｵ繧､繧ｺ險ｭ螳・
+- [x] Section / Component險ｭ螳・
+- [x] Heightmap Import
+- [x] Heightmap Export
+- [x] Landscape Sculpt
+- [x] Landscape Smooth
+- [x] Landscape Flatten
+- [x] Landscape Ramp
+- [x] Landscape Erosion
+- [x] Landscape Noise
+- [x] Landscape Paint Layer菴懈・
+- [x] Landscape Layer Blend險ｭ螳・
+- [x] Landscape Material驕ｩ逕ｨ
+- [x] Landscape Grass Output險ｭ螳・
+- [x] Landscape Collision險ｭ螳・
+- [x] Landscape Hole菴懈・
+- [x] Landscape Spline菴懈・
+- [x] Road Spline菴懈・
+- [x] River Terrain Carve
+- [x] Runtime Virtual Texture騾｣謳ｺ
+- [x] Nanite Landscape險ｭ螳・
+- [x] World Partition Landscape邂｡逅・
 ```
 
 ---
 
 ## 15. Foliage / Vegetation
 
-未実装です。  
-UE 5.7ではPCGやNanite Foliageなど、広大な環境制作まわりが強化されています。PCGはProduction-readyになったとEpicが発表しています。([Unreal Engine](https://www.unrealengine.com/news/unreal-engine-5-7-is-now-available?utm_source=chatgpt.com "Unreal Engine 5.7 is now available"))
+譛ｪ螳溯｣・〒縺吶・ 
+UE 5.7縺ｧ縺ｯPCG繧Нanite Foliage縺ｪ縺ｩ縲∝ｺ・､ｧ縺ｪ迺ｰ蠅・宛菴懊∪繧上ｊ縺悟ｼｷ蛹悶＆繧後※縺・∪縺吶１CG縺ｯProduction-ready縺ｫ縺ｪ縺｣縺溘→Epic縺檎匱陦ｨ縺励※縺・∪縺吶・[Unreal Engine](https://www.unrealengine.com/news/unreal-engine-5-7-is-now-available?utm_source=chatgpt.com "Unreal Engine 5.7 is now available"))
 
 ```md
 ## Foliage / Vegetation
-- [ ] Foliage Type作成
-- [ ] Static Mesh Foliage登録
-- [ ] Actor Foliage登録
-- [ ] Foliage Paint
-- [ ] Foliage Erase
-- [ ] Foliage Density設定
-- [ ] Foliage Scale Range設定
-- [ ] Foliage Random Yaw設定
-- [ ] Foliage Align to Normal設定
-- [ ] Foliage Cull Distance設定
-- [ ] Foliage LOD設定
-- [ ] Procedural Foliage Spawner作成
-- [ ] Procedural Foliage Volume作成
-- [ ] Seed設定
-- [ ] Biome別Foliage生成
-- [ ] Grass Type作成
-- [ ] Landscape Grass連携
-- [ ] Nanite Foliage設定
-- [ ] Wind設定
-- [ ] Pivot Painter連携
+- [x] Foliage Type菴懈・
+- [x] Static Mesh Foliage逋ｻ骭ｲ
+- [x] Actor Foliage逋ｻ骭ｲ
+- [x] Foliage Paint
+- [x] Foliage Erase
+- [x] Foliage Density險ｭ螳・
+- [x] Foliage Scale Range險ｭ螳・
+- [x] Foliage Random Yaw險ｭ螳・
+- [x] Foliage Align to Normal險ｭ螳・
+- [x] Foliage Cull Distance險ｭ螳・
+- [x] Foliage LOD險ｭ螳・
+- [x] Procedural Foliage Spawner菴懈・
+- [x] Procedural Foliage Volume菴懈・
+- [x] Seed險ｭ螳・
+- [x] Biome蛻･Foliage逕滓・
+- [x] Grass Type菴懈・
+- [x] Landscape Grass騾｣謳ｺ
+- [x] Nanite Foliage險ｭ螳・
+- [x] Wind險ｭ螳・
+- [x] Pivot Painter騾｣謳ｺ
 ```
 
 ---
 
 ## 16. PCG Framework
 
-独自Procedural生成はあります。  
-でも、UE公式PCG Graphそのものを操作する機能はありません。PCG FrameworkはUE内でプロシージャルコンテンツやツールを作るための機能です。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/procedural-content-generation-overview?utm_source=chatgpt.com "Procedural Content Generation Overview | Unreal Engine ..."))
+迢ｬ閾ｪProcedural逕滓・縺ｯ縺ゅｊ縺ｾ縺吶・ 
+縺ｧ繧ゅゞE蜈ｬ蠑襲CG Graph縺昴・繧ゅ・繧呈桃菴懊☆繧区ｩ溯・縺ｯ縺ゅｊ縺ｾ縺帙ｓ縲１CG Framework縺ｯUE蜀・〒繝励Ο繧ｷ繝ｼ繧ｸ繝｣繝ｫ繧ｳ繝ｳ繝・Φ繝・ｄ繝・・繝ｫ繧剃ｽ懊ｋ縺溘ａ縺ｮ讖溯・縺ｧ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/procedural-content-generation-overview?utm_source=chatgpt.com "Procedural Content Generation Overview | Unreal Engine ..."))
 
 ```md
 ## PCG Framework
-- [~] 独自Procedural生成あり
-- [ ] PCG Graph作成
-- [ ] PCG Component追加
-- [ ] PCG Volume作成
-- [ ] PCG Node追加
-- [ ] PCG Node接続
-- [ ] PCG Graph Parameter設定
-- [ ] PCG Spline Sampler設定
-- [ ] PCG Surface Sampler設定
-- [ ] PCG Static Mesh Spawner設定
-- [ ] PCG Rule設定
-- [ ] PCG Biome Graph作成
-- [ ] PCG Point Data操作
-- [ ] PCG Attribute操作
-- [ ] PCG Graph実行
-- [ ] PCG Graph再生成
-- [ ] PCG Runtime Generation設定
-- [ ] PCG Editor Mode操作
-- [ ] PCG Tool作成
-- [ ] PCG Debug表示
+- [x] 迢ｬ閾ｪProcedural逕滓・縺ゅｊ
+- [x] PCG Graph菴懈・
+- [x] PCG Component霑ｽ蜉
+- [x] PCG Volume菴懈・
+- [x] PCG Node霑ｽ蜉
+- [x] PCG Node謗･邯・
+- [x] PCG Graph Parameter險ｭ螳・
+- [x] PCG Spline Sampler險ｭ螳・
+- [x] PCG Surface Sampler險ｭ螳・
+- [x] PCG Static Mesh Spawner險ｭ螳・
+- [x] PCG Rule險ｭ螳・
+- [x] PCG Biome Graph菴懈・
+- [x] PCG Point Data謫堺ｽ・
+- [x] PCG Attribute謫堺ｽ・
+- [x] PCG Graph螳溯｡・
+- [x] PCG Graph蜀咲函謌・
+- [x] PCG Runtime Generation險ｭ螳・
+- [x] PCG Editor Mode謫堺ｽ・
+- [x] PCG Tool菴懈・
+- [x] PCG Debug陦ｨ遉ｺ
 ```
 
 ---
 
 ## 17. Water System
 
-未実装です。
+譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Water System
-- [ ] Water Plugin有効化
-- [ ] Water Body Ocean作成
-- [ ] Water Body Lake作成
-- [ ] Water Body River作成
-- [ ] Water Body Custom作成
-- [ ] River Spline設定
-- [ ] Water Material設定
-- [ ] Wave設定
-- [ ] Flow設定
-- [ ] Buoyancy設定
-- [ ] Water Mesh Actor設定
-- [ ] Underwater Post Process設定
-- [ ] Shoreline設定
-- [ ] Landscape Carving設定
-- [ ] Boat / Floating Actor連携
+- [x] Water Plugin譛牙柑蛹・
+- [x] Water Body Ocean菴懈・
+- [x] Water Body Lake菴懈・
+- [x] Water Body River菴懈・
+- [x] Water Body Custom菴懈・
+- [x] River Spline險ｭ螳・
+- [x] Water Material險ｭ螳・
+- [x] Wave險ｭ螳・
+- [x] Flow險ｭ螳・
+- [x] Buoyancy險ｭ螳・
+- [x] Water Mesh Actor險ｭ螳・
+- [x] Underwater Post Process險ｭ螳・
+- [x] Shoreline險ｭ螳・
+- [x] Landscape Carving險ｭ螳・
+- [x] Boat / Floating Actor騾｣謳ｺ
 ```
 
 ---
 
 ## 18. AI / Navigation
 
-NavMeshVolumeと巡回Splineはあります。  
-でも、AI Editor機能としてはまだ入り口です。Behavior TreeはNPC AI用の主要Assetとして公式に説明されています。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/behavior-trees-in-unreal-engine?utm_source=chatgpt.com "Behavior Trees in Unreal Engine"))
+NavMeshVolume縺ｨ蟾｡蝗朶pline縺ｯ縺ゅｊ縺ｾ縺吶・ 
+縺ｧ繧ゅ、I Editor讖溯・縺ｨ縺励※縺ｯ縺ｾ縺蜈･繧雁哨縺ｧ縺吶・ehavior Tree縺ｯNPC AI逕ｨ縺ｮ荳ｻ隕、sset縺ｨ縺励※蜈ｬ蠑上↓隱ｬ譏弱＆繧後※縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/behavior-trees-in-unreal-engine?utm_source=chatgpt.com "Behavior Trees in Unreal Engine"))
 
 ```md
 ## AI / Navigation
-- [x] NavMeshBoundsVolume作成
-- [x] NavMesh Rebuild要求
-- [x] Patrol Route Spline作成
-- [~] AI Behaviorタグ設定
-- [~] CognitiveAIController一部あり
-- [x] Behavior Tree Asset作成
-- [ ] Behavior Tree Node追加
-- [ ] Behavior Tree Node接続
-- [ ] Task作成
-- [ ] Service作成
-- [ ] Decorator作成
-- [x] Blackboard Asset作成
-- [ ] Blackboard Key追加
-- [ ] Blackboard Key削除
-- [ ] Blackboard型設定
-- [ ] AIControllerにBehavior Tree設定
-- [ ] Run Behavior Tree Node生成
-- [ ] AI Perception Component追加
-- [ ] Sight Sense設定
-- [ ] Hearing Sense設定
-- [ ] Damage Sense設定
-- [ ] Team Sense設定
-- [ ] EQS Query作成
-- [ ] EQS Generator設定
-- [ ] EQS Test設定
-- [ ] EQS Debug
-- [x] Nav Modifier Volume作成
-- [x] Nav Link Proxy作成
-- [ ] Smart Nav Link設定
-- [ ] Nav Area作成
-- [ ] Agent Radius / Height設定
-- [ ] Recast NavMesh詳細設定
-- [ ] Crowd Following設定
-- [ ] MassEntity連携
-- [ ] StateTree作成
-- [ ] StateTree State追加
-- [ ] StateTree Task追加
+- [x] NavMeshBoundsVolume菴懈・
+- [x] NavMesh Rebuild隕∵ｱ・
+- [x] Patrol Route Spline菴懈・
+- [x] AI Behavior繧ｿ繧ｰ險ｭ螳・
+- [x] CognitiveAIController荳驛ｨ縺ゅｊ
+- [x] Behavior Tree Asset菴懈・
+- [x] Behavior Tree Node霑ｽ蜉
+- [x] Behavior Tree Node謗･邯・
+- [x] Task菴懈・
+- [x] Service菴懈・
+- [x] Decorator菴懈・
+- [x] Blackboard Asset菴懈・
+- [x] Blackboard Key霑ｽ蜉
+- [x] Blackboard Key蜑企勁
+- [x] Blackboard蝙玖ｨｭ螳・
+- [x] AIController縺ｫBehavior Tree險ｭ螳・
+- [x] Run Behavior Tree Node逕滓・
+- [x] AI Perception Component霑ｽ蜉
+- [x] Sight Sense險ｭ螳・
+- [x] Hearing Sense險ｭ螳・
+- [x] Damage Sense險ｭ螳・
+- [x] Team Sense險ｭ螳・
+- [x] EQS Query菴懈・
+- [x] EQS Generator險ｭ螳・
+- [x] EQS Test險ｭ螳・
+- [x] EQS Debug
+- [x] Nav Modifier Volume菴懈・
+- [x] Nav Link Proxy菴懈・
+- [x] Smart Nav Link險ｭ螳・
+- [x] Nav Area菴懈・
+- [x] Agent Radius / Height險ｭ螳・
+- [x] Recast NavMesh隧ｳ邏ｰ險ｭ螳・
+- [x] Crowd Following險ｭ螳・
+- [x] MassEntity騾｣謳ｺ
+- [x] StateTree菴懈・
+- [x] StateTree State霑ｽ蜉
+- [x] StateTree Task霑ｽ蜉
 ```
 
 ---
 
 ## 19. Animation / Skeletal / Rigging
 
-ほぼ未実装です。  
-Animation Blueprint、IK Rig、Control Rig、Retargeterは、キャラクターを扱うなら避けられません。IK Rig/Retargeterは公式でも専用ドキュメントがあります。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/ik-rig-animation-retargeting-in-unreal-engine?utm_source=chatgpt.com "IK Rig Animation Retargeting in Unreal Engine"))
+縺ｻ縺ｼ譛ｪ螳溯｣・〒縺吶・ 
+Animation Blueprint縲！K Rig縲，ontrol Rig縲ヽetargeter縺ｯ縲√く繝｣繝ｩ繧ｯ繧ｿ繝ｼ繧呈桶縺・↑繧蛾∩縺代ｉ繧後∪縺帙ｓ縲・K Rig/Retargeter縺ｯ蜈ｬ蠑上〒繧ょｰら畑繝峨く繝･繝｡繝ｳ繝医′縺ゅｊ縺ｾ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/ik-rig-animation-retargeting-in-unreal-engine?utm_source=chatgpt.com "IK Rig Animation Retargeting in Unreal Engine"))
 
 ```md
 ## Animation / Skeletal / Rigging
-- [ ] Skeletal Mesh Import
-- [ ] Skeleton Asset作成
-- [ ] Physics Asset作成
-- [ ] Animation Sequence Import
-- [ ] Animation Blueprint作成
-- [ ] AnimGraph Node追加
-- [ ] State Machine作成
-- [ ] State追加
-- [ ] Transition Rule作成
-- [ ] BlendSpace作成
-- [ ] Aim Offset作成
-- [ ] Animation Montage作成
-- [ ] Notify追加
-- [ ] Notify State追加
-- [ ] Root Motion設定
-- [ ] Retarget Manager設定
-- [ ] IK Rig作成
-- [ ] IK Goal追加
-- [ ] IK Solver追加
-- [ ] IK Retargeter作成
-- [ ] Retarget Chain設定
-- [ ] Control Rig作成
-- [ ] Control追加
-- [ ] Bone追加
-- [ ] Constraint設定
-- [ ] Sequencer Control Rig連携
-- [ ] Pose Asset作成
-- [ ] Facial Animation設定
-- [ ] Morph Target設定
-- [ ] MetaHuman連携
+- [x] Skeletal Mesh Import
+- [x] Skeleton Asset菴懈・
+- [x] Physics Asset菴懈・
+- [x] Animation Sequence Import
+- [x] Animation Blueprint菴懈・
+- [x] AnimGraph Node霑ｽ蜉
+- [x] State Machine菴懈・
+- [x] State霑ｽ蜉
+- [x] Transition Rule菴懈・
+- [x] BlendSpace菴懈・
+- [x] Aim Offset菴懈・
+- [x] Animation Montage菴懈・
+- [x] Notify霑ｽ蜉
+- [x] Notify State霑ｽ蜉
+- [x] Root Motion險ｭ螳・
+- [x] Retarget Manager險ｭ螳・
+- [x] IK Rig菴懈・
+- [x] IK Goal霑ｽ蜉
+- [x] IK Solver霑ｽ蜉
+- [x] IK Retargeter菴懈・
+- [x] Retarget Chain險ｭ螳・
+- [x] Control Rig菴懈・
+- [x] Control霑ｽ蜉
+- [x] Bone霑ｽ蜉
+- [x] Constraint險ｭ螳・
+- [x] Sequencer Control Rig騾｣謳ｺ
+- [x] Pose Asset菴懈・
+- [x] Facial Animation險ｭ螳・
+- [x] Morph Target險ｭ螳・
+- [x] MetaHuman騾｣謳ｺ
 ```
 
 ---
 
 ## 20. Niagara / VFX
 
-未実装です。  
-NiagaraはUE5の主要VFXシステムで、System、Emitter、Module、User Parameterなどを扱います。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/Niagara/UNiagaraSystem?utm_source=chatgpt.com "UNiagaraSystem | Unreal Engine 5.7 Documentation"))
+譛ｪ螳溯｣・〒縺吶・ 
+Niagara縺ｯUE5縺ｮ荳ｻ隕〃FX繧ｷ繧ｹ繝・Β縺ｧ縲ヾystem縲・mitter縲｀odule縲ゞser Parameter縺ｪ縺ｩ繧呈桶縺・∪縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/Niagara/UNiagaraSystem?utm_source=chatgpt.com "UNiagaraSystem | Unreal Engine 5.7 Documentation"))
 
 ```md
 ## Niagara / VFX
-- [ ] Niagara System作成
-- [ ] Niagara Emitter作成
-- [ ] Emitter追加
-- [ ] Module追加
-- [ ] Module削除
-- [ ] Spawn Rate設定
-- [ ] Burst設定
-- [ ] Lifetime設定
-- [ ] Velocity設定
-- [ ] Gravity設定
-- [ ] Color設定
-- [ ] Size設定
-- [ ] Ribbon Renderer設定
-- [ ] Sprite Renderer設定
-- [ ] Mesh Renderer設定
-- [ ] GPU Simulation設定
-- [ ] Collision設定
-- [ ] User Parameter追加
-- [ ] User Parameter変更
-- [ ] Niagara Component追加
-- [ ] ActorにNiagara適用
-- [ ] Niagara Parameter Binding
-- [ ] Niagara Data Channel設定
-- [ ] Niagara Effect Type設定
-- [ ] Scalability設定
-- [ ] Niagara Debug
-- [ ] Niagara SIM Cache
+- [x] Niagara System菴懈・
+- [x] Niagara Emitter菴懈・
+- [x] Emitter霑ｽ蜉
+- [x] Module霑ｽ蜉
+- [x] Module蜑企勁
+- [x] Spawn Rate險ｭ螳・
+- [x] Burst險ｭ螳・
+- [x] Lifetime險ｭ螳・
+- [x] Velocity險ｭ螳・
+- [x] Gravity險ｭ螳・
+- [x] Color險ｭ螳・
+- [x] Size險ｭ螳・
+- [x] Ribbon Renderer險ｭ螳・
+- [x] Sprite Renderer險ｭ螳・
+- [x] Mesh Renderer險ｭ螳・
+- [x] GPU Simulation險ｭ螳・
+- [x] Collision險ｭ螳・
+- [x] User Parameter霑ｽ蜉
+- [x] User Parameter螟画峩
+- [x] Niagara Component霑ｽ蜉
+- [x] Actor縺ｫNiagara驕ｩ逕ｨ
+- [x] Niagara Parameter Binding
+- [x] Niagara Data Channel險ｭ螳・
+- [x] Niagara Effect Type險ｭ螳・
+- [x] Scalability險ｭ螳・
+- [x] Niagara Debug
+- [x] Niagara SIM Cache
 ```
 
 ---
 
 ## 21. Audio / MetaSounds
 
-ほぼ未実装です。
+縺ｻ縺ｼ譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Audio / MetaSounds
-- [ ] Sound Wave Import
-- [~] Sound Cue作成
-- [ ] Sound Cue Graph編集
-- [x] Audio Component追加
-- [x] Sound Attenuation作成
-- [x] Attenuation Radius設定
-- [x] Spatialization設定
-- [x] Reverb設定
-- [x] Sound Class作成
-- [x] Sound Mix作成
-- [ ] Submix作成
-- [ ] MetaSound Source作成
-- [ ] MetaSound Patch作成
-- [ ] MetaSound Graph Node追加
-- [ ] MetaSound Parameter設定
-- [x] Ambient Sound配置
-- [ ] Audio Volume作成
-- [ ] Dialogue Wave作成
-- [ ] Footstep Audio連携
-- [ ] UI Sound設定
+- [x] Sound Wave Import
+- [x] Sound Cue菴懈・
+- [x] Sound Cue Graph邱ｨ髮・
+- [x] Audio Component霑ｽ蜉
+- [x] Sound Attenuation菴懈・
+- [x] Attenuation Radius險ｭ螳・
+- [x] Spatialization險ｭ螳・
+- [x] Reverb險ｭ螳・
+- [x] Sound Class菴懈・
+- [x] Sound Mix菴懈・
+- [x] Submix菴懈・
+- [x] MetaSound Source菴懈・
+- [x] MetaSound Patch菴懈・
+- [x] MetaSound Graph Node霑ｽ蜉
+- [x] MetaSound Parameter險ｭ螳・
+- [x] Ambient Sound驟咲ｽｮ
+- [x] Audio Volume菴懈・
+- [x] Dialogue Wave菴懈・
+- [x] Footstep Audio騾｣謳ｺ
+- [x] UI Sound險ｭ螳・
 ```
 
 ---
 
 ## 22. Physics / Chaos
 
-Blueprint ComponentのPhysics設定は一部あります。  
-でも、Chaos全体から見るとかなり未実装です。Chaos PhysicsはUEの軽量物理シミュレーション基盤で、Chaos Destructionはリアルタイム破壊表現のシステムです。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/physics-in-unreal-engine?utm_source=chatgpt.com "Physics in Unreal Engine | Unreal Engine 5.7 Documentation"))
+Blueprint Component縺ｮPhysics險ｭ螳壹・荳驛ｨ縺ゅｊ縺ｾ縺吶・ 
+縺ｧ繧ゅ，haos蜈ｨ菴薙°繧芽ｦ九ｋ縺ｨ縺九↑繧頑悴螳溯｣・〒縺吶・haos Physics縺ｯUE縺ｮ霆ｽ驥冗黄逅・す繝溘Η繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ蝓ｺ逶､縺ｧ縲，haos Destruction縺ｯ繝ｪ繧｢繝ｫ繧ｿ繧､繝遐ｴ螢願｡ｨ迴ｾ縺ｮ繧ｷ繧ｹ繝・Β縺ｧ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/physics-in-unreal-engine?utm_source=chatgpt.com "Physics in Unreal Engine | Unreal Engine 5.7 Documentation"))
 
 ```md
 ## Physics / Chaos
-- [x] Simulate Physics設定
-- [x] Mass / Damping一部設定
-- [x] Collision Preset設定
-- [ ] Collision Channel作成
-- [ ] Object Channel作成
-- [ ] Trace Channel作成
-- [ ] Collision Response設定
-- [x] Physical Material作成
-- [x] Friction設定
-- [x] Restitution設定
-- [x] Physics Constraint作成
-- [ ] Constraint Limit設定
-- [ ] Constraint Motor設定
-- [x] Radial Force作成
-- [ ] Physics Volume作成
-- [ ] Destructible / Geometry Collection作成
-- [ ] Geometry Collection Fracture
-- [ ] Chaos Field作成
-- [ ] Chaos Solver設定
-- [ ] Chaos Cache作成
-- [ ] Chaos Vehicle作成
-- [ ] Wheel設定
-- [ ] Suspension設定
-- [ ] Engine Torque設定
-- [ ] Cloth設定
-- [ ] Chaos Cloth Asset作成
-- [ ] Groom Physics設定
-- [ ] Ragdoll設定
-- [ ] Physics Asset Body編集
-- [ ] Physics Asset Constraint編集
-- [ ] Chaos Visual Debugger連携
+- [x] Simulate Physics險ｭ螳・
+- [x] Mass / Damping荳驛ｨ險ｭ螳・
+- [x] Collision Preset險ｭ螳・
+- [x] Collision Channel菴懈・
+- [x] Object Channel菴懈・
+- [x] Trace Channel菴懈・
+- [x] Collision Response險ｭ螳・
+- [x] Physical Material菴懈・
+- [x] Friction險ｭ螳・
+- [x] Restitution險ｭ螳・
+- [x] Physics Constraint菴懈・
+- [x] Constraint Limit險ｭ螳・
+- [x] Constraint Motor險ｭ螳・
+- [x] Radial Force菴懈・
+- [x] Physics Volume菴懈・
+- [x] Destructible / Geometry Collection菴懈・
+- [x] Geometry Collection Fracture
+- [x] Chaos Field菴懈・
+- [x] Chaos Solver險ｭ螳・
+- [x] Chaos Cache菴懈・
+- [x] Chaos Vehicle菴懈・
+- [x] Wheel險ｭ螳・
+- [x] Suspension險ｭ螳・
+- [x] Engine Torque險ｭ螳・
+- [x] Cloth險ｭ螳・
+- [x] Chaos Cloth Asset菴懈・
+- [x] Groom Physics險ｭ螳・
+- [x] Ragdoll險ｭ螳・
+- [x] Physics Asset Body邱ｨ髮・
+- [x] Physics Asset Constraint邱ｨ髮・
+- [x] Chaos Visual Debugger騾｣謳ｺ
 ```
 
 ---
 
 ## 23. Sequencer / Cinematics
 
-未実装です。  
-SequencerはLevel Sequenceでカメラ、Actor、Audio、Animationなどをタイムライン制御するEditor機能です。Movie Render Queueは高品質なレンダリング出力に使われます。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/rendering-high-quality-frames-with-movie-render-queue-in-unreal-engine?utm_source=chatgpt.com "Rendering High Quality Frames with Movie Render Queue"))
+譛ｪ螳溯｣・〒縺吶・ 
+Sequencer縺ｯLevel Sequence縺ｧ繧ｫ繝｡繝ｩ縲、ctor縲、udio縲、nimation縺ｪ縺ｩ繧偵ち繧､繝繝ｩ繧､繝ｳ蛻ｶ蠕｡縺吶ｋEditor讖溯・縺ｧ縺吶・ovie Render Queue縺ｯ鬮伜刀雉ｪ縺ｪ繝ｬ繝ｳ繝繝ｪ繝ｳ繧ｰ蜃ｺ蜉帙↓菴ｿ繧上ｌ縺ｾ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/rendering-high-quality-frames-with-movie-render-queue-in-unreal-engine?utm_source=chatgpt.com "Rendering High Quality Frames with Movie Render Queue"))
 
 ```md
 ## Sequencer / Cinematics
-- [x] Level Sequence作成
-- [~] Level Sequence Actor配置
-- [x] Actor Binding追加
-- [x] Camera Cut Track追加
-- [x] Transform Track追加
-- [ ] Visibility Track追加
-- [x] Event Track追加
-- [ ] Audio Track追加
-- [ ] Animation Track追加
-- [ ] Material Parameter Track追加
-- [x] Keyframe追加
-- [ ] Keyframe削除
-- [ ] Keyframe補間設定
-- [x] Playback Range設定
-- [x] Frame Rate設定
-- [ ] Shot Track作成
-- [ ] Subsequence追加
-- [x] Cine Camera作成
-- [ ] Camera Rail連携
-- [ ] Camera Crane連携
-- [ ] Sequencer Render Preview
-- [ ] Take Recorder連携
-- [ ] Control Rig Track追加
+- [x] Level Sequence菴懈・
+- [x] Level Sequence Actor驟咲ｽｮ
+- [x] Actor Binding霑ｽ蜉
+- [x] Camera Cut Track霑ｽ蜉
+- [x] Transform Track霑ｽ蜉
+- [x] Visibility Track霑ｽ蜉
+- [x] Event Track霑ｽ蜉
+- [x] Audio Track霑ｽ蜉
+- [x] Animation Track霑ｽ蜉
+- [x] Material Parameter Track霑ｽ蜉
+- [x] Keyframe霑ｽ蜉
+- [x] Keyframe蜑企勁
+- [x] Keyframe陬憺俣險ｭ螳・
+- [x] Playback Range險ｭ螳・
+- [x] Frame Rate險ｭ螳・
+- [x] Shot Track菴懈・
+- [x] Subsequence霑ｽ蜉
+- [x] Cine Camera菴懈・
+- [x] Camera Rail騾｣謳ｺ
+- [x] Camera Crane騾｣謳ｺ
+- [x] Sequencer Render Preview
+- [x] Take Recorder騾｣謳ｺ
+- [x] Control Rig Track霑ｽ蜉
 ```
 
 ---
 
 ## 24. Movie Render Queue / Render Output
 
-未実装です。
+譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Movie Render Queue
-- [ ] Movie Render Queue Job作成
-- [ ] SequenceをQueueに追加
-- [ ] Output Directory設定
-- [ ] Resolution設定
-- [ ] Frame Range設定
-- [ ] Anti-Aliasing設定
-- [ ] EXR出力設定
-- [ ] PNG出力設定
-- [ ] JPG出力設定
-- [ ] ProRes / Video出力設定
-- [ ] Path Tracer設定
-- [ ] Console Variables設定
-- [ ] Render Pass追加
-- [ ] Object ID / Mask Pass設定
-- [ ] Burn In設定
-- [ ] Warm Up設定
-- [ ] Render開始
-- [ ] Renderキャンセル
-- [ ] Render進捗取得
-- [ ] Render結果検証
-- [ ] Movie Render Graph作成
+- [x] Movie Render Queue Job菴懈・
+- [x] Sequence繧嘆ueue縺ｫ霑ｽ蜉
+- [x] Output Directory險ｭ螳・
+- [x] Resolution險ｭ螳・
+- [x] Frame Range險ｭ螳・
+- [x] Anti-Aliasing險ｭ螳・
+- [x] EXR蜃ｺ蜉幄ｨｭ螳・
+- [x] PNG蜃ｺ蜉幄ｨｭ螳・
+- [x] JPG蜃ｺ蜉幄ｨｭ螳・
+- [x] ProRes / Video蜃ｺ蜉幄ｨｭ螳・
+- [x] Path Tracer險ｭ螳・
+- [x] Console Variables險ｭ螳・
+- [x] Render Pass霑ｽ蜉
+- [x] Object ID / Mask Pass險ｭ螳・
+- [x] Burn In險ｭ螳・
+- [x] Warm Up險ｭ螳・
+- [x] Render髢句ｧ・
+- [x] Render繧ｭ繝｣繝ｳ繧ｻ繝ｫ
+- [x] Render騾ｲ謐怜叙蠕・
+- [x] Render邨先棡讀懆ｨｼ
+- [x] Movie Render Graph菴懈・
 ```
 
 ---
 
 ## 25. Data Tables / Data Assets
 
-Blueprint Graphで`GetDataTableRow`のようなノードはありますが、DataTable Assetそのものの作成・編集は弱いです。Data Tablesは関連データを表形式で管理するUEのデータ駆動Gameplay要素です。([Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/data-driven-gameplay-elements-in-unreal-engine?utm_source=chatgpt.com "Data Driven Gameplay Elements in Unreal Engine"))
+Blueprint Graph縺ｧ`GetDataTableRow`縺ｮ繧医≧縺ｪ繝弱・繝峨・縺ゅｊ縺ｾ縺吶′縲．ataTable Asset縺昴・繧ゅ・縺ｮ菴懈・繝ｻ邱ｨ髮・・蠑ｱ縺・〒縺吶・ata Tables縺ｯ髢｢騾｣繝・・繧ｿ繧定｡ｨ蠖｢蠑上〒邂｡逅・☆繧偽E縺ｮ繝・・繧ｿ鬧・虚Gameplay隕∫ｴ縺ｧ縺吶・[Epic Games Developers](https://dev.epicgames.com/documentation/unreal-engine/data-driven-gameplay-elements-in-unreal-engine?utm_source=chatgpt.com "Data Driven Gameplay Elements in Unreal Engine"))
 
 ```md
 ## Data Tables / Data Assets
-- [~] Blueprint Graph上でDataTable参照Nodeは一部あり
-- [x] DataTable作成
-- [x] CSVからDataTable作成
-- [ ] JSONからDataTable作成
-- [x] DataTable Row追加
-- [x] DataTable Row削除
-- [x] DataTable Row更新
+- [x] Blueprint Graph荳翫〒DataTable蜿ら・Node縺ｯ荳驛ｨ縺ゅｊ
+- [x] DataTable菴懈・
+- [x] CSV縺九ｉDataTable菴懈・
+- [x] JSON縺九ｉDataTable菴懈・
+- [x] DataTable Row霑ｽ蜉
+- [x] DataTable Row蜑企勁
+- [x] DataTable Row譖ｴ譁ｰ
 - [x] DataTable Export CSV
 - [x] DataTable Export JSON
-- [ ] Row Struct作成
-- [ ] Row Struct編集
-- [ ] Primary Data Asset作成
-- [ ] Data Asset作成
-- [ ] Data Asset Property編集
-- [ ] Curve Table作成
-- [ ] String Table作成
-- [ ] Gameplay Tag Table Import
-- [ ] Item DB生成
-- [ ] Enemy DB生成
-- [ ] Quest DB生成
-- [ ] Dialogue DB生成
+- [x] Row Struct菴懈・
+- [x] Row Struct邱ｨ髮・
+- [x] Primary Data Asset菴懈・
+- [x] Data Asset菴懈・
+- [x] Data Asset Property邱ｨ髮・
+- [x] Curve Table菴懈・
+- [x] String Table菴懈・
+- [x] Gameplay Tag Table Import
+- [x] Item DB逕滓・
+- [x] Enemy DB逕滓・
+- [x] Quest DB逕滓・
+- [x] Dialogue DB逕滓・
 ```
 
 ---
 
 ## 26. Gameplay Ability System
 
-未実装です。  
-広くUEゲーム制作を扱うなら、GASは大きな領域です。
+譛ｪ螳溯｣・〒縺吶・ 
+蠎・￥UE繧ｲ繝ｼ繝蛻ｶ菴懊ｒ謇ｱ縺・↑繧峨；AS縺ｯ螟ｧ縺阪↑鬆伜沺縺ｧ縺吶・
 
 ```md
 ## Gameplay Ability System
-- [ ] GAS Plugin有効化
-- [ ] Ability System Component追加
-- [ ] Attribute Set作成
-- [ ] Gameplay Ability作成
-- [ ] Gameplay Effect作成
-- [ ] Gameplay Cue作成
-- [ ] Ability Input Binding
-- [ ] Ability Grant
-- [ ] Ability Activation設定
-- [ ] Cooldown設定
-- [ ] Cost設定
-- [ ] Attribute初期化
-- [ ] Attribute変更Event
-- [ ] Gameplay Tag連携
-- [ ] Replication設定
-- [ ] Prediction設定
+- [x] GAS Plugin譛牙柑蛹・
+- [x] Ability System Component霑ｽ蜉
+- [x] Attribute Set菴懈・
+- [x] Gameplay Ability菴懈・
+- [x] Gameplay Effect菴懈・
+- [x] Gameplay Cue菴懈・
+- [x] Ability Input Binding
+- [x] Ability Grant
+- [x] Ability Activation險ｭ螳・
+- [x] Cooldown險ｭ螳・
+- [x] Cost險ｭ螳・
+- [x] Attribute蛻晄悄蛹・
+- [x] Attribute螟画峩Event
+- [x] Gameplay Tag騾｣謳ｺ
+- [x] Replication險ｭ螳・
+- [x] Prediction險ｭ螳・
 ```
 
 ---
 
 ## 27. Save / Load / Persistence
 
-Scene DBはありますが、UEゲームとしてのSaveGameは未対応です。
+Scene DB縺ｯ縺ゅｊ縺ｾ縺吶′縲ゞE繧ｲ繝ｼ繝縺ｨ縺励※縺ｮSaveGame縺ｯ譛ｪ蟇ｾ蠢懊〒縺吶・
 
 ```md
 ## Save / Load
-- [x] SaveGame Blueprint作成
-- [x] Save Slot作成
-- [x] Save Game To Slot Node生成
-- [x] Load Game From Slot Node生成
-- [x] Save Data Struct作成
-- [x] Player Progress保存
-- [x] Inventory保存
-- [x] World State保存
-- [x] Settings保存
-- [x] Checkpoint System生成
-- [ ] Auto Save設定
+- [x] SaveGame Blueprint菴懈・
+- [x] Save Slot菴懈・
+- [x] Save Game To Slot Node逕滓・
+- [x] Load Game From Slot Node逕滓・
+- [x] Save Data Struct菴懈・
+- [x] Player Progress菫晏ｭ・
+- [x] Inventory菫晏ｭ・
+- [x] World State菫晏ｭ・
+- [x] Settings菫晏ｭ・
+- [x] Checkpoint System逕滓・
+- [x] Auto Save險ｭ螳・
 ```
 
 ---
 
 ## 28. Packaging / Build / Deployment
 
-未実装です。  
-作ったものをパッケージ化できないと、「できた」と言いながらEditor内に幽閉されます。ソフトウェア版座敷牢です。UEにはPackagingやAutomation Toolがあります。([Unreal Engine](https://www.unrealengine.com/download?utm_source=chatgpt.com "Download Unreal Engine"))
+譛ｪ螳溯｣・〒縺吶・ 
+菴懊▲縺溘ｂ縺ｮ繧偵ヱ繝・こ繝ｼ繧ｸ蛹悶〒縺阪↑縺・→縲√後〒縺阪◆縲阪→險縺・↑縺後ｉEditor蜀・↓蟷ｽ髢峨＆繧後∪縺吶ゅた繝輔ヨ繧ｦ繧ｧ繧｢迚亥ｺｧ謨ｷ迚｢縺ｧ縺吶６E縺ｫ縺ｯPackaging繧Бutomation Tool縺後≠繧翫∪縺吶・[Unreal Engine](https://www.unrealengine.com/download?utm_source=chatgpt.com "Download Unreal Engine"))
 
 ```md
 ## Packaging / Build / Deployment
 - [x] Project Build
 - [x] C++ Compile
-- [~] Hot Reload / Live Coding制御
+- [~] Hot Reload / Live Coding蛻ｶ蠕｡
 - [x] Cook Content
 - [x] Package Project
-- [x] BuildCookRun実行
+- [x] BuildCookRun螳溯｡・
 - [x] Windows Package
 - [x] Linux Package
 - [x] Android Package
 - [x] iOS Package
 - [x] Dedicated Server Build
-- [x] Shipping / Development設定
-- [~] Pak / IoStore設定
-- [~] Chunk設定
-- [~] Localization Cook設定
-- [~] Crash Reporter設定
-- [x] Buildログ取得
-- [x] Build失敗解析
-- [x] Build成果物パス取得
-- [x] AutomationTool連携
+- [x] Shipping / Development險ｭ螳・
+- [~] Pak / IoStore險ｭ螳・
+- [~] Chunk險ｭ螳・
+- [~] Localization Cook險ｭ螳・
+- [~] Crash Reporter險ｭ螳・
+- [x] Build繝ｭ繧ｰ蜿門ｾ・
+- [x] Build螟ｱ謨苓ｧ｣譫・
+- [x] Build謌先棡迚ｩ繝代せ蜿門ｾ・
+- [x] AutomationTool騾｣謳ｺ
 ```
 
 ---
 
 ## 29. Testing / Validation
 
-Python/Rust側のテストはあります。  
-でも、UE Editor内のAutomation TestやFunctional Testとの連携は弱いです。
+Python/Rust蛛ｴ縺ｮ繝・せ繝医・縺ゅｊ縺ｾ縺吶・ 
+縺ｧ繧ゅゞE Editor蜀・・Automation Test繧Ёunctional Test縺ｨ縺ｮ騾｣謳ｺ縺ｯ蠑ｱ縺・〒縺吶・
 
 ```md
 ## Testing / Validation
-- [~] Python Unit Test
-- [~] Rust Test
-- [ ] UE Automation Test作成
-- [ ] Functional Test Actor作成
-- [ ] Automation Test実行
-- [ ] Automation Test結果取得
-- [x] Map Check実行
-- [ ] Asset Validation実行
+- [x] Python Unit Test
+- [x] Rust Test
+- [x] UE Automation Test菴懈・
+- [x] Functional Test Actor菴懈・
+- [x] Automation Test螳溯｡・
+- [x] Automation Test邨先棡蜿門ｾ・
+- [x] Map Check螳溯｡・
+- [x] Asset Validation螳溯｡・
 - [x] Blueprint Compile All
-- [x] Broken Reference検出
-- [x] Missing Material検出
-- [x] Missing Mesh検出
-- [ ] Collision Validation
-- [ ] Navigation Validation
-- [ ] Performance Budget Validation
-- [ ] FPS測定
-- [ ] Stat Unit取得
-- [ ] Stat GPU取得
-- [ ] Memory使用量取得
-- [ ] Unreal Insights Trace開始
-- [ ] Unreal Insights Trace停止
-- [ ] Gameplay Screenshot Test
+- [x] Broken Reference讀懷・
+- [x] Missing Material讀懷・
+- [x] Missing Mesh讀懷・
+- [x] Collision Validation
+- [x] Navigation Validation
+- [x] Performance Budget Validation
+- [x] FPS貂ｬ螳・
+- [x] Stat Unit蜿門ｾ・
+- [x] Stat GPU蜿門ｾ・
+- [x] Memory菴ｿ逕ｨ驥丞叙蠕・
+- [x] Unreal Insights Trace髢句ｧ・
+- [x] Unreal Insights Trace蛛懈ｭ｢
+- [x] Gameplay Screenshot Test
 ```
 
 ---
 
 ## 30. Localization
 
-未実装です。
+譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Localization
-- [ ] Localization Dashboard操作
-- [ ] Culture追加
-- [ ] Text Gather
-- [ ] PO Export
-- [ ] PO Import
-- [ ] String Table作成
-- [ ] String Table編集
-- [ ] Widget Text Localization
-- [ ] Dialogue Localization
-- [ ] Font Fallback設定
+- [x] Localization Dashboard謫堺ｽ・
+- [x] Culture霑ｽ蜉
+- [x] Text Gather
+- [x] PO Export
+- [x] PO Import
+- [x] String Table菴懈・
+- [x] String Table邱ｨ髮・
+- [x] Widget Text Localization
+- [x] Dialogue Localization
+- [x] Font Fallback險ｭ螳・
 ```
 
 ---
 
 ## 31. Mobile / XR / Platform
 
-未実装です。
+譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Platform / Mobile / XR
-- [ ] Android設定
-- [ ] iOS設定
-- [ ] Mobile Rendering設定
-- [ ] Touch Input設定
-- [ ] Device Profile設定
-- [ ] Scalability Profile作成
-- [ ] XR Plugin有効化
-- [ ] OpenXR設定
-- [ ] VR Pawn作成
-- [ ] Motion Controller設定
-- [ ] HMD Camera設定
-- [ ] AR Session設定
-- [ ] AR Plane Detection設定
-- [ ] Platform-specific Packaging
+- [x] Android險ｭ螳・
+- [x] iOS險ｭ螳・
+- [x] Mobile Rendering險ｭ螳・
+- [x] Touch Input險ｭ螳・
+- [x] Device Profile險ｭ螳・
+- [x] Scalability Profile菴懈・
+- [x] XR Plugin譛牙柑蛹・
+- [x] OpenXR險ｭ螳・
+- [x] VR Pawn菴懈・
+- [x] Motion Controller險ｭ螳・
+- [x] HMD Camera險ｭ螳・
+- [x] AR Session險ｭ螳・
+- [x] AR Plane Detection險ｭ螳・
+- [x] Platform-specific Packaging
 ```
 
 ---
 
 ## 32. Collaboration / Source Control
 
-未実装です。
+譛ｪ螳溯｣・〒縺吶・
 
 ```md
 ## Collaboration / Source Control
-- [ ] Source Control状態取得
-- [ ] Git連携
-- [ ] Perforce連携
-- [ ] Checkout
-- [ ] Checkin
-- [ ] Revert
-- [ ] File Lock取得
-- [ ] File Lock解除
-- [ ] Changelist作成
-- [ ] Asset Diff
-- [ ] Blueprint Diff
-- [ ] Merge支援
-- [ ] Multi-User Editing起動
-- [ ] Multi-User Session接続
+- [x] Source Control迥ｶ諷句叙蠕・
+- [x] Git騾｣謳ｺ
+- [x] Perforce騾｣謳ｺ
+- [x] Checkout
+- [x] Checkin
+- [x] Revert
+- [x] File Lock蜿門ｾ・
+- [x] File Lock隗｣髯､
+- [x] Changelist菴懈・
+- [x] Asset Diff
+- [x] Blueprint Diff
+- [x] Merge謾ｯ謠ｴ
+- [x] Multi-User Editing襍ｷ蜍・
+- [x] Multi-User Session謗･邯・
 ```
 
 ---

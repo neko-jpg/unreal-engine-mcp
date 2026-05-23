@@ -14,6 +14,13 @@
 #include "Factories/MaterialFactoryNew.h"
 #include "Factories/MaterialInstanceConstantFactoryNew.h"
 #include "Factories/MaterialParameterCollectionFactoryNew.h"
+#include "Factories/MaterialFunctionMaterialLayerFactory.h"
+#include "Factories/MaterialFunctionMaterialLayerBlendFactory.h"
+#include "Materials/MaterialFunctionMaterialLayer.h"
+#include "Materials/MaterialFunctionMaterialLayerBlend.h"
+#include "Materials/MaterialExpressionSubstrate.h"
+#include "Materials/MaterialExpressionMaterialAttributeLayers.h"
+
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameterCollection.h"
@@ -249,6 +256,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCommand(const FStr
         {TEXT("create_material_parameter_collection"), &FEpicUnrealMCPMaterialCommands::HandleCreateMaterialParameterCollection},
         {TEXT("edit_material_parameter_collection"), &FEpicUnrealMCPMaterialCommands::HandleEditMaterialParameterCollection},
         {TEXT("create_advanced_material"), &FEpicUnrealMCPMaterialCommands::HandleCreateAdvancedMaterial},
+        {TEXT("create_substrate_material"), &FEpicUnrealMCPMaterialCommands::HandleCreateSubstrateMaterial},
+        {TEXT("create_layered_material"), &FEpicUnrealMCPMaterialCommands::HandleCreateLayeredMaterial},
     };
 
     const Handler* H = Dispatch.Find(CommandType);

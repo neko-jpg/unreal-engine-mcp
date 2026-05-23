@@ -497,3 +497,160 @@ def spawn_post_process_volume(
 
     response = unreal.send_command("spawn_post_process_volume", params)
     return response or make_error_response("No response from Unreal")
+
+# W1-7 Post Process / Camera residue (UE 5.7)
+
+
+@mcp.tool()
+def spawn_camera_shake_source(
+    name: str,
+    location: Optional[List[float]] = None,
+    shake_class_path: Optional[str] = None,
+    attenuation_inner_radius: float = 100.0,
+    attenuation_outer_radius: float = 1000.0,
+) -> Dict[str, Any]:
+    """Spawn an actor with a UCameraShakeSourceComponent that drives nearby cameras.
+
+    name: Unique actor name
+    location: [x, y, z] world location
+    shake_class_path: Optional /Script-path to a UCameraShakeBase-derived class
+    attenuation_inner_radius: Inner radius (full intensity)
+    attenuation_outer_radius: Outer radius (zero intensity)
+    """
+    try:
+        validate_string(name, "name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "name": name,
+        "attenuation_inner_radius": attenuation_inner_radius,
+        "attenuation_outer_radius": attenuation_outer_radius,
+    }
+    if location is not None:
+        payload["location"] = location
+    if shake_class_path:
+        payload["shake_class_path"] = shake_class_path
+    response = unreal.send_command("spawn_camera_shake_source", payload)
+    return response or make_error_response("No response from Unreal")
+
+
+@mcp.tool()
+def spawn_camera_rig_rail(
+    name: str,
+    location: Optional[List[float]] = None,
+    current_position: float = 0.0,
+    lock_orientation_to_rail: bool = False,
+) -> Dict[str, Any]:
+    """Spawn an ACameraRig_Rail (spline-driven camera dolly).
+
+    name: Unique actor name
+    location: [x, y, z] world location
+    current_position: Normalized rail position 0..1
+    lock_orientation_to_rail: If True, mount orientation follows the rail
+    """
+    try:
+        validate_string(name, "name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if not 0.0 <= current_position <= 1.0:
+        return make_error_response("current_position must be within [0, 1]")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "name": name,
+        "current_position": current_position,
+        "lock_orientation_to_rail": lock_orientation_to_rail,
+    }
+    if location is not None:
+        payload["location"] = location
+    response = unreal.send_command("spawn_camera_rig_rail", payload)
+    return response or make_error_response("No response from Unreal")
+
+
+@mcp.tool()
+def spawn_camera_rig_crane(
+    name: str,
+    location: Optional[List[float]] = None,
+    crane_pitch: float = 0.0,
+    crane_yaw: float = 0.0,
+    crane_arm_length: float = 250.0,
+    lock_mount_pitch: bool = False,
+    lock_mount_yaw: bool = False,
+) -> Dict[str, Any]:
+    """Spawn an ACameraRig_Crane for cinematic crane-like camera moves.
+
+    name: Unique actor name
+    location: [x, y, z] world location
+    crane_pitch: Pitch angle (deg)
+    crane_yaw: Yaw angle (deg)
+    crane_arm_length: Arm length (cm), clamped to >= 0
+    lock_mount_pitch: Lock the mount pitch to the crane arm direction
+    lock_mount_yaw: Lock the mount yaw to the crane arm direction
+    """
+    try:
+        validate_string(name, "name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if crane_arm_length < 0:
+        return make_error_response("crane_arm_length must be >= 0")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "name": name,
+        "crane_pitch": crane_pitch,
+        "crane_yaw": crane_yaw,
+        "crane_arm_length": crane_arm_length,
+        "lock_mount_pitch": lock_mount_pitch,
+        "lock_mount_yaw": lock_mount_yaw,
+    }
+    if location is not None:
+        payload["location"] = location
+    response = unreal.send_command("spawn_camera_rig_crane", payload)
+    return response or make_error_response("No response from Unreal")
+
+
+@mcp.tool()
+def set_post_process_override(
+    volume_name: str,
+    gi_method: Optional[str] = None,
+    reflection_method: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Override the Global Illumination / Reflection method on a PostProcessVolume.
+
+    volume_name: Existing APostProcessVolume actor name
+    gi_method: "Lumen" | "ScreenSpace" | "Plugin" | "None"
+    reflection_method: "Lumen" | "ScreenSpace" | "None"
+
+    At least one of gi_method or reflection_method must be provided.
+    """
+    try:
+        validate_string(volume_name, "volume_name")
+    except ValidationError as exc:
+        return make_validation_error_response_from_exception(exc)
+    if gi_method is None and reflection_method is None:
+        return make_error_response("provide at least one of gi_method or reflection_method")
+    gi_allowed = {"Lumen", "ScreenSpace", "Plugin", "None"}
+    ref_allowed = {"Lumen", "ScreenSpace", "None"}
+    if gi_method is not None and gi_method not in gi_allowed:
+        return make_error_response(
+            f"gi_method must be one of {sorted(gi_allowed)}, got: {gi_method}"
+        )
+    if reflection_method is not None and reflection_method not in ref_allowed:
+        return make_error_response(
+            f"reflection_method must be one of {sorted(ref_allowed)}, got: {reflection_method}"
+        )
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {"volume_name": volume_name}
+    if gi_method is not None:
+        payload["gi_method"] = gi_method
+    if reflection_method is not None:
+        payload["reflection_method"] = reflection_method
+    response = unreal.send_command("set_post_process_override", payload)
+    return response or make_error_response("No response from Unreal")

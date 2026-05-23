@@ -1,4 +1,10 @@
 #include "Commands/EpicUnrealMCPRenderingCommands.h"
+#include "CineCameraRigRail.h"
+#include "CameraRig_Rail.h"
+#include "CameraRig_Crane.h"
+#include "Camera/CameraShakeSourceComponent.h"
+#include "Camera/CameraShakeBase.h"
+#include "MatineeCameraShake.h"
 #include "Commands/EpicUnrealMCPCommonUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Editor.h"
@@ -93,6 +99,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleCommand(const FSt
         {TEXT("spawn_cine_camera_actor"), &FEpicUnrealMCPRenderingCommands::HandleSpawnCineCameraActor},
         {TEXT("set_camera_properties"), &FEpicUnrealMCPRenderingCommands::HandleSetCameraProperties},
         {TEXT("spawn_post_process_volume"), &FEpicUnrealMCPRenderingCommands::HandleSpawnPostProcessVolume},
+        {TEXT("spawn_camera_shake_source"), &FEpicUnrealMCPRenderingCommands::HandleSpawnCameraShakeSource},
+        {TEXT("spawn_camera_rig_rail"), &FEpicUnrealMCPRenderingCommands::HandleSpawnCameraRigRail},
+        {TEXT("spawn_camera_rig_crane"), &FEpicUnrealMCPRenderingCommands::HandleSpawnCameraRigCrane},
+        {TEXT("set_post_process_override"), &FEpicUnrealMCPRenderingCommands::HandleSetPostProcessOverride},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -859,5 +869,208 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSpawnPostProcessV
     Result->SetStringField(TEXT("actor_name"), Volume->GetName());
     Result->SetStringField(TEXT("actor_class"), Volume->GetClass()->GetName());
     Result->SetBoolField(TEXT("infinite_extent"), Volume->bUnbound);
+    return Result;
+}
+
+// W1-7_CAMSHAKE_BEGIN
+// W1-7 Camera Shake Source actor (CinematicCamera + Camera plugins)
+TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSpawnCameraShakeSource(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'name' parameter"));
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor world available"));
+
+    FVector Location(0, 0, 0);
+    const TArray<TSharedPtr<FJsonValue>>* LocArr = nullptr;
+    if (Params->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() >= 3)
+    {
+        Location.X = (*LocArr)[0]->AsNumber();
+        Location.Y = (*LocArr)[1]->AsNumber();
+        Location.Z = (*LocArr)[2]->AsNumber();
+    }
+
+    FActorSpawnParameters Spawn;
+    Spawn.Name = FName(*ActorName);
+    Spawn.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+    AActor* Owner = World->SpawnActor<AActor>(AActor::StaticClass(), Location, FRotator::ZeroRotator, Spawn);
+    if (!Owner)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn shake source actor"));
+    Owner->SetActorLabel(ActorName);
+
+    UCameraShakeSourceComponent* ShakeComp = NewObject<UCameraShakeSourceComponent>(Owner, TEXT("ShakeSource"));
+    ShakeComp->RegisterComponent();
+    Owner->AddInstanceComponent(ShakeComp);
+
+    double InnerAttenuation = 100.0, OuterAttenuation = 1000.0;
+    Params->TryGetNumberField(TEXT("attenuation_inner_radius"), InnerAttenuation);
+    Params->TryGetNumberField(TEXT("attenuation_outer_radius"), OuterAttenuation);
+    ShakeComp->AttenuationInnerRadius = static_cast<float>(InnerAttenuation);
+    ShakeComp->AttenuationOuterRadius = static_cast<float>(OuterAttenuation);
+
+    FString ShakeClassPath;
+    if (Params->TryGetStringField(TEXT("shake_class_path"), ShakeClassPath) && !ShakeClassPath.IsEmpty())
+    {
+        UClass* ShakeClass = LoadObject<UClass>(nullptr, *ShakeClassPath);
+        if (ShakeClass && ShakeClass->IsChildOf(UCameraShakeBase::StaticClass()))
+        {
+            ShakeComp->CameraShake = ShakeClass;
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("type"), TEXT("CameraShakeSourceActor"));
+    Result->SetNumberField(TEXT("attenuation_inner_radius"), InnerAttenuation);
+    Result->SetNumberField(TEXT("attenuation_outer_radius"), OuterAttenuation);
+    if (!ShakeClassPath.IsEmpty()) Result->SetStringField(TEXT("shake_class_path"), ShakeClassPath);
+    return Result;
+}
+
+// W1-7 Camera Rig Rail
+TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSpawnCameraRigRail(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'name' parameter"));
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor world available"));
+    FVector Location(0, 0, 0);
+    const TArray<TSharedPtr<FJsonValue>>* LocArr = nullptr;
+    if (Params->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() >= 3)
+    {
+        Location.X = (*LocArr)[0]->AsNumber();
+        Location.Y = (*LocArr)[1]->AsNumber();
+        Location.Z = (*LocArr)[2]->AsNumber();
+    }
+    FActorSpawnParameters Spawn;
+    Spawn.Name = FName(*ActorName);
+    Spawn.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+    ACameraRig_Rail* Rail = World->SpawnActor<ACameraRig_Rail>(ACameraRig_Rail::StaticClass(), Location, FRotator::ZeroRotator, Spawn);
+    if (!Rail)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn CameraRig_Rail"));
+    Rail->SetActorLabel(ActorName);
+
+    double CurrentPos = 0.0;
+    if (Params->TryGetNumberField(TEXT("current_position"), CurrentPos))
+        Rail->CurrentPositionOnRail = FMath::Clamp(static_cast<float>(CurrentPos), 0.0f, 1.0f);
+    bool bLockOrient = false;
+    if (Params->TryGetBoolField(TEXT("lock_orientation_to_rail"), bLockOrient))
+        Rail->bLockOrientationToRail = bLockOrient;
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("type"), TEXT("CameraRig_Rail"));
+    Result->SetNumberField(TEXT("current_position"), Rail->CurrentPositionOnRail);
+    Result->SetBoolField(TEXT("lock_orientation_to_rail"), Rail->bLockOrientationToRail);
+    return Result;
+}
+
+// W1-7 Camera Rig Crane
+TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSpawnCameraRigCrane(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName) || ActorName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'name' parameter"));
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor world available"));
+    FVector Location(0, 0, 0);
+    const TArray<TSharedPtr<FJsonValue>>* LocArr = nullptr;
+    if (Params->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() >= 3)
+    {
+        Location.X = (*LocArr)[0]->AsNumber();
+        Location.Y = (*LocArr)[1]->AsNumber();
+        Location.Z = (*LocArr)[2]->AsNumber();
+    }
+    FActorSpawnParameters Spawn;
+    Spawn.Name = FName(*ActorName);
+    Spawn.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+    ACameraRig_Crane* Crane = World->SpawnActor<ACameraRig_Crane>(ACameraRig_Crane::StaticClass(), Location, FRotator::ZeroRotator, Spawn);
+    if (!Crane)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn CameraRig_Crane"));
+    Crane->SetActorLabel(ActorName);
+
+    double CranePitch = 0.0, CraneYaw = 0.0, CraneArmLength = 250.0;
+    Params->TryGetNumberField(TEXT("crane_pitch"), CranePitch);
+    Params->TryGetNumberField(TEXT("crane_yaw"), CraneYaw);
+    Params->TryGetNumberField(TEXT("crane_arm_length"), CraneArmLength);
+    Crane->CranePitch = static_cast<float>(CranePitch);
+    Crane->CraneYaw = static_cast<float>(CraneYaw);
+    Crane->CraneArmLength = FMath::Max(0.0f, static_cast<float>(CraneArmLength));
+    bool bLockMountPitch = false, bLockMountYaw = false;
+    if (Params->TryGetBoolField(TEXT("lock_mount_pitch"), bLockMountPitch)) Crane->bLockMountPitch = bLockMountPitch;
+    if (Params->TryGetBoolField(TEXT("lock_mount_yaw"), bLockMountYaw)) Crane->bLockMountYaw = bLockMountYaw;
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("type"), TEXT("CameraRig_Crane"));
+    Result->SetNumberField(TEXT("crane_pitch"), Crane->CranePitch);
+    Result->SetNumberField(TEXT("crane_yaw"), Crane->CraneYaw);
+    Result->SetNumberField(TEXT("crane_arm_length"), Crane->CraneArmLength);
+    return Result;
+}
+
+// W1-7 Global Illumination / Reflections override on a PostProcessVolume
+TSharedPtr<FJsonObject> FEpicUnrealMCPRenderingCommands::HandleSetPostProcessOverride(const TSharedPtr<FJsonObject>& Params)
+{
+    FString VolumeName;
+    if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName) || VolumeName.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'volume_name' parameter"));
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor world available"));
+    APostProcessVolume* TargetVolume = nullptr;
+    for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+    {
+        if (It->GetName() == VolumeName) { TargetVolume = *It; break; }
+    }
+    if (!TargetVolume)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("PostProcessVolume not found: %s"), *VolumeName));
+
+    FPostProcessSettings& Settings = TargetVolume->Settings;
+    bool bChanged = false;
+
+    FString GIMethod;
+    if (Params->TryGetStringField(TEXT("gi_method"), GIMethod) && !GIMethod.IsEmpty())
+    {
+        EDynamicGlobalIlluminationMethod::Type GI = EDynamicGlobalIlluminationMethod::None;
+        if (GIMethod.Equals(TEXT("Lumen"), ESearchCase::IgnoreCase)) GI = EDynamicGlobalIlluminationMethod::Lumen;
+        else if (GIMethod.Equals(TEXT("ScreenSpace"), ESearchCase::IgnoreCase)) GI = EDynamicGlobalIlluminationMethod::ScreenSpace;
+        else if (GIMethod.Equals(TEXT("Plugin"), ESearchCase::IgnoreCase)) GI = EDynamicGlobalIlluminationMethod::Plugin;
+        else if (!GIMethod.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown gi_method: %s"), *GIMethod));
+        Settings.bOverride_DynamicGlobalIlluminationMethod = true;
+        Settings.DynamicGlobalIlluminationMethod = GI;
+        bChanged = true;
+    }
+
+    FString RefMethod;
+    if (Params->TryGetStringField(TEXT("reflection_method"), RefMethod) && !RefMethod.IsEmpty())
+    {
+        EReflectionMethod::Type Method = EReflectionMethod::None;
+        if (RefMethod.Equals(TEXT("Lumen"), ESearchCase::IgnoreCase)) Method = EReflectionMethod::Lumen;
+        else if (RefMethod.Equals(TEXT("ScreenSpace"), ESearchCase::IgnoreCase)) Method = EReflectionMethod::ScreenSpace;
+        else if (!RefMethod.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown reflection_method: %s"), *RefMethod));
+        Settings.bOverride_ReflectionMethod = true;
+        Settings.ReflectionMethod = Method;
+        bChanged = true;
+    }
+
+    if (bChanged) TargetVolume->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("volume_name"), VolumeName);
+    if (!GIMethod.IsEmpty()) Result->SetStringField(TEXT("gi_method"), GIMethod);
+    if (!RefMethod.IsEmpty()) Result->SetStringField(TEXT("reflection_method"), RefMethod);
+    Result->SetBoolField(TEXT("changed"), bChanged);
     return Result;
 }

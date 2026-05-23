@@ -1,4 +1,4 @@
-#include "Commands/EpicUnrealMCPRouter.h"
+﻿#include "Commands/EpicUnrealMCPRouter.h"
 
 int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
 {
@@ -15,12 +15,25 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("delete_actor_by_mcp_id"), 1},
         {TEXT("apply_scene_delta"), 1},
         {TEXT("clone_actor"), 1},
+        {TEXT("set_actor_replicates"), 1},          // W1-E
+        {TEXT("set_actor_replicate_movement"), 1},  // W1-E
+        {TEXT("set_actor_net_dormancy"), 1},        // W1-E
+        {TEXT("set_actor_net_cull_distance"), 1},   // W1-E
+        {TEXT("set_actor_owner_only_relevant"), 1}, // W1-E
+        {TEXT("set_component_replicates"), 1},      // W1-H
         {TEXT("create_nav_mesh_volume"), 20},
         {TEXT("create_patrol_route"), 20},
         {TEXT("create_spline_from_points"), 20},
         {TEXT("set_ai_behavior"), 20},
         {TEXT("create_behavior_tree"), 20},
         {TEXT("create_blackboard"), 20},
+        {TEXT("add_blackboard_key"), 20},          // W1-D
+        {TEXT("remove_blackboard_key"), 20},       // W1-D
+        {TEXT("add_ai_perception"), 20},           // W1-D
+        {TEXT("configure_ai_sense_sight"), 20},    // W1-D
+        {TEXT("set_recast_navmesh_agent"), 20},    // W1-D
+        {TEXT("create_eqs_query"), 20},            // W1-G
+        {TEXT("set_crowd_following_enable"), 20},  // W1-G
         {TEXT("create_nav_modifier_volume"), 20},
         {TEXT("create_nav_link_proxy"), 20},
         {TEXT("set_actor_collision_preset"), 22},
@@ -28,9 +41,19 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_physical_material"), 22},
         {TEXT("spawn_radial_force"), 22},
         {TEXT("spawn_physics_constraint"), 22},
+        {TEXT("set_actor_collision_response"), 22},  // W1-B
+        {TEXT("set_constraint_limits"), 22},  // W1-B
+        {TEXT("set_constraint_motor"), 22},  // W1-B
+        {TEXT("spawn_physics_volume"), 22},  // W1-B
         {TEXT("compile_all_blueprints"), 23},
         {TEXT("run_map_check"), 23},
         {TEXT("find_broken_references"), 23},
+        {TEXT("set_auto_save_settings"), 23},  // W1-B
+        {TEXT("get_editor_stats"), 23},  // W1-B
+        {TEXT("start_unreal_insights_trace"), 23},  // W1-B
+        {TEXT("stop_unreal_insights_trace"), 23},  // W1-B
+        {TEXT("validate_assets"), 23},  // W1-B
+        {TEXT("get_source_control_status"), 23},  // W1-H
         {TEXT("create_draft_proxy"), 24},
         {TEXT("update_draft_proxy"), 24},
         {TEXT("delete_draft_proxy"), 24},
@@ -84,6 +107,14 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("step_blueprint_debugger"), 2},
         {TEXT("get_blueprint_debug_info"), 2},
         {TEXT("blueprint_diff"), 2},
+        {TEXT("add_latent_node"), 2},  // W1-1 (W1-B router fix)
+        {TEXT("create_animation_blueprint"), 2},  // W1-C
+        {TEXT("create_blend_space"), 2},  // W1-C
+        {TEXT("create_anim_montage"), 2},  // W1-F
+        {TEXT("create_anim_composite"), 2},  // W1-F
+        {TEXT("set_anim_root_motion"), 2},  // W1-G
+        {TEXT("add_anim_notify"), 2},      // W1-G
+        {TEXT("create_pose_asset"), 2},    // W1-G
         {TEXT("add_blueprint_node"), 3},
         {TEXT("connect_nodes"), 3},
         {TEXT("create_variable"), 3},
@@ -110,6 +141,337 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_material_parameter_collection"), 4},
         {TEXT("edit_material_parameter_collection"), 4},
         {TEXT("create_advanced_material"), 4},
+        {TEXT("create_substrate_material"), 4},  // W1-#42
+        {TEXT("create_layered_material"), 4},     // W1-#42
+        // ---- Niagara / VFX (Sub-batch I, route 21, issue #49) ----
+        {TEXT("create_niagara_system"), 21},
+        {TEXT("create_niagara_emitter"), 21},
+        {TEXT("add_emitter_to_system"), 21},
+        {TEXT("add_niagara_module"), 21},
+        {TEXT("remove_niagara_module"), 21},
+        {TEXT("set_niagara_spawn_rate"), 21},
+        {TEXT("set_niagara_burst"), 21},
+        {TEXT("set_niagara_lifetime"), 21},
+        {TEXT("set_niagara_velocity"), 21},
+        {TEXT("set_niagara_gravity"), 21},
+        {TEXT("set_niagara_color"), 21},
+        {TEXT("set_niagara_size"), 21},
+        {TEXT("set_niagara_ribbon_renderer"), 21},
+        {TEXT("set_niagara_sprite_renderer"), 21},
+        {TEXT("set_niagara_mesh_renderer"), 21},
+        {TEXT("set_niagara_gpu_simulation"), 21},
+        {TEXT("set_niagara_collision"), 21},
+        {TEXT("add_niagara_user_parameter"), 21},
+        {TEXT("set_niagara_user_parameter"), 21},
+        {TEXT("add_niagara_component"), 21},
+        {TEXT("attach_niagara_to_actor"), 21},
+        {TEXT("bind_niagara_parameter"), 21},
+        {TEXT("create_niagara_data_channel"), 21},
+        {TEXT("create_niagara_effect_type"), 21},
+        {TEXT("set_niagara_scalability"), 21},
+        {TEXT("niagara_debug_console"), 21},
+        {TEXT("niagara_sim_cache"), 21},
+        // ---- Landscape / Terrain (Sub-batch J, route 25, issue #43) ----
+        {TEXT("create_landscape"), 25},
+        {TEXT("set_landscape_size"), 25},
+        {TEXT("set_landscape_section_component"), 25},
+        {TEXT("import_landscape_heightmap"), 25},
+        {TEXT("export_landscape_heightmap"), 25},
+        {TEXT("landscape_sculpt"), 25},
+        {TEXT("landscape_smooth"), 25},
+        {TEXT("landscape_flatten"), 25},
+        {TEXT("landscape_ramp"), 25},
+        {TEXT("landscape_erosion"), 25},
+        {TEXT("landscape_noise"), 25},
+        {TEXT("create_landscape_paint_layer"), 25},
+        {TEXT("set_landscape_layer_blend"), 25},
+        {TEXT("apply_landscape_material"), 25},
+        {TEXT("set_landscape_grass_output"), 25},
+        {TEXT("set_landscape_collision"), 25},
+        {TEXT("add_landscape_hole"), 25},
+        {TEXT("add_landscape_spline"), 25},
+        {TEXT("add_road_spline"), 25},
+        {TEXT("carve_river_terrain"), 25},
+        {TEXT("attach_landscape_rvt"), 25},
+        {TEXT("set_landscape_nanite"), 25},
+        {TEXT("set_landscape_world_partition"), 25},
+        // ---- Animation / Skeletal / Rigging (Sub-batch K, route 35, issue #48) ----
+        {TEXT("create_skeleton_asset"), 35},
+        {TEXT("create_physics_asset"), 35},
+        {TEXT("add_anim_graph_node"), 35},
+        {TEXT("create_anim_state_machine"), 35},
+        {TEXT("add_anim_state"), 35},
+        {TEXT("create_anim_transition_rule"), 35},
+        {TEXT("create_aim_offset"), 35},
+        {TEXT("add_notify_state"), 35},
+        {TEXT("set_retarget_manager"), 35},
+        {TEXT("create_ik_rig"), 35},
+        {TEXT("add_ik_goal"), 35},
+        {TEXT("add_ik_solver"), 35},
+        {TEXT("create_ik_retargeter"), 35},
+        {TEXT("set_retarget_chain"), 35},
+        {TEXT("create_control_rig"), 35},
+        {TEXT("add_control_rig_control"), 35},
+        {TEXT("add_control_rig_bone"), 35},
+        {TEXT("set_control_rig_constraint"), 35},
+        {TEXT("sequencer_control_rig_track"), 35},
+        {TEXT("set_facial_animation"), 35},
+        {TEXT("set_morph_target"), 35},
+        {TEXT("connect_metahuman"), 35},
+        // ---- AI / Navigation extensions (Sub-batch L, route 36, issue #47) ----
+        {TEXT("add_behavior_tree_node"), 36},
+        {TEXT("connect_behavior_tree_nodes"), 36},
+        {TEXT("create_bt_task"), 36},
+        {TEXT("create_bt_service"), 36},
+        {TEXT("create_bt_decorator"), 36},
+        {TEXT("set_blackboard_template"), 36},
+        {TEXT("set_ai_controller_behavior_tree"), 36},
+        {TEXT("spawn_run_behavior_tree_node"), 36},
+        {TEXT("configure_ai_sense_hearing"), 36},
+        {TEXT("configure_ai_sense_damage"), 36},
+        {TEXT("configure_ai_sense_team"), 36},
+        {TEXT("configure_eqs_generator"), 36},
+        {TEXT("configure_eqs_test"), 36},
+        {TEXT("set_eqs_debug"), 36},
+        {TEXT("set_smart_nav_link"), 36},
+        {TEXT("create_nav_area_class"), 36},
+        {TEXT("set_recast_navmesh_details"), 36},
+        {TEXT("bridge_mass_entity"), 36},
+        {TEXT("create_state_tree"), 36},
+        {TEXT("add_state_tree_state"), 36},
+        {TEXT("add_state_tree_task"), 36},
+        {TEXT("set_ai_behavior_tag"), 36},
+        {TEXT("configure_cognitive_ai_controller"), 36},
+        // ---- Movie Render Queue (Sub-batch M, route 26, issue #53) ----
+        {TEXT("create_mrq_job"), 26},
+        {TEXT("add_sequence_to_mrq"), 26},
+        {TEXT("set_mrq_output_directory"), 26},
+        {TEXT("set_mrq_resolution"), 26},
+        {TEXT("set_mrq_frame_range"), 26},
+        {TEXT("set_mrq_anti_aliasing"), 26},
+        {TEXT("set_mrq_exr_output"), 26},
+        {TEXT("set_mrq_png_output"), 26},
+        {TEXT("set_mrq_jpg_output"), 26},
+        {TEXT("set_mrq_video_output"), 26},
+        {TEXT("set_mrq_path_tracer"), 26},
+        {TEXT("set_mrq_console_variables"), 26},
+        {TEXT("add_mrq_render_pass"), 26},
+        {TEXT("set_mrq_object_id_pass"), 26},
+        {TEXT("set_mrq_burn_in"), 26},
+        {TEXT("set_mrq_warm_up"), 26},
+        {TEXT("start_mrq_render"), 26},
+        {TEXT("cancel_mrq_render"), 26},
+        {TEXT("get_mrq_render_progress"), 26},
+        {TEXT("verify_mrq_render_result"), 26},
+        {TEXT("create_movie_render_graph"), 26},
+        // ---- Foliage / Vegetation (Sub-batch N, route 27, issue #44) ----
+        {TEXT("create_foliage_type"), 27},
+        {TEXT("register_static_mesh_foliage"), 27},
+        {TEXT("register_actor_foliage"), 27},
+        {TEXT("foliage_paint"), 27},
+        {TEXT("foliage_erase"), 27},
+        {TEXT("set_foliage_density"), 27},
+        {TEXT("set_foliage_scale_range"), 27},
+        {TEXT("set_foliage_random_yaw"), 27},
+        {TEXT("set_foliage_align_to_normal"), 27},
+        {TEXT("set_foliage_cull_distance"), 27},
+        {TEXT("set_foliage_lod"), 27},
+        {TEXT("create_procedural_foliage_spawner"), 27},
+        {TEXT("create_procedural_foliage_volume"), 27},
+        {TEXT("set_procedural_foliage_seed"), 27},
+        {TEXT("spawn_biome_foliage"), 27},
+        {TEXT("create_grass_type"), 27},
+        {TEXT("bind_landscape_grass"), 27},
+        {TEXT("set_foliage_nanite"), 27},
+        {TEXT("set_foliage_wind"), 27},
+        {TEXT("configure_pivot_painter"), 27},
+        // ---- PCG Framework (Sub-batch O, route 28, issue #45) ----
+        {TEXT("create_pcg_graph"), 28},
+        {TEXT("add_pcg_component"), 28},
+        {TEXT("create_pcg_volume"), 28},
+        {TEXT("add_pcg_node"), 28},
+        {TEXT("connect_pcg_nodes"), 28},
+        {TEXT("set_pcg_graph_parameter"), 28},
+        {TEXT("configure_pcg_spline_sampler"), 28},
+        {TEXT("configure_pcg_surface_sampler"), 28},
+        {TEXT("configure_pcg_static_mesh_spawner"), 28},
+        {TEXT("configure_pcg_rule"), 28},
+        {TEXT("create_pcg_biome_graph"), 28},
+        {TEXT("operate_pcg_point_data"), 28},
+        {TEXT("operate_pcg_attribute"), 28},
+        {TEXT("execute_pcg_graph"), 28},
+        {TEXT("regenerate_pcg_graph"), 28},
+        {TEXT("set_pcg_runtime_generation"), 28},
+        {TEXT("use_pcg_editor_mode"), 28},
+        {TEXT("create_pcg_tool"), 28},
+        {TEXT("set_pcg_debug_display"), 28},
+        {TEXT("configure_pcg_self_pruning"), 28},
+        // ---- Networking / Multiplayer (Sub-batch P, route 37, issue #41) ----
+        {TEXT("create_rpc_server_function"), 37},
+        {TEXT("create_rpc_client_function"), 37},
+        {TEXT("create_rpc_multicast_function"), 37},
+        {TEXT("set_rpc_reliability"), 37},
+        {TEXT("set_rep_notify"), 37},
+        {TEXT("list_replicated_variables"), 37},
+        {TEXT("set_network_prediction"), 37},
+        {TEXT("configure_dedicated_server"), 37},
+        {TEXT("start_listen_server"), 37},
+        {TEXT("start_client"), 37},
+        {TEXT("configure_multi_pie"), 37},
+        {TEXT("set_online_subsystem"), 37},
+        {TEXT("create_session"), 37},
+        {TEXT("find_sessions"), 37},
+        {TEXT("join_session"), 37},
+        {TEXT("set_iris_replication"), 37},
+        {TEXT("set_replication_graph"), 37},
+        {TEXT("start_bandwidth_profiling"), 37},
+        {TEXT("attach_network_profiler"), 37},
+        {TEXT("create_network_component"), 37},
+        {TEXT("set_blueprint_variable_replication"), 37},
+        // ---- Chaos / Physics extensions (Sub-batch Q, route 29, issue #51) ----
+        {TEXT("create_collision_channel"), 29},
+        {TEXT("create_object_channel"), 29},
+        {TEXT("create_trace_channel"), 29},
+        {TEXT("create_geometry_collection"), 29},
+        {TEXT("fracture_geometry_collection"), 29},
+        {TEXT("create_chaos_field"), 29},
+        {TEXT("configure_chaos_solver"), 29},
+        {TEXT("create_chaos_cache"), 29},
+        {TEXT("create_chaos_vehicle"), 29},
+        {TEXT("set_vehicle_wheel"), 29},
+        {TEXT("set_vehicle_suspension"), 29},
+        {TEXT("set_vehicle_engine_torque"), 29},
+        {TEXT("set_cloth_settings"), 29},
+        {TEXT("create_chaos_cloth_asset"), 29},
+        {TEXT("set_groom_physics"), 29},
+        {TEXT("set_ragdoll"), 29},
+        {TEXT("edit_physics_asset_body"), 29},
+        {TEXT("edit_physics_asset_constraint"), 29},
+        {TEXT("attach_chaos_visual_debugger"), 29},
+        // ---- Gameplay Ability System (Sub-batch R, route 30, issue #55) ----
+        {TEXT("enable_gas_plugin"), 30},
+        {TEXT("add_ability_system_component"), 30},
+        {TEXT("create_attribute_set"), 30},
+        {TEXT("create_gameplay_ability"), 30},
+        {TEXT("create_gameplay_effect"), 30},
+        {TEXT("create_gameplay_cue"), 30},
+        {TEXT("bind_ability_input"), 30},
+        {TEXT("grant_ability"), 30},
+        {TEXT("configure_ability_activation"), 30},
+        {TEXT("configure_ability_cooldown"), 30},
+        {TEXT("configure_ability_cost"), 30},
+        {TEXT("initialize_attribute"), 30},
+        {TEXT("bind_attribute_change_event"), 30},
+        {TEXT("link_gameplay_tag"), 30},
+        {TEXT("configure_gas_replication"), 30},
+        {TEXT("configure_gas_prediction"), 30},
+        // ---- Water System (Sub-batch S, route 31, issue #46) ----
+        {TEXT("enable_water_plugin"), 31},
+        {TEXT("spawn_water_body_ocean"), 31},
+        {TEXT("spawn_water_body_lake"), 31},
+        {TEXT("spawn_water_body_river"), 31},
+        {TEXT("spawn_water_body_custom"), 31},
+        {TEXT("configure_river_spline"), 31},
+        {TEXT("set_water_material"), 31},
+        {TEXT("configure_water_wave"), 31},
+        {TEXT("configure_water_flow"), 31},
+        {TEXT("configure_buoyancy"), 31},
+        {TEXT("configure_water_mesh_actor"), 31},
+        {TEXT("configure_underwater_post_process"), 31},
+        {TEXT("configure_shoreline"), 31},
+        {TEXT("configure_water_landscape_carving"), 31},
+        {TEXT("attach_floating_actor"), 31},
+        // ---- Mobile / XR (Sub-batch T, route 38, issue #59) ----
+        {TEXT("configure_android_settings"), 38},
+        {TEXT("configure_ios_settings"), 38},
+        {TEXT("configure_mobile_rendering"), 38},
+        {TEXT("configure_touch_input"), 38},
+        {TEXT("set_device_profile"), 38},
+        {TEXT("create_scalability_profile"), 38},
+        {TEXT("enable_xr_plugin"), 38},
+        {TEXT("configure_openxr"), 38},
+        {TEXT("spawn_vr_pawn"), 38},
+        {TEXT("configure_motion_controller"), 38},
+        {TEXT("configure_hmd_camera"), 38},
+        {TEXT("configure_ar_session"), 38},
+        {TEXT("configure_ar_plane_detection"), 38},
+        {TEXT("platform_specific_packaging"), 38},
+        // ---- Source Control / Multi-User (Sub-batch U, route 32, issue #60) ----
+        {TEXT("register_git_provider"), 32},
+        {TEXT("register_perforce_provider"), 32},
+        {TEXT("source_control_checkout"), 32},
+        {TEXT("source_control_checkin"), 32},
+        {TEXT("source_control_revert"), 32},
+        {TEXT("source_control_file_lock_acquire"), 32},
+        {TEXT("source_control_file_lock_release"), 32},
+        {TEXT("source_control_create_changelist"), 32},
+        {TEXT("source_control_asset_diff"), 32},
+        {TEXT("source_control_blueprint_diff"), 32},
+        {TEXT("source_control_merge"), 32},
+        {TEXT("multi_user_editing_start"), 32},
+        {TEXT("multi_user_session_join"), 32},
+        // ---- Localization (Sub-batch V, route 33, issue #58) ----
+        {TEXT("open_localization_dashboard"), 33},
+        {TEXT("add_localization_culture"), 33},
+        {TEXT("run_text_gather"), 33},
+        {TEXT("export_po_files"), 33},
+        {TEXT("import_po_files"), 33},
+        {TEXT("localization_create_string_table"), 33},
+        {TEXT("edit_string_table"), 33},
+        {TEXT("localize_widget_text"), 33},
+        {TEXT("localize_dialogue_wave"), 33},
+        {TEXT("configure_font_fallback"), 33},
+        // ---- Testing / Validation extensions (Sub-batch W, route 39, issue #57) ----
+        {TEXT("create_ue_automation_test"), 39},
+        {TEXT("spawn_functional_test_actor"), 39},
+        {TEXT("run_automation_test"), 39},
+        {TEXT("fetch_automation_test_results"), 39},
+        {TEXT("run_collision_validation"), 39},
+        {TEXT("run_navigation_validation"), 39},
+        {TEXT("run_performance_budget_validation"), 39},
+        {TEXT("run_gameplay_screenshot_test"), 39},
+        {TEXT("run_python_unit_test"), 39},
+        {TEXT("run_rust_test"), 39},
+        // ---- Data Tables / Data Assets extensions (Sub-batch X, route 40, issue #54) ----
+        {TEXT("create_row_struct"), 40},
+        {TEXT("edit_row_struct"), 40},
+        {TEXT("edit_data_asset_properties"), 40},
+        {TEXT("import_gameplay_tag_table"), 40},
+        {TEXT("generate_item_db_template"), 40},
+        {TEXT("generate_enemy_db_template"), 40},
+        {TEXT("generate_quest_db_template"), 40},
+        {TEXT("generate_dialogue_db_template"), 40},
+        {TEXT("create_blueprint_datatable_reference_node"), 40},
+        // ---- MetaSound / Audio extensions (Sub-batch Y, route 34, issue #50) ----
+        {TEXT("edit_sound_cue_graph"), 34},
+        {TEXT("create_metasound_source"), 34},
+        {TEXT("create_metasound_patch"), 34},
+        {TEXT("add_metasound_graph_node"), 34},
+        {TEXT("set_metasound_parameter"), 34},
+        {TEXT("bind_footstep_audio"), 34},
+        {TEXT("configure_ui_sound"), 34},
+        // ---- Sequencer / Cinematics extensions (Sub-batch Z, route 41, issue #52) ----
+        {TEXT("spawn_camera_rail"), 41},
+        {TEXT("spawn_camera_crane"), 41},
+        {TEXT("sequencer_render_preview"), 41},
+        {TEXT("register_take_recorder_source"), 41},
+        {TEXT("add_control_rig_track"), 41},
+        {TEXT("spawn_level_sequence_actor"), 41},
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         // Project / Editor Commands (5)
         {TEXT("get_project_settings"), 5},
         {TEXT("set_project_setting"), 5},
@@ -225,6 +587,8 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("import_alembic"), 7},
         {TEXT("import_datasmith"), 7},
         {TEXT("reimport_asset"), 7},
+        {TEXT("import_animation_fbx"), 7},  // W1-1 (W1-B router fix)
+        {TEXT("import_skeletal_mesh_fbx"), 7},  // W1-F
         {TEXT("save_import_preset"), 7},
         {TEXT("load_import_preset"), 7},
         {TEXT("export_asset"), 7},
@@ -368,6 +732,10 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("spawn_cine_camera_actor"), 12},
         {TEXT("set_camera_properties"), 12},
         {TEXT("spawn_post_process_volume"), 12},
+        {TEXT("spawn_camera_shake_source"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("spawn_camera_rig_rail"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("spawn_camera_rig_crane"), 12},  // W1-7 (W1-B router fix)
+        {TEXT("set_post_process_override"), 12},  // W1-7 (W1-B router fix)
 
         // Lighting / Atmosphere Commands (13)
         {TEXT("set_light_intensity"), 13},
@@ -407,6 +775,11 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("update_data_table_row"), 14},
         {TEXT("export_data_table_csv"), 14},
         {TEXT("export_data_table_json"), 14},
+        {TEXT("create_data_table_from_json"), 14},  // W1-B
+        {TEXT("create_curve_table"), 14},  // W1-B
+        {TEXT("create_string_table"), 14},  // W1-B
+        {TEXT("set_string_table_entry"), 14},  // W1-B
+        {TEXT("create_data_asset"), 14},  // W1-B
 
         // Audio Commands (15)
         {TEXT("create_sound_cue"), 15},
@@ -415,6 +788,9 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_sound_class"), 15},
         {TEXT("create_sound_mix"), 15},
         {TEXT("spawn_ambient_sound"), 15},
+        {TEXT("create_sound_submix"), 15},  // W1-C
+        {TEXT("spawn_audio_volume"), 15},   // W1-H
+        {TEXT("create_dialogue_wave"), 15}, // W1-H
 
         // Sequencer Commands (16)
         {TEXT("create_level_sequence"), 16},
@@ -425,6 +801,13 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("add_keyframe"), 16},
         {TEXT("set_playback_range"), 16},
         {TEXT("set_frame_rate"), 16},
+        {TEXT("add_visibility_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_audio_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_animation_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_material_parameter_track"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("delete_keyframe"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("set_keyframe_interpolation"), 16},  // W1-4 (W1-B router fix)
+        {TEXT("add_subsequence"), 16},  // W1-4 (W1-B router fix)
 
         // VRM / Avatar Commands (17)
         {TEXT("vroid_check_plugin"), 17},

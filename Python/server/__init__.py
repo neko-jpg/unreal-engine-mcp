@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unreal Engine Advanced MCP Server
 
 A streamlined MCP server focused on advanced composition tools for Unreal Engine.
@@ -50,6 +50,24 @@ def bootstrap():
     from server import scene_validate_tools       # noqa: F401
     from server import vroid_tools                # noqa: F401
     from server import cesium_tools               # noqa: F401
+    from server import niagara_tools              # noqa: F401  Sub-batch I
+    from server import landscape_tools            # noqa: F401  Sub-batch J
+    from server import anim_rigging_tools         # noqa: F401  Sub-batch K
+    from server import ai_nav_extension_tools     # noqa: F401  Sub-batch L
+    from server import movie_render_queue_tools   # noqa: F401  Sub-batch M
+    from server import foliage_tools                # noqa: F401  Sub-batch N
+    from server import pcg_tools                    # noqa: F401  Sub-batch O
+    from server import networking_tools             # noqa: F401  Sub-batch P
+    from server import chaos_tools                  # noqa: F401  Sub-batch Q
+    from server import gas_tools                    # noqa: F401  Sub-batch R
+    from server import water_tools                  # noqa: F401  Sub-batch S
+    from server import mobile_xr_tools              # noqa: F401  Sub-batch T
+    from server import source_control_tools         # noqa: F401  Sub-batch U
+    from server import localization_tools           # noqa: F401  Sub-batch V
+    from server import testing_validation_tools     # noqa: F401  Sub-batch W
+    from server import data_table_extension_tools   # noqa: F401  Sub-batch X
+    from server import metasound_tools              # noqa: F401  Sub-batch Y
+    from server import sequencer_extension_tools    # noqa: F401  Sub-batch Z
     from server import packaging_tools             # noqa: F401
     from server import vertical_test_tools        # noqa: F401
 

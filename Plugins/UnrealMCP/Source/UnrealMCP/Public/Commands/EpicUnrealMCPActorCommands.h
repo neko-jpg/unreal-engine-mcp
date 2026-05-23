@@ -80,6 +80,15 @@ private:
     TSharedPtr<FJsonObject> ExecuteCreateActor(const FParsedCreateParams& Parsed, bool bSuppressTransaction = false);
     TSharedPtr<FJsonObject> ExecuteUpdateActor(const FParsedUpdateParams& Parsed);
 
+    // -- W1-E Networking minimal (UE 5.7) --
+    TSharedPtr<FJsonObject> HandleSetActorReplicates(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetActorReplicateMovement(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetActorNetDormancy(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetActorNetCullDistance(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSetActorOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
+    // -- W1-H Component Replicates --
+    TSharedPtr<FJsonObject> HandleSetComponentReplicates(const TSharedPtr<FJsonObject>& Params);
+
     // Template clone (fast duplication of identical-mesh actors)
     TSharedPtr<FJsonObject> HandleCloneActor(const TSharedPtr<FJsonObject>& Params);
 

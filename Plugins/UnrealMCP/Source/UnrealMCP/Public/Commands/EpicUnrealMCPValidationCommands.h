@@ -23,4 +23,12 @@ private:
     TSharedPtr<FJsonObject> HandleCompileAllBlueprints(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleRunMapCheck(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleFindBrokenReferences(const TSharedPtr<FJsonObject>& Params);
+
+    // W1-B Validation / Profiling residue (UE 5.7)
+    TSharedPtr<FJsonObject> HandleSetAutoSaveSettings(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleGetEditorStats(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleStartUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleStopUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleValidateAssets(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleGetSourceControlStatus(const TSharedPtr<FJsonObject>& Params); // W1-H
 };

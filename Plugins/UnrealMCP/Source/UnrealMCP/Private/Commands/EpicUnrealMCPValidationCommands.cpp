@@ -30,6 +30,14 @@
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Settings/EditorLoadingSavingSettings.h"
+#include "EditorValidatorSubsystem.h"
+#include "GenericPlatform/GenericPlatformMemory.h"
+#include "Misc/App.h"
+#include "AssetRegistry/AssetData.h"
+#include "ProfilingDebugging/TraceAuxiliary.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
 
 FEpicUnrealMCPValidationCommands::FEpicUnrealMCPValidationCommands()
 {
@@ -51,6 +59,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleCommand(const FS
         {TEXT("compile_all_blueprints"),  &FEpicUnrealMCPValidationCommands::HandleCompileAllBlueprints},
         {TEXT("run_map_check"),           &FEpicUnrealMCPValidationCommands::HandleRunMapCheck},
         {TEXT("find_broken_references"),  &FEpicUnrealMCPValidationCommands::HandleFindBrokenReferences},
+        {TEXT("set_auto_save_settings"), &FEpicUnrealMCPValidationCommands::HandleSetAutoSaveSettings},  // W1-B
+        {TEXT("get_editor_stats"), &FEpicUnrealMCPValidationCommands::HandleGetEditorStats},  // W1-B
+        {TEXT("start_unreal_insights_trace"), &FEpicUnrealMCPValidationCommands::HandleStartUnrealInsightsTrace},  // W1-B
+        {TEXT("stop_unreal_insights_trace"), &FEpicUnrealMCPValidationCommands::HandleStopUnrealInsightsTrace},  // W1-B
+        {TEXT("validate_assets"), &FEpicUnrealMCPValidationCommands::HandleValidateAssets},  // W1-B
+        {TEXT("get_source_control_status"), &FEpicUnrealMCPValidationCommands::HandleGetSourceControlStatus},  // W1-H
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -227,3 +241,227 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleFindBrokenRefere
     return Result;
 }
 
+// W1-B_VALIDATION_BEGIN
+// W1-B Validation / Profiling residue (UE 5.7)
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleSetAutoSaveSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    UEditorLoadingSavingSettings* Settings = GetMutableDefault<UEditorLoadingSavingSettings>();
+    if (!Settings)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("UEditorLoadingSavingSettings unavailable"));
+
+    bool bAnyChanged = false;
+    bool bAutoSaveEnable = false;
+    if (Params->TryGetBoolField(TEXT("auto_save_enable"), bAutoSaveEnable))
+    {
+        Settings->bAutoSaveEnable = bAutoSaveEnable;
+        bAnyChanged = true;
+    }
+    int32 AutoSaveTimeMinutes = 0;
+    if (Params->TryGetNumberField(TEXT("auto_save_time_minutes"), AutoSaveTimeMinutes))
+    {
+        if (AutoSaveTimeMinutes < 1) AutoSaveTimeMinutes = 1;
+        Settings->AutoSaveTimeMinutes = AutoSaveTimeMinutes;
+        bAnyChanged = true;
+    }
+    int32 AutoSaveWarningInSeconds = 0;
+    if (Params->TryGetNumberField(TEXT("auto_save_warning_in_seconds"), AutoSaveWarningInSeconds))
+    {
+        if (AutoSaveWarningInSeconds < 0) AutoSaveWarningInSeconds = 0;
+        Settings->AutoSaveWarningInSeconds = AutoSaveWarningInSeconds;
+        bAnyChanged = true;
+    }
+    bool bAutoSaveContent = false;
+    if (Params->TryGetBoolField(TEXT("auto_save_content"), bAutoSaveContent))
+    {
+        Settings->bAutoSaveContent = bAutoSaveContent;
+        bAnyChanged = true;
+    }
+    bool bAutoSaveMaps = false;
+    if (Params->TryGetBoolField(TEXT("auto_save_maps"), bAutoSaveMaps))
+    {
+        Settings->bAutoSaveMaps = bAutoSaveMaps;
+        bAnyChanged = true;
+    }
+
+    bool bSaved = false;
+    if (bAnyChanged)
+    {
+        // UE 5.7: prefer TryUpdateDefaultConfigFile() over deprecated UpdateDefaultConfigFile().
+        bSaved = Settings->TryUpdateDefaultConfigFile();
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetBoolField(TEXT("auto_save_enable"), Settings->bAutoSaveEnable);
+    Result->SetNumberField(TEXT("auto_save_time_minutes"), Settings->AutoSaveTimeMinutes);
+    Result->SetNumberField(TEXT("auto_save_warning_in_seconds"), Settings->AutoSaveWarningInSeconds);
+    Result->SetBoolField(TEXT("auto_save_content"), Settings->bAutoSaveContent);
+    Result->SetBoolField(TEXT("auto_save_maps"), Settings->bAutoSaveMaps);
+    Result->SetBoolField(TEXT("changed"), bAnyChanged);
+    Result->SetBoolField(TEXT("saved_to_default_config"), bSaved);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleGetEditorStats(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+
+    // FPS / delta time
+    const float DeltaSeconds = FApp::GetDeltaTime();
+    const float FPS = DeltaSeconds > 0.0f ? 1.0f / DeltaSeconds : 0.0f;
+    Result->SetNumberField(TEXT("delta_seconds"), DeltaSeconds);
+    Result->SetNumberField(TEXT("fps"), FPS);
+
+    // Memory stats
+    FPlatformMemoryStats Memory = FPlatformMemory::GetStats();
+    TSharedPtr<FJsonObject> MemObj = MakeShared<FJsonObject>();
+    MemObj->SetNumberField(TEXT("used_physical_mb"), Memory.UsedPhysical / (1024.0 * 1024.0));
+    MemObj->SetNumberField(TEXT("peak_used_physical_mb"), Memory.PeakUsedPhysical / (1024.0 * 1024.0));
+    MemObj->SetNumberField(TEXT("available_physical_mb"), Memory.AvailablePhysical / (1024.0 * 1024.0));
+    MemObj->SetNumberField(TEXT("used_virtual_mb"), Memory.UsedVirtual / (1024.0 * 1024.0));
+    MemObj->SetNumberField(TEXT("peak_used_virtual_mb"), Memory.PeakUsedVirtual / (1024.0 * 1024.0));
+    Result->SetObjectField(TEXT("memory"), MemObj);
+
+    // Optional: execute a stat console command via the editor world.
+    FString StatCommand;
+    if (Params->TryGetStringField(TEXT("stat_command"), StatCommand) && !StatCommand.IsEmpty())
+    {
+        if (UWorld* World = GetEditorWorld())
+        {
+            if (GEngine)
+            {
+                GEngine->Exec(World, *StatCommand);
+                Result->SetStringField(TEXT("stat_command"), StatCommand);
+                Result->SetBoolField(TEXT("stat_command_executed"), true);
+            }
+        }
+    }
+
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleStartUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params)
+{
+    FString Channels;
+    Params->TryGetStringField(TEXT("channels"), Channels);
+    if (Channels.IsEmpty())
+    {
+        Channels = TEXT("default,cpu,gpu,frame,bookmark,log");
+    }
+    FString TraceFile;
+    Params->TryGetStringField(TEXT("trace_file"), TraceFile);
+
+    // UE 5.7: TraceAuxiliary is the supported channel-control facade.
+    FTraceAuxiliary::FOptions Options;
+    Options.bExcludeTail = false;
+    Options.bNoWorkerThread = false;
+    if (!TraceFile.IsEmpty())
+    {
+        FTraceAuxiliary::Start(FTraceAuxiliary::EConnectionType::File, *TraceFile, *Channels, &Options);
+    }
+    else
+    {
+        // No file: only enable the channels (assumes the listener is already attached).
+        FTraceAuxiliary::EnableChannels(*Channels);
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("channels"), Channels);
+    if (!TraceFile.IsEmpty())
+    {
+        Result->SetStringField(TEXT("trace_file"), TraceFile);
+        Result->SetStringField(TEXT("mode"), TEXT("file"));
+    }
+    else
+    {
+        Result->SetStringField(TEXT("mode"), TEXT("channels_only"));
+    }
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleStopUnrealInsightsTrace(const TSharedPtr<FJsonObject>& Params)
+{
+    const bool bStopped = FTraceAuxiliary::Stop();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetBoolField(TEXT("stopped"), bStopped);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleValidateAssets(const TSharedPtr<FJsonObject>& Params)
+{
+    UEditorValidatorSubsystem* Validator = GEditor ? GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>() : nullptr;
+    if (!Validator)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("UEditorValidatorSubsystem unavailable"));
+
+    FString ContentPath = TEXT("/Game");
+    Params->TryGetStringField(TEXT("content_path"), ContentPath);
+
+    IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    TArray<FAssetData> AllAssets;
+    AssetRegistry.GetAssetsByPath(FName(*ContentPath), AllAssets, /*bRecursive=*/true);
+
+    int32 RequestedLimit = 0;
+    Params->TryGetNumberField(TEXT("max_assets"), RequestedLimit);
+    if (RequestedLimit > 0 && AllAssets.Num() > RequestedLimit)
+    {
+        AllAssets.SetNum(RequestedLimit);
+    }
+
+    FValidateAssetsSettings VSettings;
+    VSettings.bSkipExcludedDirectories = true;
+    VSettings.bShowIfNoFailures = false;
+    VSettings.ValidationUsecase = EDataValidationUsecase::Manual;
+
+    FValidateAssetsResults VResults;
+    Validator->ValidateAssetsWithSettings(AllAssets, VSettings, VResults);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("content_path"), ContentPath);
+    Result->SetNumberField(TEXT("num_checked"), VResults.NumChecked);
+    Result->SetNumberField(TEXT("num_valid"), VResults.NumValid);
+    Result->SetNumberField(TEXT("num_invalid"), VResults.NumInvalid);
+    Result->SetNumberField(TEXT("num_skipped"), VResults.NumSkipped);
+    Result->SetNumberField(TEXT("num_warnings"), VResults.NumWarnings);
+    Result->SetNumberField(TEXT("num_unable_to_validate"), VResults.NumUnableToValidate);
+    return Result;
+}
+
+// W1-H_SCC_BEGIN
+// W1-H Source Control status query (UE 5.7)
+TSharedPtr<FJsonObject> FEpicUnrealMCPValidationCommands::HandleGetSourceControlStatus(const TSharedPtr<FJsonObject>& Params)
+{
+    ISourceControlModule& SCC = ISourceControlModule::Get();
+    const bool bEnabled = SCC.IsEnabled();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetBoolField(TEXT("enabled"), bEnabled);
+
+    if (bEnabled)
+    {
+        ISourceControlProvider& Provider = SCC.GetProvider();
+        Result->SetStringField(TEXT("provider_name"), Provider.GetName().ToString());
+        Result->SetStringField(TEXT("status_text"), Provider.GetStatusText().ToString());
+        Result->SetBoolField(TEXT("available"), Provider.IsAvailable());
+    }
+    else
+    {
+        // Even when disabled, list the available providers so callers know
+        // what to SetProvider() with.
+        TArray<FName> ProviderNames;
+        SCC.GetProviderNames(ProviderNames);
+        TArray<TSharedPtr<FJsonValue>> ProvidersJson;
+        for (const FName& Name : ProviderNames)
+        {
+            ProvidersJson.Add(MakeShared<FJsonValueString>(Name.ToString()));
+        }
+        Result->SetArrayField(TEXT("available_providers"), ProvidersJson);
+    }
+    return Result;
+}

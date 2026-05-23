@@ -10,17 +10,20 @@ compiling against Unreal Engine 5.7.
 | Component              | Recommended version                           |
 | ---------------------- | --------------------------------------------- |
 | Visual Studio          | Visual Studio 2022 17.14 (Community / Pro / BuildTools) |
-| MSVC compiler          | 14.44.35207 (`MSVC v143 - VS 2022 C++ x64/x86 build tools (14.44-17.14)`) |
-| Windows 10 / 11 SDK    | 10.0.22621.0                                  |
-| .NET SDK               | .NET 6.0 (shipped with Visual Studio 2022)    |
+| MSVC compiler          | 14.44.35214 (`MSVC v143 - VS 2022 C++ x64/x86 build tools (14.44-17.14)`) |
+| Windows 10 / 11 SDK    | 10.0.22621.0 or newer                         |
+| .NET SDK               | .NET 8.0                                       |
 | CMake (optional)       | 3.27 or newer (only required for Cesium)      |
 
-These mirror what the Epic build farm uses for UE 5.7 release builds, and they
-are the versions that the UnrealMCP CI verifies against. Newer toolchains may
-work, but `UnrealBuildTool` will warn (e.g. `Visual Studio 2026 compiler
-version 14.50.x is not a preferred version. Please use the latest preferred
-version 14.44.35207`) and may regress at any time when Epic re-blesses the
-preferred version.
+These mirror the public UE 5.7 Visual Studio setup page: VS 2022 17.14
+is the recommended default, MSVC 14.44.35214 is both the minimum and
+recommended compiler, Windows SDK 10.0.22621.0+ is recommended, and
+.NET 8.0 is required. Newer toolchains may work, but
+`UnrealBuildTool` will warn (e.g. `Visual Studio 2026 compiler version
+14.50.x is not a preferred version`). Some installed UE 5.7 builds may
+print a nearby patch-level value such as `14.44.35207`; prefer the
+exact patch version requested by your local UBT when it differs from
+Epic documentation.
 
 ## Installing the preferred toolchain
 
@@ -31,7 +34,7 @@ preferred version.
    - *Desktop development with C++*
 4. Under **Individual components** make sure the following are checked:
    - `MSVC v143 - VS 2022 C++ x64/x86 build tools (14.44-17.14)`
-   - `Windows 11 SDK (10.0.22621.0)`
+   - `Windows 11 SDK (10.0.22621.0 or newer)`
    - `Visual Studio SDK` (required for "Editor integration")
    - `C++ profiling tools`
    - `C++ AddressSanitizer`
@@ -52,7 +55,7 @@ hits the same toolchain. Drop the snippet below at:
 <Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
     <WindowsPlatform>
         <!-- Force the UE 5.7 preferred MSVC version. -->
-        <CompilerVersion>14.44.35207</CompilerVersion>
+        <CompilerVersion>14.44.35214</CompilerVersion>
         <WindowsSdkVersion>10.0.22621.0</WindowsSdkVersion>
     </WindowsPlatform>
 </Configuration>
@@ -76,7 +79,7 @@ To confirm the toolchain is detected correctly, run:
 
 A clean run should report:
 
-- `Available x64 toolchains` selecting `14.44.35207`
+- `Available x64 toolchains` selecting `14.44.35214` (or the local UBT-requested 14.44 patch)
 - No `WARNING: Unable to find Visual Studio SDK`
 - No `Plugin 'UnrealMCP' does not list plugin 'GeometryScripting'` or
   `'GeometryProcessing'` warnings (these are addressed in the plugin's
@@ -94,4 +97,9 @@ A clean run should report:
 
 - Forcing the toolchain at the project level. We deliberately allow newer
   toolchains for contributors who want to test them, even though they trigger
-  a warning. CI and the official build farm always pin to the values above.
+  a warning. This guide defaults to Epic's Visual Studio setup page values; if your installed UE 5.7 UBT reports the release-notes build-farm patch (`14.44.35207`), use that exact local value in your user-level `BuildConfiguration.xml`.
+
+## References
+
+- Epic UE 5.7 Visual Studio setup: https://dev.epicgames.com/documentation/unreal-engine/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine?lang=en-US
+- UE 5.7 release notes: https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-7-release-notes?lang=en-US

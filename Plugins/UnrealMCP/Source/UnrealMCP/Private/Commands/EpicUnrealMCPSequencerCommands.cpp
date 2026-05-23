@@ -16,6 +16,19 @@
 #include "Channels/MovieSceneChannelProxy.h"
 #include "Channels/MovieSceneDoubleChannel.h"
 #include "Channels/MovieSceneFloatChannel.h"
+#include "Tracks/MovieSceneVisibilityTrack.h"
+#include "Sections/MovieSceneVisibilitySection.h"
+#include "Tracks/MovieSceneAudioTrack.h"
+#include "Sections/MovieSceneAudioSection.h"
+#include "Tracks/MovieSceneSkeletalAnimationTrack.h"
+#include "Sections/MovieSceneSkeletalAnimationSection.h"
+#include "Tracks/MovieSceneMaterialTrack.h"
+#include "Tracks/MovieSceneCinematicShotTrack.h"
+#include "Sections/MovieSceneCinematicShotSection.h"
+#include "Tracks/MovieSceneSubTrack.h"
+#include "Sections/MovieSceneSubSection.h"
+#include "Animation/AnimSequence.h"
+#include "Sound/SoundBase.h"
 
 FEpicUnrealMCPSequencerCommands::FEpicUnrealMCPSequencerCommands()
 {
@@ -37,6 +50,13 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleCommand(const FSt
         {TEXT("add_keyframe"), &FEpicUnrealMCPSequencerCommands::HandleAddKeyframe},
         {TEXT("set_playback_range"), &FEpicUnrealMCPSequencerCommands::HandleSetPlaybackRange},
         {TEXT("set_frame_rate"), &FEpicUnrealMCPSequencerCommands::HandleSetFrameRate},
+        {TEXT("add_visibility_track"), &FEpicUnrealMCPSequencerCommands::HandleAddVisibilityTrack},
+        {TEXT("add_audio_track"), &FEpicUnrealMCPSequencerCommands::HandleAddAudioTrack},
+        {TEXT("add_animation_track"), &FEpicUnrealMCPSequencerCommands::HandleAddAnimationTrack},
+        {TEXT("add_material_parameter_track"), &FEpicUnrealMCPSequencerCommands::HandleAddMaterialParameterTrack},
+        {TEXT("delete_keyframe"), &FEpicUnrealMCPSequencerCommands::HandleDeleteKeyframe},
+        {TEXT("set_keyframe_interpolation"), &FEpicUnrealMCPSequencerCommands::HandleSetKeyframeInterpolation},
+        {TEXT("add_subsequence"), &FEpicUnrealMCPSequencerCommands::HandleAddSubsequence},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -543,5 +563,370 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleSetFrameRate(cons
     Result->SetStringField(TEXT("sequence_path"), SequencePath);
     Result->SetNumberField(TEXT("numerator"), Numerator);
     Result->SetNumberField(TEXT("denominator"), Denominator);
+    return Result;
+}
+
+
+// =============================================================================
+// W1-4 Sequencer residue (UE 5.7)
+// =============================================================================
+
+namespace
+{
+    static ULevelSequence* LoadLevelSequenceChecked(const FString& SequencePath, TSharedPtr<FJsonObject>& OutError)
+    {
+        ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+        if (!Sequence)
+        {
+            OutError = FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+        }
+        return Sequence;
+    }
+}
+
+// W1-4_IMPL_BEGIN
+// W1-4 Sequencer residue (UE 5.7): Visibility / Audio / Animation / Material
+// parameter / Keyframe delete / Keyframe interpolation / Subsequence shot tracks
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleAddVisibilityTrack(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath, BindingGuidStr;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("binding_guid"), BindingGuidStr) || BindingGuidStr.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'binding_guid' parameter"));
+    FGuid BindingGuid;
+    if (!FGuid::Parse(BindingGuidStr, BindingGuid))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid 'binding_guid' format"));
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+    UMovieSceneVisibilityTrack* Track = MovieScene->AddTrack<UMovieSceneVisibilityTrack>(BindingGuid);
+    if (!Track)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add visibility track"));
+    Track->SetPropertyNameAndPath(FName(TEXT("bHidden")), TEXT("bHidden"));
+    UMovieSceneSection* Section = Track->CreateNewSection();
+    if (Section)
+    {
+        Section->SetRange(MovieScene->GetPlaybackRange());
+        Track->AddSection(*Section);
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+    Result->SetStringField(TEXT("track_type"), TEXT("visibility"));
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleAddAudioTrack(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+    UMovieSceneAudioTrack* Track = MovieScene->AddTrack<UMovieSceneAudioTrack>();
+    if (!Track)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add audio track"));
+
+    FString SoundPath;
+    int32 StartFrame = 0;
+    Params->TryGetNumberField(TEXT("start_frame"), StartFrame);
+    if (Params->TryGetStringField(TEXT("sound_path"), SoundPath) && !SoundPath.IsEmpty())
+    {
+        USoundBase* Sound = LoadObject<USoundBase>(nullptr, *SoundPath);
+        if (Sound) Track->AddNewSound(Sound, FFrameNumber(StartFrame));
+    }
+    else
+    {
+        UMovieSceneSection* Section = Track->CreateNewSection();
+        if (Section)
+        {
+            Section->SetRange(MovieScene->GetPlaybackRange());
+            Track->AddSection(*Section);
+        }
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("track_type"), TEXT("audio"));
+    if (!SoundPath.IsEmpty()) Result->SetStringField(TEXT("sound_path"), SoundPath);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleAddAnimationTrack(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath, BindingGuidStr;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("binding_guid"), BindingGuidStr) || BindingGuidStr.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'binding_guid' parameter"));
+    FGuid BindingGuid;
+    if (!FGuid::Parse(BindingGuidStr, BindingGuid))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid 'binding_guid' format"));
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+    UMovieSceneSkeletalAnimationTrack* Track = MovieScene->AddTrack<UMovieSceneSkeletalAnimationTrack>(BindingGuid);
+    if (!Track)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add animation track"));
+
+    FString AnimPath;
+    int32 StartFrame = 0;
+    Params->TryGetNumberField(TEXT("start_frame"), StartFrame);
+    UMovieSceneSkeletalAnimationSection* Section = Cast<UMovieSceneSkeletalAnimationSection>(Track->CreateNewSection());
+    if (Section)
+    {
+        if (Params->TryGetStringField(TEXT("anim_sequence_path"), AnimPath) && !AnimPath.IsEmpty())
+        {
+            UAnimSequenceBase* Anim = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
+            if (Anim) Section->Params.Animation = Anim;
+        }
+        TRange<FFrameNumber> Range = MovieScene->GetPlaybackRange();
+        if (StartFrame > 0)
+        {
+            const int32 Length = UE::MovieScene::DiscreteSize(Range);
+            Range = TRange<FFrameNumber>(FFrameNumber(StartFrame), FFrameNumber(StartFrame + Length));
+        }
+        Section->SetRange(Range);
+        Track->AddSection(*Section);
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+    Result->SetStringField(TEXT("track_type"), TEXT("skeletal_animation"));
+    if (!AnimPath.IsEmpty()) Result->SetStringField(TEXT("anim_sequence_path"), AnimPath);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleAddMaterialParameterTrack(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath, BindingGuidStr;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("binding_guid"), BindingGuidStr) || BindingGuidStr.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'binding_guid' parameter"));
+    FGuid BindingGuid;
+    if (!FGuid::Parse(BindingGuidStr, BindingGuid))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid 'binding_guid' format"));
+    int32 MaterialIndex = 0;
+    Params->TryGetNumberField(TEXT("material_index"), MaterialIndex);
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+    UMovieSceneComponentMaterialTrack* Track = MovieScene->AddTrack<UMovieSceneComponentMaterialTrack>(BindingGuid);
+    if (!Track)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add material parameter track"));
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 4
+    FComponentMaterialInfo MatInfo;
+    MatInfo.MaterialSlotName = NAME_None;
+    MatInfo.MaterialSlotIndex = MaterialIndex;
+    MatInfo.MaterialType = EComponentMaterialType::IndexedMaterial;
+    Track->SetMaterialInfo(MatInfo);
+#else
+    Track->SetMaterialIndex(MaterialIndex);
+#endif
+    UMovieSceneSection* Section = Track->CreateNewSection();
+    if (Section)
+    {
+        Section->SetRange(MovieScene->GetPlaybackRange());
+        Track->AddSection(*Section);
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+    Result->SetStringField(TEXT("track_type"), TEXT("component_material_parameter"));
+    Result->SetNumberField(TEXT("material_index"), MaterialIndex);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleDeleteKeyframe(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath, BindingGuidStr;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("binding_guid"), BindingGuidStr) || BindingGuidStr.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'binding_guid' parameter"));
+    FGuid BindingGuid;
+    if (!FGuid::Parse(BindingGuidStr, BindingGuid))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid 'binding_guid' format"));
+    int32 Frame = 0;
+    Params->TryGetNumberField(TEXT("frame"), Frame);
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+
+    int32 RemovedKeyCount = 0;
+    const FFrameNumber Target(Frame);
+    for (UMovieSceneTrack* Track : MovieScene->GetTracks())
+    {
+        if (!Track || Track->FindObjectBindingGuid() != BindingGuid) continue;
+        for (UMovieSceneSection* Section : Track->GetAllSections())
+        {
+            if (!Section) continue;
+            for (FMovieSceneDoubleChannel* Channel : Section->GetChannelProxy().GetChannels<FMovieSceneDoubleChannel>())
+            {
+                if (!Channel) continue;
+                TArray<FKeyHandle> Handles;
+                Channel->GetKeys(TRange<FFrameNumber>(Target, Target + 1), nullptr, &Handles);
+                if (Handles.Num() > 0) { Channel->DeleteKeys(Handles); RemovedKeyCount += Handles.Num(); }
+            }
+            for (FMovieSceneFloatChannel* Channel : Section->GetChannelProxy().GetChannels<FMovieSceneFloatChannel>())
+            {
+                if (!Channel) continue;
+                TArray<FKeyHandle> Handles;
+                Channel->GetKeys(TRange<FFrameNumber>(Target, Target + 1), nullptr, &Handles);
+                if (Handles.Num() > 0) { Channel->DeleteKeys(Handles); RemovedKeyCount += Handles.Num(); }
+            }
+        }
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+    Result->SetNumberField(TEXT("frame"), Frame);
+    Result->SetNumberField(TEXT("removed_keys"), RemovedKeyCount);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleSetKeyframeInterpolation(const TSharedPtr<FJsonObject>& Params)
+{
+    FString SequencePath, BindingGuidStr;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("binding_guid"), BindingGuidStr) || BindingGuidStr.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'binding_guid' parameter"));
+    FGuid BindingGuid;
+    if (!FGuid::Parse(BindingGuidStr, BindingGuid))
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid 'binding_guid' format"));
+    FString InterpMode = TEXT("Cubic");
+    Params->TryGetStringField(TEXT("interpolation"), InterpMode);
+    ERichCurveInterpMode Mode = RCIM_Cubic;
+    if (InterpMode.Equals(TEXT("Linear"), ESearchCase::IgnoreCase)) Mode = RCIM_Linear;
+    else if (InterpMode.Equals(TEXT("Constant"), ESearchCase::IgnoreCase)) Mode = RCIM_Constant;
+    else if (InterpMode.Equals(TEXT("None"), ESearchCase::IgnoreCase)) Mode = RCIM_None;
+    ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *SequencePath);
+    if (!Sequence)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+    if (!MovieScene)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+
+    int32 UpdatedKeyCount = 0;
+    for (UMovieSceneTrack* Track : MovieScene->GetTracks())
+    {
+        if (!Track || Track->FindObjectBindingGuid() != BindingGuid) continue;
+        for (UMovieSceneSection* Section : Track->GetAllSections())
+        {
+            if (!Section) continue;
+            for (FMovieSceneDoubleChannel* Channel : Section->GetChannelProxy().GetChannels<FMovieSceneDoubleChannel>())
+            {
+                if (!Channel) continue;
+                TArrayView<FMovieSceneDoubleValue> Values = Channel->GetData().GetValues();
+                for (FMovieSceneDoubleValue& V : Values) { V.InterpMode = Mode; V.TangentMode = RCTM_Auto; ++UpdatedKeyCount; }
+            }
+            for (FMovieSceneFloatChannel* Channel : Section->GetChannelProxy().GetChannels<FMovieSceneFloatChannel>())
+            {
+                if (!Channel) continue;
+                TArrayView<FMovieSceneFloatValue> Values = Channel->GetData().GetValues();
+                for (FMovieSceneFloatValue& V : Values) { V.InterpMode = Mode; V.TangentMode = RCTM_Auto; ++UpdatedKeyCount; }
+            }
+        }
+    }
+    Sequence->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), SequencePath);
+    Result->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+    Result->SetStringField(TEXT("interpolation"), InterpMode);
+    Result->SetNumberField(TEXT("updated_keys"), UpdatedKeyCount);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerCommands::HandleAddSubsequence(const TSharedPtr<FJsonObject>& Params)
+{
+    FString OuterPath, InnerPath;
+    if (!Params->TryGetStringField(TEXT("sequence_path"), OuterPath) || OuterPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'sequence_path' parameter"));
+    if (!Params->TryGetStringField(TEXT("inner_sequence_path"), InnerPath) || InnerPath.IsEmpty())
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'inner_sequence_path' parameter"));
+    int32 StartFrame = 0, Duration = 150;
+    Params->TryGetNumberField(TEXT("start_frame"), StartFrame);
+    Params->TryGetNumberField(TEXT("duration_frames"), Duration);
+    bool bAsShot = false;
+    Params->TryGetBoolField(TEXT("as_shot"), bAsShot);
+
+    ULevelSequence* Outer = LoadObject<ULevelSequence>(nullptr, *OuterPath);
+    if (!Outer)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Outer LevelSequence not found: %s"), *OuterPath));
+    ULevelSequence* Inner = LoadObject<ULevelSequence>(nullptr, *InnerPath);
+    if (!Inner)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Inner LevelSequence not found: %s"), *InnerPath));
+    UMovieScene* MS = Outer->GetMovieScene();
+    if (!MS)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("LevelSequence has no MovieScene"));
+
+    UMovieSceneSubSection* SubSection = nullptr;
+    FString TrackKind;
+    if (bAsShot)
+    {
+        UMovieSceneCinematicShotTrack* Track = MS->FindTrack<UMovieSceneCinematicShotTrack>();
+        if (!Track) Track = MS->AddTrack<UMovieSceneCinematicShotTrack>();
+        if (!Track)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add cinematic shot track"));
+        SubSection = Cast<UMovieSceneSubSection>(Track->AddSequence(Inner, FFrameNumber(StartFrame), Duration));
+        TrackKind = TEXT("cinematic_shot");
+    }
+    else
+    {
+        UMovieSceneSubTrack* Track = MS->FindTrack<UMovieSceneSubTrack>();
+        if (!Track) Track = MS->AddTrack<UMovieSceneSubTrack>();
+        if (!Track)
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add sub-sequence track"));
+        SubSection = Track->AddSequence(Inner, FFrameNumber(StartFrame), Duration);
+        TrackKind = TEXT("subsequence");
+    }
+    if (!SubSection)
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to add subsequence section"));
+    Outer->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("sequence_path"), OuterPath);
+    Result->SetStringField(TEXT("inner_sequence_path"), InnerPath);
+    Result->SetStringField(TEXT("track_type"), TrackKind);
+    Result->SetNumberField(TEXT("start_frame"), StartFrame);
+    Result->SetNumberField(TEXT("duration_frames"), Duration);
     return Result;
 }

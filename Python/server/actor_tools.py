@@ -358,3 +358,155 @@ def delete_actor_by_mcp_id(mcp_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"delete_actor_by_mcp_id error: {e}")
         return make_error_response(str(e))
+
+# W1-E Networking minimal (UE 5.7)
+
+_NET_DORMANCY_VALUES = {"Never", "Awake", "DormantAll", "DormantPartial", "Initial"}
+
+
+@mcp.tool()
+def set_actor_replicates(actor_name: str, replicates: bool = True) -> Dict[str, Any]:
+    """Toggle AActor::SetReplicates on an editor-world actor.
+
+    actor_name: Editor-world actor name or label
+    replicates: True (default) to enable replication
+    """
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_actor_replicates",
+            {"actor_name": actor_name, "replicates": replicates},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_actor_replicates error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def set_actor_replicate_movement(actor_name: str, replicate_movement: bool = True) -> Dict[str, Any]:
+    """Toggle AActor::SetReplicateMovement on an editor-world actor."""
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_actor_replicate_movement",
+            {"actor_name": actor_name, "replicate_movement": replicate_movement},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_actor_replicate_movement error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def set_actor_net_dormancy(actor_name: str, dormancy: str) -> Dict[str, Any]:
+    """Set AActor net dormancy mode via SetNetDormancy.
+
+    dormancy: Never | Awake | DormantAll | DormantPartial | Initial
+    """
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    if dormancy not in _NET_DORMANCY_VALUES:
+        return make_error_response(
+            f"dormancy must be one of {sorted(_NET_DORMANCY_VALUES)}"
+        )
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_actor_net_dormancy",
+            {"actor_name": actor_name, "dormancy": dormancy},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_actor_net_dormancy error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def set_actor_net_cull_distance(actor_name: str, distance: float) -> Dict[str, Any]:
+    """Set AActor net relevancy cull distance (squared internally).
+
+    distance: cm. Must be >= 0. C++ stores distance * distance.
+    """
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    if distance < 0:
+        return make_error_response("distance must be >= 0")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_actor_net_cull_distance",
+            {"actor_name": actor_name, "distance": distance},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_actor_net_cull_distance error: {exc}")
+        return make_error_response(str(exc))
+
+
+@mcp.tool()
+def set_actor_owner_only_relevant(actor_name: str, owner_only: bool = True) -> Dict[str, Any]:
+    """Set AActor::bOnlyRelevantToOwner."""
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_actor_owner_only_relevant",
+            {"actor_name": actor_name, "owner_only": owner_only},
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_actor_owner_only_relevant error: {exc}")
+        return make_error_response(str(exc))
+
+# W1-H Component Replicates (UE 5.7)
+
+
+@mcp.tool()
+def set_component_replicates(
+    actor_name: str,
+    component_name: str,
+    replicates: bool = True,
+) -> Dict[str, Any]:
+    """Toggle UActorComponent::SetIsReplicated on a component owned by an actor.
+
+    actor_name: Editor-world actor name or label
+    component_name: Component instance name (e.g. "StaticMeshComponent0") or
+                    class name (e.g. "StaticMeshComponent"). First match wins.
+    replicates: True (default) to enable component replication
+    """
+    if not isinstance(actor_name, str) or not actor_name:
+        return make_error_response("actor_name must be a non-empty string")
+    if not isinstance(component_name, str) or not component_name:
+        return make_error_response("component_name must be a non-empty string")
+    unreal = get_unreal_connection()
+    if not unreal:
+        return make_error_response("Failed to connect to Unreal Engine")
+    try:
+        response = unreal.send_command(
+            "set_component_replicates",
+            {
+                "actor_name": actor_name,
+                "component_name": component_name,
+                "replicates": replicates,
+            },
+        )
+        return response or make_error_response("No response from Unreal")
+    except Exception as exc:
+        logger.error(f"set_component_replicates error: {exc}")
+        return make_error_response(str(exc))

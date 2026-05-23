@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Json.h"
@@ -35,6 +35,10 @@ private:
 
     // Phase 2: Advanced Material Types
     TSharedPtr<FJsonObject> HandleCreateAdvancedMaterial(const TSharedPtr<FJsonObject>& Params);
+
+    // Substrate / Layered Material (W1-#42)
+    TSharedPtr<FJsonObject> HandleCreateSubstrateMaterial(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleCreateLayeredMaterial(const TSharedPtr<FJsonObject>& Params);
 
     // Internal helpers
     TSharedPtr<FJsonObject> ApplyBatchParameters(UMaterialInstance* Instance, const TArray<TSharedPtr<FJsonValue>>& Parameters);
