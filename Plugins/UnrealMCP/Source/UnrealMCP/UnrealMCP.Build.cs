@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
 
@@ -155,6 +155,43 @@ public class UnrealMCP : ModuleRules
 		else
 		{
 			PublicDefinitions.Add("WITH_CESIUM=0");
+		}
+		// ----- Optional Niagara integration (Sub-batch I, route 21) -----
+		// Engine/Plugins/FX/Niagara ships with UE 5.7 by default but is gated as
+		// optional so the plugin still builds in environments that explicitly
+		// disable Niagara. When detected we link the Niagara + NiagaraEditor
+		// modules privately and define WITH_NIAGARA_MCP=1 so the gated headers
+		// in EpicUnrealMCPNiagaraCommands.cpp compile against real types.
+		bool bNiagaraFound = false;
+		string[] NiagaraProbePaths = new string[] {
+			System.IO.Path.Combine(EngineDirectory, "Plugins", "FX", "Niagara", "Niagara.uplugin"),
+		};
+		if (Target.ProjectFile != null)
+		{
+			string ProjectDir = System.IO.Path.GetDirectoryName(Target.ProjectFile.FullName);
+			System.Array.Resize(ref NiagaraProbePaths, NiagaraProbePaths.Length + 1);
+			NiagaraProbePaths[NiagaraProbePaths.Length - 1] = System.IO.Path.Combine(ProjectDir, "Plugins", "FX", "Niagara", "Niagara.uplugin");
+		}
+		foreach (string Probe in NiagaraProbePaths)
+		{
+			if (System.IO.File.Exists(Probe))
+			{
+				bNiagaraFound = true;
+				break;
+			}
+		}
+		if (bNiagaraFound)
+		{
+			PublicDefinitions.Add("WITH_NIAGARA_MCP=1");
+			PrivateDependencyModuleNames.Add("Niagara");
+			if (Target.bBuildEditor)
+			{
+				PrivateDependencyModuleNames.Add("NiagaraEditor");
+			}
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_NIAGARA_MCP=0");
 		}
 	}
 }

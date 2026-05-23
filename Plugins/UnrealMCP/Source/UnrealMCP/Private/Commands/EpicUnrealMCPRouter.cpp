@@ -1,4 +1,4 @@
-#include "Commands/EpicUnrealMCPRouter.h"
+﻿#include "Commands/EpicUnrealMCPRouter.h"
 
 int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
 {
@@ -143,6 +143,34 @@ int32 FEpicUnrealMCPRouter::RouteCommand(const FString& CommandType)
         {TEXT("create_advanced_material"), 4},
         {TEXT("create_substrate_material"), 4},  // W1-#42
         {TEXT("create_layered_material"), 4},     // W1-#42
+        // ---- Niagara / VFX (Sub-batch I, route 21, issue #49) ----
+        {TEXT("create_niagara_system"), 21},
+        {TEXT("create_niagara_emitter"), 21},
+        {TEXT("add_emitter_to_system"), 21},
+        {TEXT("add_niagara_module"), 21},
+        {TEXT("remove_niagara_module"), 21},
+        {TEXT("set_niagara_spawn_rate"), 21},
+        {TEXT("set_niagara_burst"), 21},
+        {TEXT("set_niagara_lifetime"), 21},
+        {TEXT("set_niagara_velocity"), 21},
+        {TEXT("set_niagara_gravity"), 21},
+        {TEXT("set_niagara_color"), 21},
+        {TEXT("set_niagara_size"), 21},
+        {TEXT("set_niagara_ribbon_renderer"), 21},
+        {TEXT("set_niagara_sprite_renderer"), 21},
+        {TEXT("set_niagara_mesh_renderer"), 21},
+        {TEXT("set_niagara_gpu_simulation"), 21},
+        {TEXT("set_niagara_collision"), 21},
+        {TEXT("add_niagara_user_parameter"), 21},
+        {TEXT("set_niagara_user_parameter"), 21},
+        {TEXT("add_niagara_component"), 21},
+        {TEXT("attach_niagara_to_actor"), 21},
+        {TEXT("bind_niagara_parameter"), 21},
+        {TEXT("create_niagara_data_channel"), 21},
+        {TEXT("create_niagara_effect_type"), 21},
+        {TEXT("set_niagara_scalability"), 21},
+        {TEXT("niagara_debug_console"), 21},
+        {TEXT("niagara_sim_cache"), 21},
         // Project / Editor Commands (5)
         {TEXT("get_project_settings"), 5},
         {TEXT("set_project_setting"), 5},

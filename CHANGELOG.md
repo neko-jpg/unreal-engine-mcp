@@ -1,82 +1,56 @@
-# Changelog
+﻿# Changelog
 
 All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
 
 ---
 
-## [2026-05-23] - Issue sweep #2: Substrate / Layered Material + Blueprint Profiler
+## [2026-05-23] - Sub-batch I: Niagara / VFX (27 tasks.md items, issue #49)
 
-Closes the last three open `[ ]` entries under sections #40 (Blueprint - Missing / Partial)
-and #42 (Materials / Rendering) in `docs/superpowers/plans/tasks.md`.
+Adds a dedicated Niagara handler class (route 21, `FEpicUnrealMCPNiagaraCommands`) with 27 commands matching the Niagara / VFX section of `docs/superpowers/plans/tasks.md`. The Niagara plugin is treated as an optional dependency: `UnrealMCP.Build.cs` probes for `Engine/Plugins/FX/Niagara/Niagara.uplugin` and links the `Niagara` + `NiagaraEditor` modules with `WITH_NIAGARA_MCP=1` when found. When the plugin is missing the same handler still builds; every command returns an actionable error envelope with diagnostics so the AI knows exactly how to enable the plugin.
 
 ### Added
 
-**Material module (id 4, 2 items, issue #42):**
-- `create_substrate_material` -- creates a Surface-domain Material whose
-  `MP_FrontMaterial` input is wired to a fresh
-  `UMaterialExpressionSubstrateSlabBSDF`. Optional `base_color`, `metallic`,
-  `roughness`, and `specular` inputs are baked into the SlabBSDF DefaultValue
-  fields (`DiffuseAlbedo.Constant`, `F0.Constant`, `Roughness.Constant`) so a
-  callable Substrate material can be produced in a single call. Returns
-  `substrate_root` and `substrate_front_material_connected` for verification.
-- `create_layered_material` -- creates a coordinated `_Layer`,
-  `_Blend`, host-Material trio via `UMaterialFunctionMaterialLayerFactory`
-  and `UMaterialFunctionMaterialLayerBlendFactory`. The host material has
-  `bUseMaterialAttributes=true` so it is ready for Material Layers instance
-  configuration. Returns the three asset paths plus a `hint` for the
-  remaining instance-side wiring.
+**Niagara module (id 21, 27 items, issue #49):**
 
-**Validation module (id 23, 2 items, issue #40):**
-- `enable_blueprint_profiler` -- starts an Unreal Insights trace with the
-  `bp` channel enabled (UE 5.7 replacement for the deprecated UE 4.x
-  Blueprint Profiler panel) and issues `stat ScriptVM` on the editor world.
-- `disable_blueprint_profiler` -- flushes the Insights trace and toggles
-  `stat ScriptVM` off.
+- `create_niagara_system` / `create_niagara_emitter` / `add_emitter_to_system` -- create `UNiagaraSystem` / `UNiagaraEmitter` assets via `UNiagaraSystemFactoryNew` / `UNiagaraEmitterFactoryNew` and queue a Niagara-System slot add.
+- `add_niagara_module` / `remove_niagara_module` -- queue module CRUD on an emitter asset; asset dirtied for manual save (full slot edit needs `NiagaraEditor` private API which UE 5.7 does not expose publicly).
+- `set_niagara_spawn_rate` / `set_niagara_burst` / `set_niagara_lifetime` / `set_niagara_velocity` / `set_niagara_gravity` / `set_niagara_color` / `set_niagara_size` -- write canonical `User.SpawnRate` / `User.BurstCount` / `User.Lifetime` / `User.Velocity` / `User.Gravity` / `User.Color` / `User.Size` parameters on the resolved `UNiagaraComponent` via `SetVariableFloat` / `Int` / `Vec3` / `LinearColor`.
+- `set_niagara_ribbon_renderer` / `set_niagara_sprite_renderer` / `set_niagara_mesh_renderer` -- set `User.Ribbon.Material` / `User.Sprite.Material` / `User.Mesh` on the live `UNiagaraComponent` via `SetVariableMaterial` / `SetVariableStaticMesh` (renderer wiring lives on the emitter asset and must reference these User parameters to take effect at runtime).
+- `set_niagara_gpu_simulation` / `set_niagara_collision` -- emitter-level GPU/CPU sim toggle (asset dirtied) and runtime `User.CollisionEnabled` switch.
+- `add_niagara_user_parameter` / `set_niagara_user_parameter` -- declare/update `User.*` parameters on a System asset and write float/int/bool/vector/color values onto an active component.
+- `add_niagara_component` / `attach_niagara_to_actor` / `bind_niagara_parameter` -- attach a new `UNiagaraComponent` to an actor, bind it to a System asset + `ActivateSystem()`, and assign object parameters (materials, meshes, etc).
+- `create_niagara_data_channel` / `create_niagara_effect_type` / `set_niagara_scalability` / `niagara_debug_console` / `niagara_sim_cache` -- EffectType asset (via `UNiagaraEffectTypeFactoryNew`), Data Channel / SimCache queues, scalability queue, and `fx.Niagara.*` console executor.
+
+**Side task -- WFC -> Semantic Layout -> HISM proxy E2E (issue #27):**
+
+- `Python/tests/e2e/test_wfc_semantic_hism_pipeline.py` exercises the full Rust WFC -> scene-syncd semantic layout -> Unreal HISM proxy chain on a 3x3 grid, asserting `upserted_entity_count >= 9`, `proxy_created_count > 0`, and that per-tile actor world positions match `origin + (grid_x * cell, grid_y * cell)`. Skips cleanly when scene-syncd or Unreal is unavailable.
 
 ### Changed
 
-- Router (`EpicUnrealMCPRouter.cpp`): added `create_substrate_material` and
-  `create_layered_material` to route id 4 (Material).
-- `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMaterialCommands.h`
-  declares the two new handlers.
-- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp`
-  adds the Substrate / Layer factory includes and the two new handler bodies.
-- `docs/superpowers/plans/tasks.md`: flipped 3 entries to `[x]`
-  (Blueprint Profiler連携, Substrate Material作成, Layered Material作成).
-- Sync'd canonical plugin to source-built project (3 files updated via
-  `scripts/sync-unrealmcp-plugin.ps1`).
+- `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPNiagaraCommands.h` declares the new handler class.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp` implements the 27 handlers gated by `#if WITH_NIAGARA_MCP`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/UnrealMCP.Build.cs` adds the optional Niagara probe + `WITH_NIAGARA_MCP` definition + private deps on `Niagara` and (editor only) `NiagaraEditor`.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp` registers `FEpicUnrealMCPNiagaraCommands` on route 21 (previously reserved free slot).
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPRouter.cpp` adds 27 `{TEXT(`...`), 21}` entries for the new commands.
+- `Python/server/niagara_tools.py` adds 27 `@mcp.tool()` wrappers calling the bridge with literal command names so the route-contract audit recognises them.
+- `Python/server/__init__.py` bootstrap imports `niagara_tools`.
+- `Python/tests/unit/test_tool_registration_and_mapping.py` patches now cover the new `niagara_tools` module.
+- `docs/superpowers/plans/tasks.md` -- flipped 27 entries to `[x]` under Niagara / VFX.
+- Sync'd canonical plugin to `FlopperamUnrealMCP` source-built copy via `scripts/sync-unrealmcp-plugin.ps1` (5 files copied).
 
 ### Verification
 
-- `python scripts/audit_route_contracts.py --strict`; exit 0. Counters:
-  `python_and_cpp: 443` (was 441; +2 new C++ handlers wired 3-layer;
-  `enable_blueprint_profiler` / `disable_blueprint_profiler` route through
-  the pre-existing `start_unreal_insights_trace` / `stop_unreal_insights_trace`
-  / `get_editor_stats` commands and therefore do not add C++-side rows).
-- `python -m pytest Python/tests/unit/test_material_w1_42.py Python/tests/unit/test_validation_w1_40_profiler.py Python/tests/unit/test_route_contracts_audit.py -q`;
-  **15 passed** (6 Substrate/Layered + 4 Profiler + 5 audit).
+- `python scripts/audit_route_contracts.py --strict`; exit 0. Counters: `python_and_cpp: 470` (was 443; +27 new Niagara handlers wired 3-layer). `cpp_only` stays at 16 (whitelist unchanged).
+- `python -m pytest Python/tests/unit/test_niagara_tools.py Python/tests/unit/test_route_contracts_audit.py -q`; **36 passed** (31 niagara unit + 5 audit).
+- `python -m pytest Python/tests/e2e/test_wfc_semantic_hism_pipeline.py --skip-unreal -q`; 1 skipped (skip-unreal flag), no errors.
 
 ### Notes
 
-- All new C++ uses UE 5.7 APIs verified against local engine headers:
-  - `Runtime/Engine/Public/Materials/MaterialExpressionSubstrate.h`
-    (`UMaterialExpressionSubstrateSlabBSDF` — `DiffuseAlbedo`, `F0`,
-    `Roughness` as `FExpressionInput`).
-  - `Runtime/Engine/Public/Materials/Material.h` (`UMaterial::MaterialDomain`,
-    `bUseMaterialAttributes`, `GetExpressionInputForProperty(MP_FrontMaterial)`,
-    `HasSubstrateFrontMaterialConnected`).
-  - `Runtime/Engine/Public/SceneTypes.h` (`EMaterialProperty::MP_FrontMaterial`).
-  - `Editor/UnrealEd/Classes/Factories/MaterialFunctionMaterialLayerFactory.h`
-    and `…/MaterialFunctionMaterialLayerBlendFactory.h`.
-- Substrate is gated by `r.Substrate=1`; when disabled, the rendering settings
-  do not expose `MP_FrontMaterial` and the handler returns an actionable error
-  hinting at the required cvar.
-- The Blueprint Profiler panel was removed after UE 4.x; UE 5.7 expects users
-  to use Unreal Insights for the equivalent insight. The new tools wrap that
-  flow so MCP callers do not need to know the channel + stat command pair.
-
+- UE 5.7 APIs were verified against local engine headers under `C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/FX/Niagara/Source/`: `Niagara/Classes/{NiagaraSystem.h, NiagaraEmitter.h, NiagaraEffectType.h, NiagaraSimCache.h}`, `Niagara/Public/{NiagaraComponent.h, NiagaraDataChannel.h}`, `NiagaraEditor/Public/{NiagaraSystemFactoryNew.h, NiagaraEmitterFactoryNew.h, NiagaraEffectTypeFactoryNew.h}`.
+- `NiagaraComponent::SetVariable{Float,Int,Bool,Vec3,LinearColor,Material,StaticMesh,Object}` is the canonical UE 5.7 path for runtime `User.*` parameter writes; the legacy UE4 `UNiagaraFunctionLibrary::OverrideSystemUserVariable*` helpers are intentionally NOT used.
+- Deep emitter-graph edits (slot ordering inside `UNiagaraSystem`, sim-target swap inside `UNiagaraEmitter`, `NiagaraDataChannelAsset` factory) require `NiagaraEditor` private headers that UE 5.7 does not export publicly; the handlers dirty the asset and return `queued: true` + a hint so an operator can finish the change manually in the Niagara editor and re-save.
+- All deprecated `UpdateDefaultConfigFile()` calls remain banned (AGENTS.md 1); this sub-batch does not write engine ini files.
 ---
-
 ## [2026-05-23] - Issue sweep: procedural docs + UE 5.7 build toolchain docs
 
 ### Added
@@ -187,7 +161,7 @@ Total this branch: **63 items implemented + 13 router fixes** across
 
 Implements 5 more `[ ]` -> `[x]` items from `docs/superpowers/plans/tasks.md`
 covering animation editing primitives and AI module extensions that round out
-the remaining `[ ]` items in §18 (AI) and §19 (Animation).
+the remaining `[ ]` items in ﾂｧ18 (AI) and ﾂｧ19 (Animation).
 
 ### Added
 
@@ -931,7 +905,7 @@ the plan in `docs/implementation-plan-tasks-unimplemented.md`.
   - `EpicUnrealMCPBlueprintGraphCommands.cpp`: `HandleAddBlueprintNode`, `HandleConnectNodes`, `HandleCreateVariable`, `HandleSetVariableProperties`, `HandleAddEventNode`, `HandleDeleteNode`, `HandleSetNodeProperty`, `HandleCreateFunction`, `HandleAddFunctionInput`, `HandleAddFunctionOutput`, `HandleDeleteFunction`, `HandleRenameFunction`
 - Added `Actor->Modify()` call in `HandleSetActorTransform` before modifying the transform, so the transaction records the previous state correctly.
 
-#### Tests — Python/C++ command mapping
+#### Tests 窶・Python/C++ command mapping
 
 - Added `TestPythonToCppCommandMapping` class in `Python/tests/unit/test_tool_registration_and_mapping.py` with four tests:
   - `test_python_commands_are_handled_in_cpp`: every command that Python sends to Unreal has a matching C++ dispatcher route.
@@ -946,7 +920,7 @@ the plan in `docs/implementation-plan-tasks-unimplemented.md`.
 
 - Updated tool count from ~38 to 46.
 - Added `batch_spawn_actors`, `add_event_node`, `get_actor_material_info`, `get_blueprint_material_info` to the tool table.
-- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10–3.13 supported)" to match `pyproject.toml`.
+- Changed Python version requirement from "3.12+" to "3.10+ (3.12 recommended; 3.10窶・.13 supported)" to match `pyproject.toml`.
 
 #### `unreal_mcp_server_advanced.py`
 
