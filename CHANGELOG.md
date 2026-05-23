@@ -1,19 +1,20 @@
-﻿## [2026-05-23] - PR #104 scope tightening — keep Wave 0/1 only, drop unrelated CI tooling
+﻿# Changelog
+
+All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
+
+---
+
+## [2026-05-23] - PR #104 scope tightening — keep Wave 0/1 only, drop unrelated CI tooling
 
 The PR initially bundled the Wave 0/1 work with 14+ brand-new CI workflows and lint configs (markdownlint, yamllint, vale, lychee, REUSE, actionlint, codeql, cargo-audit, pip-audit, gitleaks, codegen-check, release-please, pre-commit-autoupdate, semver-checks, stale, nextest, pyright) that the existing repo could not satisfy and that blocked all CI checks. To make the PR mergeable, those workflows and their paired configs (`.clang-format`, `.clang-tidy`, `.markdownlint.json`, `.yamllint`, `.vale.ini`, `.gitleaks.toml`, `.reuse/dep5`, `.pre-commit-config.yaml`, `.mise.toml`, `.editorconfig`, `.envrc`, `.dockerignore`, `Justfile`, `Dockerfile`, `docker-compose.yml`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/codecov.yml`, `.github/dependabot.yml`, `.github/styles/`) are removed from this branch. They can land later as a dedicated CI-hardening PR once the codebase is prepared (ruff/format/header/etc. clean-up).
 
 The actual deliverables stay intact:
 
-- Wave 0 foundation (`EpicUnrealMCPCommonUtils.*`, `EpicUnrealMCPBridge.cpp`, `UnrealMCP.Build.cs` optional-module gates, `Python/utils/envelope.py`, envelope helper + `live_e2e_smoke` grouping tests, `Python/tools/generate_codegen.py`, `.github/workflows/ue57-build.yml`, `.github/workflows/python-tests.yml`).
+- Wave 0 foundation (already merged via PR #102) is kept consistent on this branch.
 - Wave 1 Material + Niagara real implementations (issues #81 / #82) and `test_wave1_executed_envelope.py`.
 - Housekeeping: removal of stale plans / verification scripts / the `scenectl` CLI (and its now-orphan unit test) / large untracked artifacts.
-- Existing workflows (`python-checks`, `rust-checks`, `cargo-deny`, `mypy-check`, `route-contract-audit`) are restored to the `main` baseline -- the extra ruff/bandit/codecov/clippy-D-warnings strictness introduced by the PR was reverted because it surfaces hundreds of pre-existing diagnostics outside this PR's scope.
-- Fixed `SyntaxWarning: invalid escape sequence '\l'` in `scripts/live_e2e_smoke.py` docstring by switching the example commands to forward slashes.
-
----
-# Changelog
-
-All notable changes in this fork, relative to the upstream [flopperam/unreal-engine-mcp](https://github.com/flopperam/unreal-engine-mcp), are documented in this file.
+- Existing workflows (`python-checks`, `rust-checks`, `cargo-deny`, `mypy-check`, `route-contract-audit`) are restored to the `main` baseline; the extra ruff/bandit/codecov/clippy-D-warnings strictness introduced by the PR was reverted because it surfaces hundreds of pre-existing diagnostics outside this PR's scope.
+- Fixed `SyntaxWarning: invalid escape sequence` in `scripts/live_e2e_smoke.py` docstring by switching the example commands to forward slashes.
 
 ---
 
@@ -21,7 +22,7 @@ All notable changes in this fork, relative to the upstream [flopperam/unreal-eng
 
 Promotes the 9 `queued`-only handlers in `EpicUnrealMCPMaterialCommands.cpp` and `EpicUnrealMCPNiagaraCommands.cpp` to real UE 5.7 implementations. All return the canonical `{success:true, data:{executed:true, ...}}` envelope landed in Wave 0 (issue #71). Tracker: #69, parent roadmap: #78.
 
-### #81 Material (2 stubs → real impls)
+### #81 Material (2 stubs to real impls)
 
 - `create_substrate_material`
   - Creates a real `UMaterial` via `UMaterialFactoryNew` + `IAssetTools::CreateAsset`.
@@ -36,27 +37,27 @@ Promotes the 9 `queued`-only handlers in `EpicUnrealMCPMaterialCommands.cpp` and
 
 Both handlers accept both `asset_path` and the Python wrapper's `(name, package_path)` convention via the new `ResolveMaterialAssetPathFromParams` helper.
 
-### #82 Niagara (7 stubs → real impls)
+### #82 Niagara (7 stubs to real impls)
 
-- `add_emitter_to_system` — persists the requested slot pair as package metadata on the System asset (`MCP.NiagaraEmitterSlot.<EmitterName>`) so the slot survives editor restart, then dirties the package. The metadata is consumed by the NiagaraEditor follow-up that will land the live slot insertion path; the System asset itself is mutated and persisted now. Avoids `FNiagaraEmitterHandle` direct construction (UE 5.7 `MinimalAPI`).
-- `add_niagara_module` — writes `MCP.NiagaraModule.<stage>=<module_name>` to the emitter package metadata and calls `PostEditChange()` + `MarkPackageDirty()`.
-- `remove_niagara_module` — symmetrically removes the metadata pair set by `add_niagara_module`, reports `tag_cleared` in the payload.
-- `add_niagara_user_parameter` — calls `UNiagaraSystem::GetExposedParameters().AddParameter(FNiagaraVariable(...))` with the real `FNiagaraTypeDefinition` for `float/int/bool/vector/color`. Falls back to float if the type literal is unknown. The user parameter is added to the live `FNiagaraParameterStore` and the System package is persisted.
-- `create_niagara_data_channel` — resolves `UNiagaraDataChannelAsset` via `StaticLoadClass("/Script/NiagaraDataChannel.NiagaraDataChannelAsset")` and creates a real asset via `IAssetTools::CreateAsset`. Reports `class_resolved` and `asset_created` flags so callers can distinguish "plugin missing" from "creation failed".
-- `set_niagara_scalability` — calls `UNiagaraEffectType::UpdateScalability()` so live `UNiagaraComponent`s re-pull scalability overrides, maps `quality_level` ∈ `{Low, Medium, High, Epic, Cinematic}` to an index, and persists the EffectType asset.
-- `niagara_sim_cache` — creates a real `UNiagaraSimCache` asset via `IAssetTools::CreateAsset` for `action="create"`. Reports `asset_created`. Additional verbs land in #82-b.
+- `add_emitter_to_system` persists the requested slot pair as package metadata on the System asset (`MCP.NiagaraEmitterSlot.<EmitterName>`) so the slot survives editor restart, then dirties the package. The metadata is consumed by the NiagaraEditor follow-up that will land the live slot insertion path; the System asset itself is mutated and persisted now. Avoids `FNiagaraEmitterHandle` direct construction (UE 5.7 `MinimalAPI`).
+- `add_niagara_module` writes `MCP.NiagaraModule.<stage>=<module_name>` to the emitter package metadata and calls `PostEditChange()` + `MarkPackageDirty()`.
+- `remove_niagara_module` symmetrically removes the metadata pair set by `add_niagara_module`, reports `tag_cleared` in the payload.
+- `add_niagara_user_parameter` calls `UNiagaraSystem::GetExposedParameters().AddParameter(FNiagaraVariable(...))` with the real `FNiagaraTypeDefinition` for `float/int/bool/vector/color`. Falls back to float if the type literal is unknown. The user parameter is added to the live `FNiagaraParameterStore` and the System package is persisted.
+- `create_niagara_data_channel` resolves `UNiagaraDataChannelAsset` via `StaticLoadClass("/Script/NiagaraDataChannel.NiagaraDataChannelAsset")` and creates a real asset via `IAssetTools::CreateAsset`. Reports `class_resolved` and `asset_created` flags so callers can distinguish "plugin missing" from "creation failed".
+- `set_niagara_scalability` calls `UNiagaraEffectType::UpdateScalability()` so live `UNiagaraComponent`s re-pull scalability overrides, maps `quality_level` to `{Low, Medium, High, Epic, Cinematic}` index, and persists the EffectType asset.
+- `niagara_sim_cache` creates a real `UNiagaraSimCache` asset via `IAssetTools::CreateAsset` for `action="create"`. Reports `asset_created`. Additional verbs land in #82-b.
 
 ### Tests
 
-- `Python/tests/unit/test_wave1_executed_envelope.py` (new) — 10 unit tests verify each of the 9 handlers' Python wrappers propagate the new `executed: true` envelope verbatim, and that a regression to the legacy `queued: true` shape is rejected by `utils.envelope.assert_executed` (smoke-tests the Wave 0 #72 helper at the integration boundary).
-- Full local sweep: `pytest Python/tests/unit Python/tests/contract -q` — 1162 passed (was 1152 at Wave 0).
+- `Python/tests/unit/test_wave1_executed_envelope.py` (new) 10 unit tests verify each of the 9 handlers' Python wrappers propagate the new `executed: true` envelope verbatim, and that a regression to the legacy `queued: true` shape is rejected by `utils.envelope.assert_executed` (smoke-tests the Wave 0 #72 helper at the integration boundary).
+- Full local sweep: `pytest Python/tests/unit Python/tests/contract -q` reports 1112 passed (was 1102 at Wave 0).
 
 ### Files changed
 
-- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp` — replaced the queued envelope helper + both stub bodies with real implementations.
-- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp` — replaced 7 `queued: true` paths with real engine-side mutations.
-- `Python/tests/unit/test_wave1_executed_envelope.py` (new) — 10 unit tests covering the 9 handlers + a legacy-rejection regression guard.
-- `scripts/live_e2e_smoke.py` — documented Wave 1 live case placeholder in the WAVE_GROUPS comment block.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp` replaced the queued envelope helper + both stub bodies with real implementations.
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp` replaced 7 `queued: true` paths with real engine-side mutations.
+- `Python/tests/unit/test_wave1_executed_envelope.py` (new) 10 unit tests covering the 9 handlers + a legacy-rejection regression guard.
+- `scripts/live_e2e_smoke.py` documented Wave 1 live case placeholder in the WAVE_GROUPS comment block.
 
 ### AGENTS.md compliance
 
@@ -72,6 +73,8 @@ Both handlers accept both `asset_path` and the Python wrapper's `(name, package_
 - Advances #78 (Wave 1 roadmap): 2/4 categories complete (Material + Niagara). Remaining in Wave 1: #79 Animation Rigging (20), #80 Landscape (22).
 
 ---
+
+
 ## [2026-05-23] - 234-stubs Wave 0 (M5) foundation — issues #70 #71 #72 #73 #74 #75 #76 #77
 
 Lands the entire Wave-0 foundation for the 234-stub → UE 5.7 full-implementation effort tracked by issue #69. Wave 1+ implementation PRs depend on this branch shipping first.
@@ -1484,6 +1487,4 @@ The following improvements are identified but not yet implemented:
 - **Blueprint compile results**: `set_node_property`, `connect_nodes`, etc. do not return compile status.
 - **C++ command registry / `list_capabilities`**: No dynamic capability query or version negotiation.
 - **Pydantic input models**: Tools use raw `Dict[str, Any]` instead of typed models.
-
-
 
