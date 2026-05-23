@@ -164,8 +164,18 @@ def add_notify_state(anim_sequence_path: str, notify_state_class: str, start_tim
 
 
 @mcp.tool()
-def set_retarget_manager(skeleton_path: str, rig_bp_path: str = "") -> Dict[str, Any]:
-    """Queue Retarget Manager binding."""
+def set_retarget_manager(
+    skeleton_path: str,
+    rig_bp_path: str = "",
+    rig_mode: str = "Humanoid",
+    preview_mesh: str = "",
+) -> Dict[str, Any]:
+    """Persist the requested retarget manager configuration on a USkeleton.
+
+    234-stubs W1 (#79) Part 1: this handler now runs the C++ promotion path,
+    writing MCP-namespaced metadata onto the skeleton's package so an
+    IKRigEditor follow-up can apply the chosen rig mode.
+    """
     try:
         validate_string(skeleton_path, "skeleton_path")
     except ValidationError as e:
@@ -173,11 +183,21 @@ def set_retarget_manager(skeleton_path: str, rig_bp_path: str = "") -> Dict[str,
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {
+        "skeleton_path": skeleton_path,
+        "rig_mode": rig_mode,
+    }
+    if rig_bp_path:
+        payload["rig_bp_path"] = rig_bp_path
+    if preview_mesh:
+        payload["preview_mesh"] = preview_mesh
     try:
-        r = u.send_command("set_retarget_manager", {"skeleton_path": skeleton_path, "rig_bp_path": rig_bp_path})
+        r = u.send_command("set_retarget_manager", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_retarget_manager': {e}")
     return _envelope("set_retarget_manager", r)
+
+
 
 
 @mcp.tool()
@@ -361,21 +381,41 @@ def sequencer_control_rig_track(level_sequence_path: str, skeletal_actor: str, c
 
 
 @mcp.tool()
-def set_facial_animation(skeletal_mesh_path: str, anim_sequence_path: str) -> Dict[str, Any]:
-    """Queue facial animation binding."""
+def set_facial_animation(
+    skeletal_mesh_path: str,
+    anim_sequence_path: str = "",
+    curve_name: str = "",
+    weight: float = 0.0,
+    rig_type: str = "MetaHumanFacial",
+) -> Dict[str, Any]:
+    """Persist a facial animation curve weight onto a USkeleton's package metadata.
+
+    234-stubs W1 (#79) Part 1: this handler is now executed in C++ via
+    `AnimMetaPersist` so the requested curve/weight survives editor restart and
+    can be replayed by the MetaHuman / facial follow-up.
+    Legacy callers may still pass ``anim_sequence_path`` (forwarded verbatim).
+    """
     try:
         validate_string(skeletal_mesh_path, "skeletal_mesh_path")
-        validate_string(anim_sequence_path, "anim_sequence_path")
     except ValidationError as e:
         return make_validation_error_response_from_exception(e)
     u = get_unreal_connection()
     if u is None:
         return make_error_response("Failed to connect to Unreal Engine")
+    payload: Dict[str, Any] = {"skeleton_path": skeletal_mesh_path}
+    if anim_sequence_path:
+        payload["anim_sequence_path"] = anim_sequence_path
+    if curve_name:
+        payload["curve_name"] = curve_name
+    payload["weight"] = float(weight)
+    payload["rig_type"] = rig_type
     try:
-        r = u.send_command("set_facial_animation", {"skeletal_mesh_path": skeletal_mesh_path, "anim_sequence_path": anim_sequence_path})
+        r = u.send_command("set_facial_animation", payload)
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'set_facial_animation': {e}")
     return _envelope("set_facial_animation", r)
+
+
 
 
 @mcp.tool()
