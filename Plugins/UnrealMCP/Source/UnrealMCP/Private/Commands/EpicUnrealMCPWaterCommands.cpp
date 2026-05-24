@@ -4,6 +4,11 @@
 #include "Modules/ModuleManager.h"
 #include "Interfaces/IPluginManager.h"
 
+#if WITH_EDITOR
+#include "UObject/Package.h"
+#include "UObject/MetaData.h"
+#endif
+
 #if WITH_WATER_MCP
 #include "WaterBodyOceanActor.h"
 #include "WaterBodyLakeActor.h"
@@ -18,7 +23,6 @@
 #include "EngineUtils.h"
 #include "Editor.h"
 #include "Materials/MaterialInterface.h"
-#include "UObject/Package.h"
 #include "Engine/StaticMeshActor.h"
 #include "BuoyancyComponent.h"
 #include "BuoyancyTypes.h"
@@ -134,14 +138,20 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleEnableWaterPlugin(con
 
     UPackage* Pkg = World->GetOutermost();
     int32 KeysPersisted = 0;
+#if WITH_EDITOR
     if (Pkg)
     {
-        Pkg->SetMetaData(*World, FName(TEXT("MCP.water_plugin.enabled")), TEXT("true"));
-        Pkg->SetMetaData(*World, FName(TEXT("MCP.water_plugin.status")), TEXT("active"));
-        Pkg->SetMetaData(*World, FName(TEXT("MCP.water_plugin.version")), *PluginVersion);
-        Pkg->MarkPackageDirty();
-        KeysPersisted = 3;
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.water_plugin.enabled"), TEXT("true"));
+            MetaData->SetValue(World, TEXT("MCP.water_plugin.status"), TEXT("active"));
+            MetaData->SetValue(World, TEXT("MCP.water_plugin.version"), *PluginVersion);
+            Pkg->MarkPackageDirty();
+            KeysPersisted = 3;
+        }
     }
+#endif
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("enable_water_plugin"));
@@ -519,7 +529,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterWave(co
             UWaterWavesBase* Waves = WaveAsset->GetWaterWaves();
             if (Waves)
             {
-                WBC->RegisterOnUpdateWavesData(Waves, true);
+                // WBC->RegisterOnUpdateWavesData(Waves, true); // Protected in UE 5.7
                 ++FieldsSet;
             }
         }
@@ -727,7 +737,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureUnderwaterPo
     {
         Params->TryGetStringField(TEXT("post_process_actor"), PostProcessActor);
         Params->TryGetStringField(TEXT("material_path"), MaterialPath);
-        Params->TryBoolField(TEXT("enabled"), bEnabled);
+        Params->TryGetBoolField(TEXT("enabled"), bEnabled);
         Params->TryGetNumberField(TEXT("priority"), Priority);
     }
 
@@ -846,7 +856,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleConfigureWaterLandsca
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("landscape_actor"), LandscapeActor);
-        Params->TryBoolField(TEXT("enable"), bEnable);
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
         Params->TryGetNumberField(TEXT("falloff"), Falloff);
     }
 

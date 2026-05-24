@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 using System;
 using System.IO;
@@ -377,7 +377,7 @@ public class UnrealMCP : ModuleRules
         AddGate("IRIS", bIris, new string[] { }, new string[] { }, Target);
 
         // -- Localization --
-        AddGate("LOCALIZATION", true, new string[] { "Internationalization" }, new string[] { "Localization" }, Target);
+        AddGate("LOCALIZATION", true, null, new string[] { "Localization" }, Target);
         bool bLocEditor = File.Exists(Path.Combine(EngineDirectory, "Source", "Editor", "LocalizationCommandletExecution", "Public", "LocalizationCommandletExecution.h"));
         AddGate("LOCALIZATION_EDITOR", bLocEditor, new string[] { }, new string[] { "LocalizationCommandletExecution" }, Target);
 
