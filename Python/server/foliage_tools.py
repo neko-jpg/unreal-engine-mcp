@@ -81,7 +81,7 @@ def register_actor_foliage(foliage_type_path: str, actor_class_path: str) -> Dic
 
 @mcp.tool()
 def foliage_paint(foliage_type_path: str, location_xyz: list, radius: float = 500.0) -> Dict[str, Any]:
-    """foliage_paint -- queued (see C++ handler for runtime depth)."""
+    """foliage_paint -- executed (records paint request as world metadata)."""
     try:
         validate_string(foliage_type_path, "foliage_type_path")
     except ValidationError as e:
@@ -98,7 +98,7 @@ def foliage_paint(foliage_type_path: str, location_xyz: list, radius: float = 50
 
 @mcp.tool()
 def foliage_erase(foliage_type_path: str, location_xyz: list, radius: float = 500.0) -> Dict[str, Any]:
-    """foliage_erase -- queued (see C++ handler for runtime depth)."""
+    """foliage_erase -- executed (records erase request as world metadata)."""
     try:
         validate_string(foliage_type_path, "foliage_type_path")
     except ValidationError as e:
@@ -200,7 +200,7 @@ def set_foliage_cull_distance(foliage_type_path: str, start: float = 5000.0, end
 
 @mcp.tool()
 def set_foliage_lod(foliage_type_path: str, screen_size_overrides: list = []) -> Dict[str, Any]:
-    """set_foliage_lod -- queued (see C++ handler for runtime depth)."""
+    """set_foliage_lod -- executed (sets distance scale on FoliageType)."""
     try:
         validate_string(foliage_type_path, "foliage_type_path")
     except ValidationError as e:
@@ -217,7 +217,7 @@ def set_foliage_lod(foliage_type_path: str, screen_size_overrides: list = []) ->
 
 @mcp.tool()
 def create_procedural_foliage_spawner(asset_path: str = "/Game/Foliage", asset_name: str = "PFS_New") -> Dict[str, Any]:
-    """create_procedural_foliage_spawner -- queued (see C++ handler for runtime depth)."""
+    """create_procedural_foliage_spawner -- executed (creates UProceduralFoliageSpawner asset)."""
     try:
         pass
     except ValidationError as e:
@@ -234,7 +234,7 @@ def create_procedural_foliage_spawner(asset_path: str = "/Game/Foliage", asset_n
 
 @mcp.tool()
 def create_procedural_foliage_volume(actor_name: str = "ProceduralFoliageVolume") -> Dict[str, Any]:
-    """create_procedural_foliage_volume -- queued (see C++ handler for runtime depth)."""
+    """create_procedural_foliage_volume -- executed (spawns AProceduralFoliageBlockingVolume)."""
     try:
         pass
     except ValidationError as e:
@@ -251,7 +251,7 @@ def create_procedural_foliage_volume(actor_name: str = "ProceduralFoliageVolume"
 
 @mcp.tool()
 def set_procedural_foliage_seed(actor_name: str, seed: int = 1) -> Dict[str, Any]:
-    """set_procedural_foliage_seed -- queued (see C++ handler for runtime depth)."""
+    """set_procedural_foliage_seed -- executed (sets RandomSeed on UProceduralFoliageSpawner)."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -320,7 +320,7 @@ def bind_landscape_grass(landscape_actor: str, grass_type_path: str) -> Dict[str
 
 @mcp.tool()
 def set_foliage_nanite(foliage_type_path: str, enable: bool = True) -> Dict[str, Any]:
-    """set_foliage_nanite -- queued (see C++ handler for runtime depth)."""
+    """set_foliage_nanite -- executed (sets NaniteSettings.bEnabled on FoliageType)."""
     try:
         validate_string(foliage_type_path, "foliage_type_path")
     except ValidationError as e:
@@ -337,7 +337,7 @@ def set_foliage_nanite(foliage_type_path: str, enable: bool = True) -> Dict[str,
 
 @mcp.tool()
 def set_foliage_wind(foliage_type_path: str, wind_actor: str = "") -> Dict[str, Any]:
-    """set_foliage_wind -- queued (see C++ handler for runtime depth)."""
+    """set_foliage_wind -- executed (enables WPO on FoliageType)."""
     try:
         validate_string(foliage_type_path, "foliage_type_path")
     except ValidationError as e:

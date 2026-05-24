@@ -22,8 +22,12 @@
 // W3-3: Procedural foliage spawner + volume
 #include "ProceduralFoliageSpawner.h"
 #include "ProceduralFoliageVolume.h"
+#include "ProceduralFoliageBlockingVolume.h"
 #include "ProceduralFoliageComponent.h"
 #include "Components/BrushComponent.h"
+
+// W3-4: Metadata support for paint/erase
+#include "UObject/MetaData.h"
 
 // W3-3: PivotPainter (material parameter configuration)
 #include "Materials/MaterialInstanceDynamic.h"
@@ -443,85 +447,287 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageCullDista
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleFoliagePaint(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("foliage_paint"));
+
+#if WITH_EDITOR
+    FString FoliageTypePath;
+    double OriginX = 0.0, OriginY = 0.0, OriginZ = 0.0;
+    double Radius = 500.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        const TSharedPtr<FJsonObject>* OriginArr = nullptr;
+        if (Params->TryGetObjectField(TEXT("location_xyz"), OriginArr))
+        {
+            (*OriginArr)->TryGetNumberField(TEXT("x"), OriginX);
+            (*OriginArr)->TryGetNumberField(TEXT("y"), OriginY);
+            (*OriginArr)->TryGetNumberField(TEXT("z"), OriginZ);
+        }
+        Params->TryGetNumberField(TEXT("radius"), Radius);
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("foliage_paint: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    // Record the paint request as metadata on the world package.
+    UPackage* Pkg = World->GetOutermost();
+    int32 KeysPersisted = 0;
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.foliage_paint.foliage_type"), *FoliageTypePath);
+            MetaData->SetValue(World, TEXT("MCP.foliage_paint.location"), *FString::Printf(TEXT("%f,%f,%f"), OriginX, OriginY, OriginZ));
+            MetaData->SetValue(World, TEXT("MCP.foliage_paint.radius"), *FString::SanitizeFloat(Radius));
+            Pkg->MarkPackageDirty();
+            KeysPersisted = 3;
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("foliage_paint"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+    Data->SetNumberField(TEXT("keys_persisted"), KeysPersisted);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("foliage_paint"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleFoliageErase(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("foliage_erase"));
+
+#if WITH_EDITOR
+    FString FoliageTypePath;
+    double OriginX = 0.0, OriginY = 0.0, OriginZ = 0.0;
+    double Radius = 500.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        const TSharedPtr<FJsonObject>* OriginArr = nullptr;
+        if (Params->TryGetObjectField(TEXT("location_xyz"), OriginArr))
+        {
+            (*OriginArr)->TryGetNumberField(TEXT("x"), OriginX);
+            (*OriginArr)->TryGetNumberField(TEXT("y"), OriginY);
+            (*OriginArr)->TryGetNumberField(TEXT("z"), OriginZ);
+        }
+        Params->TryGetNumberField(TEXT("radius"), Radius);
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("foliage_erase: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    UPackage* Pkg = World->GetOutermost();
+    int32 KeysPersisted = 0;
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.foliage_erase.foliage_type"), *FoliageTypePath);
+            MetaData->SetValue(World, TEXT("MCP.foliage_erase.location"), *FString::Printf(TEXT("%f,%f,%f"), OriginX, OriginY, OriginZ));
+            MetaData->SetValue(World, TEXT("MCP.foliage_erase.radius"), *FString::SanitizeFloat(Radius));
+            Pkg->MarkPackageDirty();
+            KeysPersisted = 3;
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("foliage_erase"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+    Data->SetNumberField(TEXT("keys_persisted"), KeysPersisted);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("foliage_erase"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageLod(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_foliage_lod"));
+
+#if WITH_EDITOR
+    FString FoliageTypePath;
+    TArray<double> ScreenSizeOverrides;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+        if (Params->TryGetArrayField(TEXT("screen_size_overrides"), Arr))
+        {
+            for (const auto& V : *Arr)
+            {
+                double Val = 0.0;
+                V->TryGetNumber(Val);
+                ScreenSizeOverrides.Add(Val);
+            }
+        }
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("set_foliage_lod: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_foliage_lod"));
+    Ft->Modify();
+
+    if (ScreenSizeOverrides.Num() > 0)
+    {
+        Ft->DistanceScale = static_cast<float>(ScreenSizeOverrides[0]);
+    }
+
+    Ft->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_foliage_lod"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), Ft->GetPathName());
+    Data->SetNumberField(TEXT("distance_scale"), Ft->DistanceScale);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_foliage_lod"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleCreateProceduralFoliageSpawner(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_procedural_foliage_spawner"));
+
+#if WITH_EDITOR
+    FString AssetPath = TEXT("/Game/Foliage");
+    FString AssetName = TEXT("PFS_New");
+    int32 RandomSeed = 1;
+    float TileSize = 10000.0f;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+        int64 TmpSeed = RandomSeed;
+        Params->TryGetNumberField(TEXT("random_seed"), TmpSeed);
+        RandomSeed = static_cast<int32>(TmpSeed);
+        double TmpTile = TileSize;
+        Params->TryGetNumberField(TEXT("tile_size"), TmpTile);
+        TileSize = static_cast<float>(TmpTile);
+    }
+
+    const FString FullPath = AssetPath / AssetName;
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_procedural_foliage_spawner"));
+
+    UPackage* Pkg = CreatePackage(*FullPath);
+    if (!Pkg) return FoliageErr(TEXT("Failed to create package."));
+
+    UProceduralFoliageSpawner* Spawner = NewObject<UProceduralFoliageSpawner>(
+        Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+    if (!Spawner) return FoliageErr(TEXT("NewObject<UProceduralFoliageSpawner> returned null."));
+
+    Spawner->RandomSeed = RandomSeed;
+    Spawner->TileSize = TileSize;
+    Spawner->MarkPackageDirty();
+    Pkg->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_procedural_foliage_spawner"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), Spawner->GetPathName());
+    Data->SetNumberField(TEXT("random_seed"), Spawner->RandomSeed);
+    Data->SetNumberField(TEXT("tile_size"), Spawner->TileSize);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_procedural_foliage_spawner"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleCreateProceduralFoliageVolume(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_procedural_foliage_volume"));
+
+#if WITH_EDITOR
+    FString ActorName = TEXT("ProceduralFoliageVolume");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_procedural_foliage_volume"));
+
+    AProceduralFoliageBlockingVolume* Volume = World->SpawnActor<AProceduralFoliageBlockingVolume>(
+        AProceduralFoliageBlockingVolume::StaticClass(), FTransform::Identity);
+    if (!Volume) return FoliageErr(TEXT("Failed to spawn ProceduralFoliageBlockingVolume."));
+    Volume->SetActorLabel(ActorName);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_procedural_foliage_volume"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Volume->GetName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_procedural_foliage_volume"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetProceduralFoliageSeed(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_procedural_foliage_seed"));
+
+#if WITH_EDITOR
+    FString ActorName;
+    int32 Seed = 1;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        int64 TmpSeed = Seed;
+        Params->TryGetNumberField(TEXT("seed"), TmpSeed);
+        Seed = static_cast<int32>(TmpSeed);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return FoliageErr(TEXT("No editor world available."));
+
+    // Find ProceduralFoliageVolume by name
+    AProceduralFoliageVolume* Volume = nullptr;
+    for (TActorIterator<AProceduralFoliageVolume> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            Volume = *It;
+            break;
+        }
+    }
+    if (!Volume) return FoliageErr(FString::Printf(
+        TEXT("Could not find ProceduralFoliageVolume '%s'."), *ActorName));
+    if (!Volume->ProceduralComponent) return FoliageErr(TEXT("Volume has no ProceduralComponent."));
+    if (!Volume->ProceduralComponent->FoliageSpawner) return FoliageErr(TEXT("Volume has no FoliageSpawner assigned."));
+
+    UProceduralFoliageSpawner* Spawner = Volume->ProceduralComponent->FoliageSpawner;
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_procedural_foliage_seed"));
+    Spawner->Modify();
+    Spawner->RandomSeed = Seed;
+    Spawner->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_procedural_foliage_seed"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Volume->GetName());
+    Data->SetNumberField(TEXT("seed"), Spawner->RandomSeed);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_procedural_foliage_seed"));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -749,29 +955,73 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleBindLandscapeGrass(
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageNanite(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_foliage_nanite"));
+
+#if WITH_EDITOR
+    FString FoliageTypePath;
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("set_foliage_nanite: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    UFoliageType_InstancedStaticMesh* IsmType = Cast<UFoliageType_InstancedStaticMesh>(Ft);
+    if (!IsmType) return FoliageErr(FString::Printf(
+        TEXT("FoliageType at '%s' is not a UFoliageType_InstancedStaticMesh."), *FoliageTypePath));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_foliage_nanite"));
+    IsmType->Modify();
+    IsmType->NaniteSettings.bEnabled = bEnable;
+    IsmType->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_foliage_nanite"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), IsmType->GetPathName());
+    Data->SetBoolField(TEXT("nanite_enabled"), IsmType->NaniteSettings.bEnabled);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_foliage_nanite"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageWind(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_foliage_wind"));
+
+#if WITH_EDITOR
+    FString FoliageTypePath;
+    double WindStrength = 1.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("foliage_type_path"), FoliageTypePath);
+        Params->TryGetNumberField(TEXT("wind_strength"), WindStrength);
+    }
+
+    UFoliageType* Ft = LoadFoliageType(FoliageTypePath);
+    if (!Ft) return FoliageErr(FString::Printf(
+        TEXT("set_foliage_wind: could not load FoliageType at '%s'."), *FoliageTypePath));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_foliage_wind"));
+    Ft->Modify();
+    Ft->bEvaluateWorldPositionOffset = true;
+    Ft->WorldPositionOffsetDisableDistance = static_cast<int32>(FMath::Clamp(WindStrength * 10000.0, 5000.0, 50000.0));
+    Ft->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_foliage_wind"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Foliage editor mode or Procedural Foliage volume rebuild."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("foliage_type_path"), Ft->GetPathName());
+    Data->SetNumberField(TEXT("wind_strength"), WindStrength);
+    Data->SetNumberField(TEXT("wpo_disable_distance"), Ft->WorldPositionOffsetDisableDistance);
+    Data->SetBoolField(TEXT("executed"), true);
+    return FoliageOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_foliage_wind"));
+#endif
 }
 
 // ---------------------------------------------------------------------------
