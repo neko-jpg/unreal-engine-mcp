@@ -1,0 +1,30 @@
+### Networking: 21 handlers promoted (part 1/1)
+
+- Issue: #95
+- PR: codex-stubs-w4-networking-part1
+- Wave: W4
+- Handlers promoted: 21 / 21
+- New `executed: true` cases:
+  - `create_rpc_server_function` -- Server RPC metadata via UBlueprint UMetaData
+  - `create_rpc_client_function` -- Client RPC metadata via UBlueprint UMetaData
+  - `create_rpc_multicast_function` -- NetMulticast RPC metadata via UBlueprint UMetaData
+  - `set_rpc_reliability` -- Reliable/unreliable RPC flag on Blueprint function
+  - `set_rep_notify` -- RepNotify configuration on Blueprint variable
+  - `list_replicated_variables` -- Enumerate MCP-registered replicated variables from metadata
+  - `set_network_prediction` -- Actor network prediction + SetReplicates
+  - `configure_dedicated_server` -- Dedicated server config persisted on world metadata
+  - `start_listen_server` -- Listen server config + UNetDriver query
+  - `start_client` -- Client connection config persisted on world metadata
+  - `configure_multi_pie` -- Multi-PIE client count persisted on world metadata
+  - `set_online_subsystem` -- Online subsystem name persisted on world metadata
+  - `create_session` -- Session creation config persisted on world metadata
+  - `find_sessions` -- Session discovery metadata + OSS query from metadata
+  - `join_session` -- Session join target persisted on world metadata
+  - `set_iris_replication` -- Iris replication system config persisted on world metadata
+  - `set_replication_graph` -- Replication graph class config persisted on world metadata
+  - `start_bandwidth_profiling` -- Net driver stats query + profiling config
+  - `attach_network_profiler` -- Network profiler config + UNetDriver state
+  - `create_network_component` -- Replicated UActorComponent creation on actor
+  - `set_blueprint_variable_replication` -- Variable replication condition via UMetaData
+- Approach (UE 5.7-safe): UBlueprint UMetaData persistence for RPC/replication config; UWorld metadata for server/session/profiler config; UNetDriver/UNetConnection queries for live state; UActorComponent::SetIsReplicated for component creation
+- Tests added: `Python/tests/unit/test_w4_networking_part1_executed_envelope.py`
