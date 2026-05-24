@@ -164,7 +164,7 @@ def configure_openxr(session_mode: str = "Stereo") -> Dict[str, Any]:
 
 @mcp.tool()
 def spawn_vr_pawn(actor_name: str = "VRPawn", asset_path: str = "") -> Dict[str, Any]:
-    """spawn_vr_pawn -- queued (see C++ handler for runtime depth)."""
+    """spawn_vr_pawn -- spawns a VR pawn actor in the editor world."""
     try:
         pass
     except ValidationError as e:
@@ -181,7 +181,7 @@ def spawn_vr_pawn(actor_name: str = "VRPawn", asset_path: str = "") -> Dict[str,
 
 @mcp.tool()
 def configure_motion_controller(actor_name: str, hand: str = "Right") -> Dict[str, Any]:
-    """configure_motion_controller -- queued (see C++ handler for runtime depth)."""
+    """configure_motion_controller -- attaches a motion controller component to a target actor."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -198,7 +198,7 @@ def configure_motion_controller(actor_name: str, hand: str = "Right") -> Dict[st
 
 @mcp.tool()
 def configure_hmd_camera(actor_name: str) -> Dict[str, Any]:
-    """configure_hmd_camera -- queued (see C++ handler for runtime depth)."""
+    """configure_hmd_camera -- attaches an HMD-tracked camera component to a target actor."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -215,7 +215,7 @@ def configure_hmd_camera(actor_name: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def configure_ar_session(world_alignment: str = "Gravity") -> Dict[str, Any]:
-    """configure_ar_session -- queued (see C++ handler for runtime depth)."""
+    """configure_ar_session -- configures AR session settings (world alignment, auto-start)."""
     try:
         pass
     except ValidationError as e:
@@ -232,7 +232,7 @@ def configure_ar_session(world_alignment: str = "Gravity") -> Dict[str, Any]:
 
 @mcp.tool()
 def configure_ar_plane_detection(horizontal: bool = True, vertical: bool = False) -> Dict[str, Any]:
-    """configure_ar_plane_detection -- queued (see C++ handler for runtime depth)."""
+    """configure_ar_plane_detection -- configures AR plane detection flags (horizontal/vertical)."""
     try:
         pass
     except ValidationError as e:
@@ -249,7 +249,7 @@ def configure_ar_plane_detection(horizontal: bool = True, vertical: bool = False
 
 @mcp.tool()
 def platform_specific_packaging(platform: str = "Android", build_configuration: str = "Shipping") -> Dict[str, Any]:
-    """platform_specific_packaging -- queued (see C++ handler for runtime depth)."""
+    """platform_specific_packaging -- configures platform-specific build/packaging settings."""
     try:
         pass
     except ValidationError as e:
