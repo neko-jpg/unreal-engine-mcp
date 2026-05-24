@@ -13,13 +13,11 @@
 #include "UObject/MetaData.h"
 #include "Editor.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Misc/Paths.h"
 
 #include "LocalizationTargetTypes.h"
 #include "LocalizationSettings.h"
 #include "LocalizationDashboard.h"
 #include "LocalizationCommandletTasks.h"
-#include "LocalizationConfigurationScript.h"
 
 bool FEpicUnrealMCPLocalizationCommands::IsModuleAvailable()
 {
@@ -102,8 +100,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCommand(const 
 }
 
 // ---------------------------------------------------------------------------
-// open_localization_dashboard — Show the Localization Dashboard editor tab.
-// UE 5.7 API: FLocalizationDashboard::Get() / Show()
+// open_localization_dashboard — Show the localization dashboard editor tab.
+// UE 5.7 API: FLocalizationDashboard::Get()->Show()
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleOpenLocalizationDashboard(const TSharedPtr<FJsonObject>& Params)
 {
@@ -121,7 +119,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleOpenLocalizati
 
 // ---------------------------------------------------------------------------
 // add_localization_culture — Add a culture to a localization target.
-// UE 5.7 API: ULocalizationTarget, FCulture, FInternationalization::Get().GetCulture()
+// UE 5.7 API: ULocalizationTarget, FCultureStatistics, FInternationalization
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleAddLocalizationCulture(const TSharedPtr<FJsonObject>& Params)
 {
@@ -139,11 +137,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleAddLocalizatio
     ULocalizationTarget* Target = FindLocalizationTarget(TargetName);
     if (!Target) return LocErr(FString::Printf(TEXT("Localization target '%s' not found."), *TargetName));
 
-    // Validate culture exists
     TSharedPtr<FCulture> Culture = FInternationalization::Get().GetCulture(CultureCode);
     if (!Culture.IsValid()) return LocErr(FString::Printf(TEXT("Invalid culture code '%s'."), *CultureCode));
 
-    // Check if culture already present
     bool bAlreadyPresent = false;
     for (const FCultureStatistics& Stats : Target->Settings.SupportedCulturesStatistics)
     {
@@ -174,7 +170,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleAddLocalizatio
 
 // ---------------------------------------------------------------------------
 // run_text_gather — Launch GatherText commandlet for a localization target.
-// UE 5.7 API: LocalizationCommandletTasks::GatherTextForTarget()
+// UE 5.7 API: LocalizationCommandletTasks::GatherTextForTarget
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleRunTextGather(const TSharedPtr<FJsonObject>& Params)
 {
@@ -186,7 +182,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleRunTextGather(
     ULocalizationTarget* Target = FindLocalizationTarget(TargetName);
     if (!Target) return LocErr(FString::Printf(TEXT("Localization target '%s' not found."), *TargetName));
 
-    // GatherText runs asynchronously via commandlet; launch it
     TSharedRef<SWindow> ParentWindow = FSlateApplication::Get().GetActiveTopLevelWindow().ToSharedRef();
     bool bStarted = LocalizationCommandletTasks::GatherTextForTarget(ParentWindow, Target);
 
@@ -201,7 +196,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleRunTextGather(
 
 // ---------------------------------------------------------------------------
 // export_po_files — Export PO files for a localization target.
-// UE 5.7 API: LocalizationCommandletTasks::ExportTextForTarget()
+// UE 5.7 API: LocalizationCommandletTasks::ExportTextForTarget
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleExportPoFiles(const TSharedPtr<FJsonObject>& Params)
 {
@@ -233,7 +228,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleExportPoFiles(
 
 // ---------------------------------------------------------------------------
 // import_po_files — Import PO files for a localization target.
-// UE 5.7 API: LocalizationCommandletTasks::ImportTextForTarget()
+// UE 5.7 API: LocalizationCommandletTasks::ImportTextForTarget
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleImportPoFiles(const TSharedPtr<FJsonObject>& Params)
 {
@@ -264,8 +259,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleImportPoFiles(
 }
 
 // ---------------------------------------------------------------------------
-// localization_create_string_table — Create a UStringTable asset.
-// UE 5.7 API: FStringTableRegistry::Get(), NewObject<UStringTable>()
+// localization_create_string_table — Create a new UStringTable asset.
+// UE 5.7 API: UStringTable, NewObject, CreatePackage
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCreateStringTable(const TSharedPtr<FJsonObject>& Params)
 {
@@ -281,12 +276,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCreateStringTa
 
     const FString FullPath = AssetPath / AssetName;
 
-    // Check if asset already exists
     UStringTable* Existing = LoadObject<UStringTable>(nullptr, *FullPath);
-    if (Existing)
-    {
-        return LocErr(FString::Printf(TEXT("StringTable asset already exists at '%s'."), *FullPath));
-    }
+    if (Existing) return LocErr(FString::Printf(TEXT("StringTable asset already exists at '%s'."), *FullPath));
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: localization_create_string_table"));
 
@@ -296,14 +287,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCreateStringTa
     UStringTable* NewTable = NewObject<UStringTable>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
     if (!NewTable) return LocErr(TEXT("NewObject<UStringTable> returned null."));
 
-    NewTable->SetNamespace(FTextKey(*AssetName));
     NewTable->MarkPackageDirty();
     Pkg->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("localization_create_string_table"));
     Data->SetStringField(TEXT("asset_path"), NewTable->GetPathName());
-    Data->SetStringField(TEXT("namespace"), AssetName);
     Data->SetBoolField(TEXT("executed"), true);
     return LocOk(Data);
 }
@@ -317,20 +306,17 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleEditStringTabl
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("edit_string_table"));
 
     FString AssetPath;
+    const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetArrayField(TEXT("entries"), Entries);
     }
     if (AssetPath.IsEmpty()) return LocErr(TEXT("edit_string_table: 'asset_path' is required."));
+    if (!Entries || Entries->Num() == 0) return LocErr(TEXT("edit_string_table: 'entries' array is required and must not be empty."));
 
     UStringTable* Table = LoadObject<UStringTable>(nullptr, *AssetPath);
-    if (!Table) return LocErr(FString::Printf(TEXT("StringTable not found at '%s'."), *AssetPath));
-
-    const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
-    if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("entries"), Entries) || !Entries || Entries->Num() == 0)
-    {
-        return LocErr(TEXT("edit_string_table: 'entries' is required and must be non-empty."));
-    }
+    if (!Table) return LocErr(FString::Printf(TEXT("Could not load StringTable at '%s'."), *AssetPath));
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: edit_string_table"));
     Table->Modify();
@@ -361,11 +347,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleEditStringTabl
 }
 
 // ---------------------------------------------------------------------------
-// localize_widget_text — Add a text localization key to a widget via UMG.
-// UE 5.7 API: FTextLocalizationManager, LOCTABLE macros
-//
-// This handler registers a string table entry so that the widget text can
-// reference it via LOCTABLE(table_id, key) at runtime.
+// localize_widget_text — Register a localized text key for widget use.
+// UE 5.7 API: FMetaData, UObject metadata
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeWidgetText(const TSharedPtr<FJsonObject>& Params)
 {
@@ -384,31 +367,28 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeWidget
     if (TextId.IsEmpty()) return LocErr(TEXT("localize_widget_text: 'text_id' is required."));
     if (Translation.IsEmpty()) return LocErr(TEXT("localize_widget_text: 'translation' is required."));
 
-    // Register the translation in the text localization manager
-    // The text_id is expected to be "namespace.key" or just "key"
-    FString Namespace, Key;
-    if (!TextId.Split(TEXT("."), &Namespace, &Key))
-    {
-        Namespace = TEXT("MCPWidgets");
-        Key = TextId;
-    }
+    UObject* WidgetObj = LoadObject<UObject>(nullptr, *WidgetPath);
+    if (!WidgetObj) return LocErr(FString::Printf(TEXT("Could not load widget at '%s'."), *WidgetPath));
 
-    FTextLocalizationManager& LocMgr = FTextLocalizationManager::Get();
-    LocMgr.RegisterStringTableEntry(*Namespace, *Key, *Translation);
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: localize_widget_text"));
+    WidgetObj->Modify();
+
+    FString MetaKey = FString::Printf(TEXT("MCP.loc.%s"), *TextId);
+    FMetaData::SetObjectMetaData(WidgetObj, *MetaKey, *Translation);
+    WidgetObj->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("localize_widget_text"));
     Data->SetStringField(TEXT("widget_path"), WidgetPath);
     Data->SetStringField(TEXT("text_id"), TextId);
-    Data->SetStringField(TEXT("namespace"), Namespace);
-    Data->SetStringField(TEXT("key"), Key);
+    Data->SetStringField(TEXT("translation"), Translation);
     Data->SetBoolField(TEXT("executed"), true);
     return LocOk(Data);
 }
 
 // ---------------------------------------------------------------------------
-// localize_dialogue_wave — Register a localized dialogue wave.
-// UE 5.7 API: FTextLocalizationManager, FInternationalization::Get().GetCulture()
+// localize_dialogue_wave — Mark a dialogue wave asset for localization.
+// UE 5.7 API: FMetaData, FInternationalization::Get().GetCulture()
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeDialogueWave(const TSharedPtr<FJsonObject>& Params)
 {
@@ -424,21 +404,18 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeDialog
     if (DialogueWavePath.IsEmpty()) return LocErr(TEXT("localize_dialogue_wave: 'dialogue_wave_path' is required."));
     if (CultureCode.IsEmpty()) return LocErr(TEXT("localize_dialogue_wave: 'culture_code' is required."));
 
-    // Validate culture exists
     TSharedPtr<FCulture> Culture = FInternationalization::Get().GetCulture(CultureCode);
     if (!Culture.IsValid()) return LocErr(FString::Printf(TEXT("Invalid culture code '%s'."), *CultureCode));
 
-    // Load the dialogue wave asset
-    UObject* DialogueWaveObj = LoadObject<UObject>(nullptr, *DialogueWavePath);
-    if (!DialogueWaveObj) return LocErr(FString::Printf(TEXT("Could not load object at '%s'."), *DialogueWavePath));
+    UObject* DlgWave = LoadObject<UObject>(nullptr, *DialogueWavePath);
+    if (!DlgWave) return LocErr(FString::Printf(TEXT("Could not load dialogue wave at '%s'."), *DialogueWavePath));
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: localize_dialogue_wave"));
-    DialogueWaveObj->Modify();
+    DlgWave->Modify();
 
-    // Set metadata for the culture on the dialogue wave object
     FString MetaKey = FString::Printf(TEXT("Localization_%s"), *CultureCode);
-    FMetaData::SetObjectMetaData(DialogueWaveObj, *MetaKey, TEXT("true"));
-    DialogueWaveObj->MarkPackageDirty();
+    FMetaData::SetObjectMetaData(DlgWave, *MetaKey, TEXT("true"));
+    DlgWave->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("localize_dialogue_wave"));
@@ -449,8 +426,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeDialog
 }
 
 // ---------------------------------------------------------------------------
-// configure_font_fallback — Configure font fallback chain for localization.
-// UE 5.7 API: FTextLocalizationManager, engine ini persistence via TryUpdateDefaultConfigFileSafe()
+// configure_font_fallback — Persist font fallback chain to engine ini.
+// UE 5.7 API: GConfig->SetString, GEngineIni
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleConfigureFontFallback(const TSharedPtr<FJsonObject>& Params)
 {
@@ -469,7 +446,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleConfigureFontF
         return LocErr(TEXT("configure_font_fallback: 'fallback_fonts' is required and must be non-empty."));
     }
 
-    // Build fallback chain info for the response
     TArray<FString> ResolvedFonts;
     for (const TSharedPtr<FJsonValue>& Entry : *FallbackFonts)
     {
@@ -478,12 +454,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleConfigureFontF
         if (!FontName.IsEmpty()) ResolvedFonts.Add(FontName);
     }
 
-    if (ResolvedFonts.Num() == 0)
-    {
-        return LocErr(TEXT("configure_font_fallback: no valid font names in 'fallback_fonts'."));
-    }
+    if (ResolvedFonts.Num() == 0) return LocErr(TEXT("configure_font_fallback: no valid font names in 'fallback_fonts'."));
 
-    // Persist to engine ini via the standard UE 5.7 config path
     GConfig->SetString(TEXT("Internationalization"), TEXT("FontFallback"), *FontPath, GEngineIni);
     for (int32 i = 0; i < ResolvedFonts.Num(); ++i)
     {
