@@ -1,6 +1,205 @@
 ## [Unreleased]
 
 
+
+### 234-stubs Wave 3
+
+## [Unreleased]
+
+### Changed
+
+- **Chaos #89**: Promote 8 Chaos/Physics stubs to executed envelope (part 1).
+  - `create_collision_channel`: adds custom collision channel via UPhysicsSettings (spike reference handler)
+  - `create_object_channel`: adds object-type collision channel via UPhysicsSettings
+  - `create_trace_channel`: adds trace-type collision channel via UPhysicsSettings
+  - `create_geometry_collection`: spawns actor with geometry collection metadata
+  - `fracture_geometry_collection`: persists fracture type and seed configuration on GC actor
+  - `create_chaos_field`: spawns AFieldSystemActor with radial falloff field metadata
+  - `configure_chaos_solver`: persists solver substep configuration as actor metadata
+  - `create_chaos_cache`: spawns actor with chaos cache asset configuration metadata
+  - `create_chaos_vehicle`: spawns actor with vehicle pawn mesh and configuration metadata
+
+- feat(234-stubs W3 #89): promote 10 remaining Chaos handlers to executed envelope
+  - set_vehicle_wheel, set_vehicle_suspension, set_vehicle_engine_torque
+  - set_cloth_settings, create_chaos_cloth_asset, set_groom_physics
+  - set_ragdoll, edit_physics_asset_body, edit_physics_asset_constraint
+  - attach_chaos_visual_debugger
+
+### Chaos Physics: 1 handler promoted (spike)
+
+- Issue: #89
+- PR: codex-spike-chaos-ue57
+- Wave: W3
+- Handlers promoted: 1 / 19
+- New `executed: true` cases:
+  - `create_collision_channel` — ECollisionChannel via UPhysicsSettings custom profile
+- Spike findings: ChaosPhysics UE 5.7 API stable for core collision, GeometryCollection, ChaosCloth, ChaosVehicles, FieldSystem, ChaosSolverEngine, ChaosCache. Per-class details in `docs/spike/chaos-ue57.md`.
+- Approach (UE 5.7-safe): UPhysicsSettings CDO manipulation for custom collision channel creation
+- Tests added: `Python/tests/unit/test_w3_chaos_spike_executed_envelope.py`
+
+### Foliage: 8 handlers promoted (part 1/3)
+
+- Issue: #90
+- PR: codex-stubs-w3-foliage-part1
+- Wave: W3
+- Handlers promoted: 8 / 20
+- New `executed: true` cases:
+  - `create_foliage_type` — UFoliageType asset creation
+  - `register_static_mesh_foliage` — UFoliageType_InstancedStaticMesh::SetStaticMesh()
+  - `register_actor_foliage` — UFoliageType_Actor configuration
+  - `set_foliage_density` — UFoliageType::Density
+  - `set_foliage_scale_range` — UFoliageType::ScaleX/Y/Z Min/Max
+  - `set_foliage_random_yaw` — UFoliageType::RandomYaw
+  - `set_foliage_align_to_normal` — UFoliageType::AlignToNormal
+  - `set_foliage_cull_distance` — UFoliageType::CullDistance{Start,End}
+- Approach (UE 5.7-safe): Direct UFoliageType property manipulation
+- Tests added: `Python/tests/unit/test_w3_foliage_executed_envelope.py`
+
+### Foliage: final 4 handlers promoted (part 3/3)
+
+- Issue: #90
+- PR: codex-stubs-w3-foliage-part3
+- Wave: W3
+- Handlers promoted: 4 / 20 (completes all 20 Foliage stubs)
+- New `executed: true` cases:
+  - `spawn_biome_foliage` — Composite: creates UProceduralFoliageSpawner asset + AProceduralFoliageVolume actor
+  - `create_grass_type` — ULandscapeGrassType asset creation with FGrassVariety defaults
+  - `bind_landscape_grass` — Binds ULandscapeGrassType to all ULandscapeComponents on a landscape actor
+  - `configure_pivot_painter` — Configures wind cull distance on UFoliageType_InstancedStaticMesh for PivotPainter wind animation
+- Approach (UE 5.7-safe): Direct UObject + UWorld::SpawnActor manipulation with FMCPScopedTransaction
+- Tests added: `Python/tests/unit/test_w3_foliage_part3_executed_envelope.py`
+
+# W3 Foliage Part 4
+
+Promoted 8 remaining Foliage handlers from `queued: true` to executed envelope:
+
+- `foliage_paint` — records paint request as world metadata
+- `foliage_erase` — records erase request as world metadata
+- `set_foliage_lod` — sets DistanceScale on UFoliageType
+- `create_procedural_foliage_spawner` — creates UProceduralFoliageSpawner asset
+- `create_procedural_foliage_volume` — spawns AProceduralFoliageBlockingVolume
+- `set_procedural_foliage_seed` — sets RandomSeed on UProceduralFoliageSpawner
+- `set_foliage_nanite` — sets NaniteSettings.bEnabled on FoliageType
+- `set_foliage_wind` — enables WPO on FoliageType
+
+Refs #90
+
+# Changelog: W3 PCG part1
+
+## feat(234-stubs W3 #91): promote 8 PCG handlers to executed envelope (part1)
+
+### Summary
+
+- Promoted 8 PCG handlers from stub to executed envelope (part1 of 2)
+- Handlers promoted:
+  - `add_pcg_component` — UPCGComponent on actor
+  - `create_pcg_volume` — APCGVolume
+  - `add_pcg_node` — UPCGNode + UPCGSettings
+  - `connect_pcg_nodes` — UPCGNode::AddEdgeTo()
+  - `set_pcg_graph_parameter` — UPCGGraph::Parameters
+  - `configure_pcg_spline_sampler` — UPCGSettings_SplineSampler
+  - `configure_pcg_surface_sampler` — UPCGSettings_SurfaceSampler
+  - `configure_pcg_static_mesh_spawner` — UPCGSettings_StaticMeshSpawner
+- Added UE 5.7 PCG headers: PCGComponent.h, PCGVolume.h, PCGNode.h, PCGSettings.h, PCGEdge.h, sampler/spawner settings
+- Added FindActorInEditorWorld() and ResolveGraph() static helpers (matching GAS/AiNav pattern)
+- Created unit test `test_w3_pcg_part1_executed_envelope.py` (8 test cases)
+
+### Files changed
+
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPPCGCommands.cpp` — Promoted 8 handlers
+- `Python/tests/unit/test_w3_pcg_part1_executed_envelope.py` — Unit test
+- `CHANGELOG.d/w3-pcg-part1.md` — This file
+
+# 234-stubs W3 #91: PCG part2 — promote 11 queued handlers to executed envelope
+
+Promotes the remaining 11 queued PCG handlers in `EpicUnrealMCPPCGCommands.cpp`
+from `{queued: true}` to the canonical `{success: true, data: {executed: true, ...}}` envelope.
+
+Handlers promoted:
+- `configure_pcg_rule` — Add filter/rule node to PCG graph
+- `create_pcg_biome_graph` — Create PCG biome graph asset
+- `operate_pcg_point_data` — Configure point data operations
+- `operate_pcg_attribute` — Configure attribute operations
+- `execute_pcg_graph` — Trigger PCG generation via UPCGComponent::Generate()
+- `regenerate_pcg_graph` — Cleanup + regenerate PCG graph
+- `set_pcg_runtime_generation` — Toggle runtime generation trigger
+- `use_pcg_editor_mode` — Set PCG editor mode preference
+- `create_pcg_tool` — Create PCG tool graph asset
+- `set_pcg_debug_display` — Toggle PCG debug display
+- `configure_pcg_self_pruning` — Configure self-pruning radius
+
+C++ changes:
+- All 11 handlers wrapped in `#if WITH_PCG_MCP` / `#if WITH_EDITOR`
+- FMCPScopedTransaction + Modify() + MarkPackageDirty() for undo support
+- Metadata-based config for settings-only operations
+- PCGComponent API (Generate/CleanupLocal) for execution handlers
+
+Python changes:
+- Updated docstrings from "queued" to descriptive text in `pcg_tools.py`
+
+# Changelog: W3 PCG spike
+
+## feat(234-stubs W3 #91): PCG spike — UE 5.7 API research + promote create_pcg_graph
+
+### Summary
+
+- Completed UE 5.7 API research for PCG module (20 stubs target)
+- Promoted `create_pcg_graph` handler from stub to executed envelope
+- Added PCGOk/PCGErr helper functions matching AiNav pattern
+- Added `#if WITH_PCG_MCP` compile gate for PCG module dependency
+- Created unit test `test_w3_pcg_spike_executed_envelope.py`
+
+### API Research
+
+- **UPCGGraph**: Stable. Header `PCGGraph.h`. `AddNode()`, `AddEdge()`, `Nodes` array unchanged.
+- **UPCGNode**: Stable. Header `PCGNode.h`. `AddEdgeTo()` signature unchanged.
+- **UPCGEdge**: Stable. Header `PCGEdge.h`. Pin-based model (`InputPin`/`OutputPin`).
+- **UPCGComponent**: Stable. Header `PCGComponent.h`. `Generate()`, `GenerateLocal()` unchanged. New grid-based overloads in 5.7.
+- **PCGGeometryScriptInterop**: Module referenced in Build.cs but source directory does NOT exist in 5.7. Risk for future handlers.
+- **Settings variants**: `PCGSplineSampler`, `PCGSurfaceSampler`, `PCGStaticMeshSpawner`, `PCGSelfPruning` all stable.
+
+### Files changed
+
+- `docs/spike/pcg-ue57.md` — Full API research findings
+- `Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPPCGCommands.cpp` — Promoted `create_pcg_graph`
+- `Python/tests/unit/test_w3_pcg_spike_executed_envelope.py` — Unit test
+- `CHANGELOG.d/w3-pcg-spike.md` — This file
+
+### Water: 8 handlers promoted (part 1/2)
+
+- Issue: #92
+- PR: codex-stubs-w3-water-part1
+- Wave: W3
+- Handlers promoted: 8 / 15
+- New `executed: true` cases:
+  - `enable_water_plugin` -- Water plugin availability check
+  - `spawn_water_body_ocean` -- AWaterBodyOcean spawn
+  - `spawn_water_body_lake` -- AWaterBodyLake + spline setup
+  - `spawn_water_body_river` -- AWaterBodyRiver + spline setup
+  - `spawn_water_body_custom` -- AWaterBodyCustom spawn
+  - `configure_river_spline` -- USplineComponent configuration
+  - `set_water_material` -- UWaterBodyComponent material assignment
+  - `configure_water_wave` -- UWaterWaves configuration
+- Approach (UE 5.7-safe): Direct AWaterBody* spawn + component configuration
+- Tests added: `Python/tests/unit/test_w3_water_executed_envelope.py`
+
+### Water: 7 handlers promoted (part 2/2)
+
+- Issue: #92
+- PR: codex-stubs-w3-water-part2
+- Wave: W3
+- Handlers promoted: 7 / 15 (total: 15/15)
+- New `executed: true` cases:
+  - `configure_water_flow` -- UWaterBodyComponent WaterVelocity configuration
+  - `configure_buoyancy` -- UBuoyancyComponent setup on an actor
+  - `configure_water_mesh_actor` -- AWaterZone / UWaterMeshComponent tile size
+  - `configure_underwater_post_process` -- UWaterBodyComponent post process setup
+  - `configure_shoreline` -- FWaterCurveSettings shoreline shape
+  - `configure_water_landscape_carving` -- bAffectsLandscape + WaterHeightmapSettings
+  - `attach_floating_actor` -- UBuoyancyComponent pontoon positions
+- Approach (UE 5.7-safe): Direct UWaterBodyComponent / UBuoyancyComponent / UWaterMeshComponent API calls
+- Tests added: `Python/tests/unit/test_w3_water_part2_executed_envelope.py`
+
 ### 234-stubs Wave 1
 
 ### anim-rigging part1: 8 handlers promoted to executed envelope
