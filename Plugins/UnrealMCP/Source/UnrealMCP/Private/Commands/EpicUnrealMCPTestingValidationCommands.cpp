@@ -418,15 +418,35 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleRunGamepl
 TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleRunPythonUnitTest(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("run_python_unit_test"));
+
+    FString TestPath = TEXT("Python/tests/unit");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("test_path"), TestPath);
+    }
+
+    FString PythonExe = FPaths::ConvertRelativePathToFull(
+        FPaths::ProjectDir() / TEXT("Python") / TEXT("venv") / TEXT("Scripts") / TEXT("python.exe"));
+    if (!FPaths::FileExists(PythonExe))
+        PythonExe = TEXT("python");
+
+    FString Args = FString::Printf(TEXT("-m pytest %s --tb=short -q"), *TestPath);
+    int32 ReturnCode = -1;
+    FString StdOut;
+    FString StdErr;
+    FPlatformProcess::ExecProcess(*PythonExe, *Args, &ReturnCode, &StdOut, &StdErr);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("run_python_unit_test"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; FAutomationTestFramework runs asynchronously."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("test_path"), TestPath);
+    Data->SetNumberField(TEXT("exit_code"), ReturnCode);
+    Data->SetBoolField(TEXT("passed"), ReturnCode == 0);
+    if (!StdOut.IsEmpty())
+        Data->SetStringField(TEXT("stdout"), StdOut.Left(2048));
+    if (!StdErr.IsEmpty())
+        Data->SetStringField(TEXT("stderr"), StdErr.Left(1024));
+    Data->SetBoolField(TEXT("executed"), true);
+    return TvOk(Data);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,13 +455,35 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleRunPython
 TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleRunRustTest(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("run_rust_test"));
+
+    FString TestFilter;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("test_filter"), TestFilter);
+    }
+
+    FString CargoExe = TEXT("cargo");
+    int32 ReturnCode = -1;
+    FString StdOut;
+    FString StdErr;
+
+    FString Args = TEXT("test");
+    if (!TestFilter.IsEmpty())
+        Args += FString::Printf(TEXT(" %s"), *TestFilter);
+    Args += TEXT(" -- --nocapture");
+
+    FPlatformProcess::ExecProcess(*CargoExe, *Args, &ReturnCode, &StdOut, &StdErr);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("run_rust_test"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; FAutomationTestFramework runs asynchronously."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    if (!TestFilter.IsEmpty())
+        Data->SetStringField(TEXT("test_filter"), TestFilter);
+    Data->SetNumberField(TEXT("exit_code"), ReturnCode);
+    Data->SetBoolField(TEXT("passed"), ReturnCode == 0);
+    if (!StdOut.IsEmpty())
+        Data->SetStringField(TEXT("stdout"), StdOut.Left(2048));
+    if (!StdErr.IsEmpty())
+        Data->SetStringField(TEXT("stderr"), StdErr.Left(1024));
+    Data->SetBoolField(TEXT("executed"), true);
+    return TvOk(Data);
 }
