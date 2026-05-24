@@ -6,6 +6,17 @@
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/IConsoleManager.h"
 
+#if WITH_EDITOR
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Pawn.h"
+#include "Components/MotionControllerComponent.h"
+#include "Components/SceneComponent.h"
+#include "Camera/CameraComponent.h"
+#include "UObject/Package.h"
+#include "Editor.h"
+#endif
+
 // ---------------------------------------------------------------------------
 // 234-stubs W5 (#100): Mobile/XR executed-envelope helpers.
 // ---------------------------------------------------------------------------
@@ -324,15 +335,46 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureOpenxr(co
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleSpawnVrPawn(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("spawn_vr_pawn"));
+
+#if WITH_EDITOR
+    FString ActorName = TEXT("VRPawn");
+    FString AssetPath;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    }
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+        return XrErr(TEXT("spawn_vr_pawn: No editor world available."));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_vr_pawn"));
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = FName(*ActorName);
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    APawn* NewPawn = World->SpawnActor<APawn>(APawn::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+    if (!NewPawn)
+        return XrErr(FString::Printf(TEXT("spawn_vr_pawn: Failed to spawn actor '%s'."), *ActorName));
+
+    NewPawn->SetActorLabel(ActorName);
+
+    USceneComponent* VRRoot = NewObject<USceneComponent>(NewPawn, TEXT("VRRoot"));
+    VRRoot->SetupAttachment(NewPawn->GetRootComponent());
+    VRRoot->RegisterComponent();
+    NewPawn->SetRootComponent(VRRoot);
+    NewPawn->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("spawn_vr_pawn"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), ActorName);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("spawn_vr_pawn: requires WITH_EDITOR."));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -341,15 +383,55 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleSpawnVrPawn(const 
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureMotionController(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_motion_controller"));
+
+#if WITH_EDITOR
+    FString ActorName;
+    FString Hand = TEXT("Right");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetStringField(TEXT("hand"), Hand);
+    }
+
+    if (ActorName.IsEmpty())
+        return XrErr(TEXT("configure_motion_controller: 'actor_name' is required."));
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+        return XrErr(TEXT("configure_motion_controller: No editor world available."));
+
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+
+    if (!TargetActor)
+        return XrErr(FString::Printf(TEXT("configure_motion_controller: Actor '%s' not found."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_motion_controller"));
+    TargetActor->Modify();
+
+    UMotionControllerComponent* MC = NewObject<UMotionControllerComponent>(TargetActor, TEXT("MotionController"));
+    MC->SetTrackingMotionSource(FName(Hand));
+    MC->SetupAttachment(TargetActor->GetRootComponent());
+    MC->RegisterComponent();
+    TargetActor->AddInstanceComponent(MC);
+    TargetActor->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_motion_controller"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), ActorName);
+    Data->SetStringField(TEXT("hand"), Hand);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("configure_motion_controller: requires WITH_EDITOR."));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -358,15 +440,51 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureMotionCon
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureHmdCamera(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_hmd_camera"));
+
+#if WITH_EDITOR
+    FString ActorName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+    }
+
+    if (ActorName.IsEmpty())
+        return XrErr(TEXT("configure_hmd_camera: 'actor_name' is required."));
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+        return XrErr(TEXT("configure_hmd_camera: No editor world available."));
+
+    AActor* TargetActor = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            TargetActor = *It;
+            break;
+        }
+    }
+
+    if (!TargetActor)
+        return XrErr(FString::Printf(TEXT("configure_hmd_camera: Actor '%s' not found."), *ActorName));
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_hmd_camera"));
+    TargetActor->Modify();
+
+    UCameraComponent* HmdCamera = NewObject<UCameraComponent>(TargetActor, TEXT("HMD_Camera"));
+    HmdCamera->SetupAttachment(TargetActor->GetRootComponent());
+    HmdCamera->RegisterComponent();
+    TargetActor->AddInstanceComponent(HmdCamera);
+    TargetActor->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_hmd_camera"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), ActorName);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("configure_hmd_camera: requires WITH_EDITOR."));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -375,15 +493,29 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureHmdCamera
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArSession(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_ar_session"));
+
+#if WITH_EDITOR
+    FString WorldAlignment = TEXT("Gravity");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("world_alignment"), WorldAlignment);
+    }
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_ar_session"));
+
+    const FString Section = TEXT("/Script/ARSessionConfig.ARSessionConfig");
+    GConfig->SetString(*Section, TEXT("WorldAlignment"), *WorldAlignment, GEngineIni);
+    GConfig->Flush(false, GEngineIni);
+    TryUpdateDefaultConfigFile(GEngineIni);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_ar_session"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("world_alignment"), WorldAlignment);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("configure_ar_session: requires WITH_EDITOR."));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -392,15 +524,33 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArSession
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArPlaneDetection(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_ar_plane_detection"));
+
+#if WITH_EDITOR
+    bool bHorizontal = true;
+    bool bVertical = false;
+    if (Params.IsValid())
+    {
+        Params->TryGetBoolField(TEXT("horizontal"), bHorizontal);
+        Params->TryGetBoolField(TEXT("vertical"), bVertical);
+    }
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_ar_plane_detection"));
+
+    const FString Section = TEXT("/Script/ARSessionConfig.ARSessionConfig");
+    GConfig->SetBool(*Section, TEXT("bHorizontalPlaneDetection"), bHorizontal, GEngineIni);
+    GConfig->SetBool(*Section, TEXT("bVerticalPlaneDetection"), bVertical, GEngineIni);
+    GConfig->Flush(false, GEngineIni);
+    TryUpdateDefaultConfigFile(GEngineIni);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_ar_plane_detection"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetBoolField(TEXT("horizontal"), bHorizontal);
+    Data->SetBoolField(TEXT("vertical"), bVertical);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("configure_ar_plane_detection: requires WITH_EDITOR."));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -409,13 +559,30 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArPlaneDe
 TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandlePlatformSpecificPackaging(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("platform_specific_packaging"));
+
+#if WITH_EDITOR
+    FString Platform = TEXT("Android");
+    FString BuildConfiguration = TEXT("Shipping");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("platform"), Platform);
+        Params->TryGetStringField(TEXT("build_configuration"), BuildConfiguration);
+    }
+
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: platform_specific_packaging"));
+
+    const FString Section = FString::Printf(TEXT("/Script/%s.%sRuntimeSettings"), *Platform, *Platform);
+    GConfig->SetString(*Section, TEXT("BuildConfiguration"), *BuildConfiguration, GEngineIni);
+    GConfig->Flush(false, GEngineIni);
+    TryUpdateDefaultConfigFile(GEngineIni);
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("platform_specific_packaging"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; the bridge persists ini changes via TryUpdateDefaultConfigFile()."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("platform"), Platform);
+    Data->SetStringField(TEXT("build_configuration"), BuildConfiguration);
+    Data->SetBoolField(TEXT("executed"), true);
+    return XrOk(Data);
+#else
+    return XrErr(TEXT("platform_specific_packaging: requires WITH_EDITOR."));
+#endif
 }
