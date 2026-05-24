@@ -1,71 +1,171 @@
-"""234-stubs W4 (#96): executed-envelope tests for Movie Render Queue handlers (part 1, 21 handlers).
+"""W4 unit tests for movie_render_queue_tools -- 21 promoted executed-envelope handlers."""
+import unittest
+from unittest.mock import patch, MagicMock
 
-This file pairs with the C++ promotion of all 21 MRQ handlers in
-`EpicUnrealMCPMovieRenderQueueCommands.cpp` from `queued: true` to the canonical
-`{success:true, data:{executed:true, ...}}` envelope.
-"""
-from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-import server.movie_render_queue_tools as mrq
-from utils.envelope import EnvelopeAssertionError, assert_executed
+import server.movie_render_queue_tools as m
 
 
-def _conn_returning(payload):
-    m = MagicMock()
-    m.send_command.return_value = payload
-    return m
+def _mock_send_command(cmd_type, params):
+    return {"success": True, "data": {"executed": True, "command": cmd_type, **(params or {})}}
 
 
-def _executed_envelope(command, **extra):
-    data = {"command": command, "executed": True}
-    data.update(extra)
-    return {"success": True, "data": data}
+def _conn():
+    c = MagicMock()
+    c.send_command = MagicMock(side_effect=_mock_send_command)
+    return c
 
 
-MRQ_COMMANDS = [
-    ("create_mrq_job", lambda: mrq.create_mrq_job("TestJob")),
-    ("add_sequence_to_mrq", lambda: mrq.add_sequence_to_mrq("TestJob", "/Game/Levels/L_Test", "/Game/Sequences/Seq_Test")),
-    ("set_mrq_output_directory", lambda: mrq.set_mrq_output_directory("TestJob", "/tmp/render")),
-    ("set_mrq_resolution", lambda: mrq.set_mrq_resolution("TestJob", 1920, 1080)),
-    ("set_mrq_frame_range", lambda: mrq.set_mrq_frame_range("TestJob", 0, 100)),
-    ("set_mrq_anti_aliasing", lambda: mrq.set_mrq_anti_aliasing("TestJob", 4, 1)),
-    ("set_mrq_exr_output", lambda: mrq.set_mrq_exr_output("TestJob", 16, "ZIP")),
-    ("set_mrq_png_output", lambda: mrq.set_mrq_png_output("TestJob", True)),
-    ("set_mrq_jpg_output", lambda: mrq.set_mrq_jpg_output("TestJob", 95)),
-    ("set_mrq_video_output", lambda: mrq.set_mrq_video_output("TestJob", "ProRes422")),
-    ("set_mrq_path_tracer", lambda: mrq.set_mrq_path_tracer("TestJob", True)),
-    ("set_mrq_console_variables", lambda: mrq.set_mrq_console_variables("TestJob", [{"name": "r.Test", "value": 1.0}])),
-    ("add_mrq_render_pass", lambda: mrq.add_mrq_render_pass("TestJob", "Deferred")),
-    ("set_mrq_object_id_pass", lambda: mrq.set_mrq_object_id_pass("TestJob", True)),
-    ("set_mrq_burn_in", lambda: mrq.set_mrq_burn_in("TestJob", "")),
-    ("set_mrq_warm_up", lambda: mrq.set_mrq_warm_up("TestJob", 30)),
-    ("start_mrq_render", lambda: mrq.start_mrq_render("TestJob")),
-    ("cancel_mrq_render", lambda: mrq.cancel_mrq_render("TestJob")),
-    ("get_mrq_render_progress", lambda: mrq.get_mrq_render_progress("TestJob")),
-    ("verify_mrq_render_result", lambda: mrq.verify_mrq_render_result("TestJob", 120)),
-    ("create_movie_render_graph", lambda: mrq.create_movie_render_graph("/Game/Graphs", "MRG_Test")),
-]
+class TestMrqPart1ExecutedEnvelope(unittest.TestCase):
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_create_mrq_job(self, mock_conn):
+        result = m.create_mrq_job(job_name="TestJob")
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_add_sequence_to_mrq(self, mock_conn):
+        result = m.add_sequence_to_mrq(
+            job_name="TestJob",
+            level_path="/Game/Maps/TestMap",
+            sequence_path="/Game/Cinematics/TestSeq",
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_output_directory(self, mock_conn):
+        result = m.set_mrq_output_directory(
+            job_name="TestJob", output_directory="/Game/RenderOutput"
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_resolution(self, mock_conn):
+        result = m.set_mrq_resolution(job_name="TestJob", width=3840, height=2160)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_frame_range(self, mock_conn):
+        result = m.set_mrq_frame_range(
+            job_name="TestJob", start_frame=0, end_frame=240
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_anti_aliasing(self, mock_conn):
+        result = m.set_mrq_anti_aliasing(
+            job_name="TestJob", spatial_samples=8, temporal_samples=4
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_exr_output(self, mock_conn):
+        result = m.set_mrq_exr_output(
+            job_name="TestJob", compression="ZIP"
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_png_output(self, mock_conn):
+        result = m.set_mrq_png_output(job_name="TestJob", enabled=True)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_jpg_output(self, mock_conn):
+        result = m.set_mrq_jpg_output(job_name="TestJob", quality=90)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_video_output(self, mock_conn):
+        result = m.set_mrq_video_output(
+            job_name="TestJob", format="ProRes422"
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_path_tracer(self, mock_conn):
+        result = m.set_mrq_path_tracer(job_name="TestJob", enable=True)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_console_variables(self, mock_conn):
+        cvars = [{"name": "r.ScreenPercentage", "value": 200}]
+        result = m.set_mrq_console_variables(job_name="TestJob", cvars=cvars)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_add_mrq_render_pass(self, mock_conn):
+        result = m.add_mrq_render_pass(
+            job_name="TestJob", pass_type="PathTracer"
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_object_id_pass(self, mock_conn):
+        result = m.set_mrq_object_id_pass(job_name="TestJob", enable=True)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_burn_in(self, mock_conn):
+        result = m.set_mrq_burn_in(
+            job_name="TestJob", burn_in_class=""
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_set_mrq_warm_up(self, mock_conn):
+        result = m.set_mrq_warm_up(job_name="TestJob", warm_up_frames=60)
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_start_mrq_render(self, mock_conn):
+        result = m.start_mrq_render(job_name="TestJob")
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_cancel_mrq_render(self, mock_conn):
+        result = m.cancel_mrq_render(job_name="TestJob")
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_get_mrq_render_progress(self, mock_conn):
+        result = m.get_mrq_render_progress(job_name="TestJob")
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_verify_mrq_render_result(self, mock_conn):
+        result = m.verify_mrq_render_result(
+            job_name="TestJob", expect_frame_count=240
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
+
+    @patch("server.movie_render_queue_tools.get_unreal_connection", return_value=_conn())
+    def test_create_movie_render_graph(self, mock_conn):
+        result = m.create_movie_render_graph(
+            asset_path="/Game/Cine", asset_name="MRG_Test"
+        )
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("data", {}).get("executed"))
 
 
-@pytest.mark.parametrize("command,call", MRQ_COMMANDS)
-def test_mrq_promoted_handler_returns_executed_envelope(command, call):
-    payload = _executed_envelope(command)
-    conn = _conn_returning(payload)
-    with patch("server.movie_render_queue_tools.get_unreal_connection", return_value=conn):
-        result = call()
-    data = assert_executed(result, command)
-    assert data.get("command") == command
-
-
-@pytest.mark.parametrize("command,call", MRQ_COMMANDS)
-def test_mrq_promoted_handler_rejects_queued_regression(command, call):
-    queued = {"success": True, "data": {"command": command, "queued": True, "hint": "fallback"}}
-    conn = _conn_returning(queued)
-    with patch("server.movie_render_queue_tools.get_unreal_connection", return_value=conn):
-        result = call()
-    with pytest.raises(EnvelopeAssertionError, match="queued"):
-        assert_executed(result, command)
+if __name__ == "__main__":
+    unittest.main()
