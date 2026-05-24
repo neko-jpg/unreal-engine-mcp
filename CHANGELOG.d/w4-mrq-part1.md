@@ -1,0 +1,30 @@
+### Movie Render Queue: 21 handlers promoted (part 1)
+
+- Issue: #96
+- PR: codex-stubs-w4-mrq-part1
+- Wave: W4
+- Handlers promoted: 21 / 21
+- New `executed: true` cases:
+  - `create_mrq_job` -- UMoviePipelineQueue::AllocateNewJob
+  - `add_sequence_to_mrq` -- UMoviePipelineExecutorJob::SetSequence + Map
+  - `set_mrq_output_directory` -- UMoviePipelineOutputSetting::OutputDirectory
+  - `set_mrq_resolution` -- UMoviePipelineOutputSetting::OutputResolution
+  - `set_mrq_frame_range` -- UMoviePipelineOutputSetting::CustomStartFrame/CustomEndFrame
+  - `set_mrq_anti_aliasing` -- UMoviePipelineAntiAliasingSetting::SpatialSampleCount/TemporalSampleCount
+  - `set_mrq_exr_output` -- UMoviePipelineImageSequenceOutput_EXR::Compression
+  - `set_mrq_png_output` -- UMoviePipelineImageSequenceOutput_PNG enable/disable
+  - `set_mrq_jpg_output` -- UMoviePipelineImageSequenceOutput_JPG configuration
+  - `set_mrq_video_output` -- Video format preference recorded (abstract API)
+  - `set_mrq_path_tracer` -- UMoviePipelineDeferredPass_PathTracer add/remove
+  - `set_mrq_console_variables` -- UMoviePipelineConsoleVariableSetting::AddOrUpdateConsoleVariable
+  - `add_mrq_render_pass` -- UMoviePipelineDeferredPassBase variants (Lit/Unlit/PathTracer/etc.)
+  - `set_mrq_object_id_pass` -- bDisableMultisampleEffects for stencil-based object IDs
+  - `set_mrq_burn_in` -- UMoviePipelineBurnInSetting::BurnInClass
+  - `set_mrq_warm_up` -- UMoviePipelineAntiAliasingSetting::RenderWarmUpCount
+  - `start_mrq_render` -- UMoviePipelineQueueSubsystem::RenderQueueWithExecutor
+  - `cancel_mrq_render` -- UMoviePipelineExecutorBase::CancelAllJobs
+  - `get_mrq_render_progress` -- UMoviePipelineExecutorBase::GetStatusMessage/GetStatusProgress
+  - `verify_mrq_render_result` -- Executor state check
+  - `create_movie_render_graph` -- UMovieGraphConfig asset creation via AssetRegistry
+- Approach (UE 5.7-safe): UMoviePipelineQueueSubsystem + UMoviePipelinePrimaryConfig + FindOrAddSettingByClass pattern
+- Tests added: `Python/tests/unit/test_w4_mrq_part1_executed_envelope.py`
