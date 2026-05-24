@@ -1,0 +1,5 @@
+- feat(234-stubs W3 #89): promote 10 remaining Chaos handlers to executed envelope
+  - set_vehicle_wheel, set_vehicle_suspension, set_vehicle_engine_torque
+  - set_cloth_settings, create_chaos_cloth_asset, set_groom_physics
+  - set_ragdoll, edit_physics_asset_body, edit_physics_asset_constraint
+  - attach_chaos_visual_debugger
