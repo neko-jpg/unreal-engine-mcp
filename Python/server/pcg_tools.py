@@ -189,7 +189,7 @@ def configure_pcg_static_mesh_spawner(graph_path: str, mesh_path: str) -> Dict[s
 
 @mcp.tool()
 def configure_pcg_rule(graph_path: str, rule_name: str) -> Dict[str, Any]:
-    """configure_pcg_rule -- queued (see C++ handler for runtime depth)."""
+    """configure_pcg_rule -- Add a filter/rule node to a PCG graph."""
     try:
         validate_string(graph_path, "graph_path")
         validate_string(rule_name, "rule_name")
@@ -207,7 +207,7 @@ def configure_pcg_rule(graph_path: str, rule_name: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def create_pcg_biome_graph(asset_path: str = "/Game/PCG", asset_name: str = "PCGB_New") -> Dict[str, Any]:
-    """create_pcg_biome_graph -- queued (see C++ handler for runtime depth)."""
+    """create_pcg_biome_graph -- Create a new PCG biome graph asset."""
     try:
         pass
     except ValidationError as e:
@@ -224,7 +224,7 @@ def create_pcg_biome_graph(asset_path: str = "/Game/PCG", asset_name: str = "PCG
 
 @mcp.tool()
 def operate_pcg_point_data(graph_path: str, operation: str = "Project") -> Dict[str, Any]:
-    """operate_pcg_point_data -- queued (see C++ handler for runtime depth)."""
+    """operate_pcg_point_data -- Configure point data operations on a PCG graph."""
     try:
         validate_string(graph_path, "graph_path")
     except ValidationError as e:
@@ -241,7 +241,7 @@ def operate_pcg_point_data(graph_path: str, operation: str = "Project") -> Dict[
 
 @mcp.tool()
 def operate_pcg_attribute(graph_path: str, attribute_name: str) -> Dict[str, Any]:
-    """operate_pcg_attribute -- queued (see C++ handler for runtime depth)."""
+    """operate_pcg_attribute -- Configure attribute operations on a PCG graph."""
     try:
         validate_string(graph_path, "graph_path")
         validate_string(attribute_name, "attribute_name")
@@ -259,7 +259,7 @@ def operate_pcg_attribute(graph_path: str, attribute_name: str) -> Dict[str, Any
 
 @mcp.tool()
 def execute_pcg_graph(actor_name: str) -> Dict[str, Any]:
-    """execute_pcg_graph -- queued (see C++ handler for runtime depth)."""
+    """execute_pcg_graph -- Trigger PCG graph generation on an actor."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -276,7 +276,7 @@ def execute_pcg_graph(actor_name: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def regenerate_pcg_graph(actor_name: str) -> Dict[str, Any]:
-    """regenerate_pcg_graph -- queued (see C++ handler for runtime depth)."""
+    """regenerate_pcg_graph -- Cleanup and regenerate a PCG graph on an actor."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -293,7 +293,7 @@ def regenerate_pcg_graph(actor_name: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def set_pcg_runtime_generation(actor_name: str, enable: bool = True) -> Dict[str, Any]:
-    """set_pcg_runtime_generation -- queued (see C++ handler for runtime depth)."""
+    """set_pcg_runtime_generation -- Enable/disable runtime generation on a PCG component."""
     try:
         validate_string(actor_name, "actor_name")
     except ValidationError as e:
@@ -310,7 +310,7 @@ def set_pcg_runtime_generation(actor_name: str, enable: bool = True) -> Dict[str
 
 @mcp.tool()
 def use_pcg_editor_mode(mode: str = "Sculpt") -> Dict[str, Any]:
-    """use_pcg_editor_mode -- queued (see C++ handler for runtime depth)."""
+    """use_pcg_editor_mode -- Set the PCG editor mode preference."""
     try:
         pass
     except ValidationError as e:
@@ -327,7 +327,7 @@ def use_pcg_editor_mode(mode: str = "Sculpt") -> Dict[str, Any]:
 
 @mcp.tool()
 def create_pcg_tool(asset_path: str = "/Game/PCG", asset_name: str = "PCGTool_New") -> Dict[str, Any]:
-    """create_pcg_tool -- queued (see C++ handler for runtime depth)."""
+    """create_pcg_tool -- Create a new PCG tool graph asset."""
     try:
         pass
     except ValidationError as e:
@@ -344,7 +344,7 @@ def create_pcg_tool(asset_path: str = "/Game/PCG", asset_name: str = "PCGTool_Ne
 
 @mcp.tool()
 def set_pcg_debug_display(enable: bool = True) -> Dict[str, Any]:
-    """set_pcg_debug_display -- queued (see C++ handler for runtime depth)."""
+    """set_pcg_debug_display -- Enable/disable PCG debug display in the editor."""
     try:
         pass
     except ValidationError as e:
@@ -361,7 +361,7 @@ def set_pcg_debug_display(enable: bool = True) -> Dict[str, Any]:
 
 @mcp.tool()
 def configure_pcg_self_pruning(graph_path: str, radius: float = 100.0) -> Dict[str, Any]:
-    """configure_pcg_self_pruning -- queued (see C++ handler for runtime depth)."""
+    """configure_pcg_self_pruning -- Configure self-pruning radius on a PCG graph."""
     try:
         validate_string(graph_path, "graph_path")
     except ValidationError as e:

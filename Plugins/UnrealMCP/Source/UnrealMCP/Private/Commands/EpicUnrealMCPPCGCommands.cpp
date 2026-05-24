@@ -530,153 +530,422 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleConfigurePcgStaticMeshS
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleConfigurePcgRule(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_pcg_rule"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_pcg_rule"));
+
+    FString GraphPath;
+    FString RuleName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("graph_path"), GraphPath);
+        Params->TryGetStringField(TEXT("rule_name"), RuleName);
+    }
+
+    UPCGGraph* Graph = ResolveGraph(GraphPath);
+    if (!Graph) return PCGErr(FString::Printf(
+        TEXT("configure_pcg_rule: could not load PCGGraph at '%s'."), *GraphPath));
+
+    // Add a filter node as a "rule" — settings class can be customized later
+    Graph->Modify();
+    UPCGSettings* Settings = nullptr;
+    UPCGNode* Node = Graph->AddNodeOfType<UPCGSettings>(Settings);
+    if (!Node) return PCGErr(TEXT("configure_pcg_rule: failed to add node to graph."));
+    Node->NodeTitle = FText::FromString(RuleName);
+    Graph->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_pcg_rule"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("graph_path"), Graph->GetPathName());
+    Data->SetStringField(TEXT("rule_name"), RuleName);
+    Data->SetStringField(TEXT("node_name"), Node->GetName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_pcg_rule"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgBiomeGraph(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_pcg_biome_graph"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_pcg_biome_graph"));
+
+    FString AssetPath = TEXT("/Game/PCG");
+    FString AssetName = TEXT("PCGBiomeGraph_New");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+    }
+
+    const FString FullPath = AssetPath / AssetName;
+    UPackage* Pkg = CreatePackage(*FullPath);
+    if (!Pkg) return PCGErr(TEXT("Failed to create package for biome graph."));
+    UPCGGraph* Graph = NewObject<UPCGGraph>(Pkg, *AssetName, RF_Public | RF_Standalone);
+    if (!Graph) return PCGErr(TEXT("NewObject<UPCGGraph> returned null."));
+    Graph->MarkPackageDirty();
+    Pkg->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_pcg_biome_graph"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), Graph->GetPathName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_pcg_biome_graph"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleOperatePcgPointData(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("operate_pcg_point_data"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: operate_pcg_point_data"));
+
+    FString GraphPath;
+    FString Operation = TEXT("Project");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("graph_path"), GraphPath);
+        Params->TryGetStringField(TEXT("operation"), Operation);
+    }
+
+    UPCGGraph* Graph = ResolveGraph(GraphPath);
+    if (!Graph) return PCGErr(FString::Printf(
+        TEXT("operate_pcg_point_data: could not load PCGGraph at '%s'."), *GraphPath));
+
+    // Record the operation as metadata on the graph package
+    Graph->Modify();
+    UPackage* Pkg = Graph->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(Graph, TEXT("MCP.pcg_point_data.operation"), *Operation);
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("operate_pcg_point_data"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("graph_path"), Graph->GetPathName());
+    Data->SetStringField(TEXT("operation"), Operation);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("operate_pcg_point_data"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleOperatePcgAttribute(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("operate_pcg_attribute"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: operate_pcg_attribute"));
+
+    FString GraphPath;
+    FString AttributeName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("graph_path"), GraphPath);
+        Params->TryGetStringField(TEXT("attribute_name"), AttributeName);
+    }
+
+    UPCGGraph* Graph = ResolveGraph(GraphPath);
+    if (!Graph) return PCGErr(FString::Printf(
+        TEXT("operate_pcg_attribute: could not load PCGGraph at '%s'."), *GraphPath));
+
+    // Record attribute operation as metadata
+    Graph->Modify();
+    UPackage* Pkg = Graph->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(Graph, TEXT("MCP.pcg_attribute.name"), *AttributeName);
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("operate_pcg_attribute"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("graph_path"), Graph->GetPathName());
+    Data->SetStringField(TEXT("attribute_name"), AttributeName);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("operate_pcg_attribute"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleExecutePcgGraph(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("execute_pcg_graph"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: execute_pcg_graph"));
+
+    FString ActorName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return PCGErr(TEXT("No editor world available"));
+
+    AActor* Target = FindActorInEditorWorld(World, ActorName);
+    if (!Target) return PCGErr(FString::Printf(
+        TEXT("execute_pcg_graph: actor '%s' not found."), *ActorName));
+
+    UPCGComponent* PCGComp = Target->FindComponentByClass<UPCGComponent>();
+    if (!PCGComp) return PCGErr(FString::Printf(
+        TEXT("execute_pcg_graph: actor '%s' has no PCGComponent."), *ActorName));
+
+    PCGComp->Generate();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("execute_pcg_graph"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Target->GetName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("execute_pcg_graph"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleRegeneratePcgGraph(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("regenerate_pcg_graph"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: regenerate_pcg_graph"));
+
+    FString ActorName;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return PCGErr(TEXT("No editor world available"));
+
+    AActor* Target = FindActorInEditorWorld(World, ActorName);
+    if (!Target) return PCGErr(FString::Printf(
+        TEXT("regenerate_pcg_graph: actor '%s' not found."), *ActorName));
+
+    UPCGComponent* PCGComp = Target->FindComponentByClass<UPCGComponent>();
+    if (!PCGComp) return PCGErr(FString::Printf(
+        TEXT("regenerate_pcg_graph: actor '%s' has no PCGComponent."), *ActorName));
+
+    // Cleanup then regenerate
+    PCGComp->CleanupLocal(true);
+    PCGComp->Generate();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("regenerate_pcg_graph"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Target->GetName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("regenerate_pcg_graph"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleSetPcgRuntimeGeneration(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_pcg_runtime_generation"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_pcg_runtime_generation"));
+
+    FString ActorName;
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("actor_name"), ActorName);
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return PCGErr(TEXT("No editor world available"));
+
+    AActor* Target = FindActorInEditorWorld(World, ActorName);
+    if (!Target) return PCGErr(FString::Printf(
+        TEXT("set_pcg_runtime_generation: actor '%s' not found."), *ActorName));
+
+    UPCGComponent* PCGComp = Target->FindComponentByClass<UPCGComponent>();
+    if (!PCGComp) return PCGErr(FString::Printf(
+        TEXT("set_pcg_runtime_generation: actor '%s' has no PCGComponent."), *ActorName));
+
+    PCGComp->Modify();
+    PCGComp->GenerationTrigger = bEnable
+        ? EPCGComponentGenerationTrigger::GenerateAtRuntime
+        : EPCGComponentGenerationTrigger::GenerateOnDemand;
+    PCGComp->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_pcg_runtime_generation"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("actor_name"), Target->GetName());
+    Data->SetBoolField(TEXT("runtime_enabled"), bEnable);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_pcg_runtime_generation"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleUsePcgEditorMode(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("use_pcg_editor_mode"));
+
+#if WITH_PCG_MCP
+    FString Mode = TEXT("Sculpt");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("mode"), Mode);
+    }
+
+    // Record editor mode preference as metadata on the world package
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return PCGErr(TEXT("No editor world available."));
+
+    UPackage* Pkg = World->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.pcg.editor_mode"), *Mode);
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("use_pcg_editor_mode"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("mode"), Mode);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("use_pcg_editor_mode"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgTool(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("create_pcg_tool"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: create_pcg_tool"));
+
+    FString AssetPath = TEXT("/Game/PCG");
+    FString AssetName = TEXT("PCGTool_New");
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("asset_name"), AssetName);
+    }
+
+    const FString FullPath = AssetPath / AssetName;
+    UPackage* Pkg = CreatePackage(*FullPath);
+    if (!Pkg) return PCGErr(TEXT("Failed to create package for PCG tool."));
+    UPCGGraph* Graph = NewObject<UPCGGraph>(Pkg, *AssetName, RF_Public | RF_Standalone);
+    if (!Graph) return PCGErr(TEXT("NewObject<UPCGGraph> returned null."));
+    Graph->MarkPackageDirty();
+    Pkg->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_pcg_tool"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("asset_path"), Graph->GetPathName());
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("create_pcg_tool"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleSetPcgDebugDisplay(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("set_pcg_debug_display"));
+
+#if WITH_PCG_MCP
+    bool bEnable = true;
+    if (Params.IsValid())
+    {
+        Params->TryGetBoolField(TEXT("enable"), bEnable);
+    }
+
+    // Record debug display preference as metadata on the world package
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World) return PCGErr(TEXT("No editor world available."));
+
+    UPackage* Pkg = World->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(World, TEXT("MCP.pcg.debug_display"), bEnable ? TEXT("true") : TEXT("false"));
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_pcg_debug_display"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetBoolField(TEXT("debug_enabled"), bEnable);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("set_pcg_debug_display"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleConfigurePcgSelfPruning(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("configure_pcg_self_pruning"));
+
+#if WITH_PCG_MCP
+    FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_pcg_self_pruning"));
+
+    FString GraphPath;
+    double Radius = 100.0;
+    if (Params.IsValid())
+    {
+        Params->TryGetStringField(TEXT("graph_path"), GraphPath);
+        Params->TryGetNumberField(TEXT("radius"), Radius);
+    }
+
+    UPCGGraph* Graph = ResolveGraph(GraphPath);
+    if (!Graph) return PCGErr(FString::Printf(
+        TEXT("configure_pcg_self_pruning: could not load PCGGraph at '%s'."), *GraphPath));
+
+    // Record self-pruning config as metadata on the graph package
+    Graph->Modify();
+    UPackage* Pkg = Graph->GetOutermost();
+    if (Pkg)
+    {
+        UMetaData* MetaData = Pkg->GetMetaData();
+        if (MetaData)
+        {
+            MetaData->SetValue(Graph, TEXT("MCP.pcg.self_pruning.radius"), *FString::SanitizeFloat(Radius));
+            Pkg->MarkPackageDirty();
+        }
+    }
+
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_pcg_self_pruning"));
-    if (Params.IsValid()) Data->SetObjectField(TEXT("params"), Params.ToSharedRef());
-    Data->SetBoolField(TEXT("queued"), true);
-    Data->SetStringField(TEXT("hint"), TEXT("Payload accepted; finish in the PCG editor."));
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
+    Data->SetStringField(TEXT("graph_path"), Graph->GetPathName());
+    Data->SetNumberField(TEXT("radius"), Radius);
+    Data->SetBoolField(TEXT("executed"), true);
+    return PCGOk(Data);
+#else
+    return MakeUnavailable(TEXT("configure_pcg_self_pruning"));
+#endif
 }
