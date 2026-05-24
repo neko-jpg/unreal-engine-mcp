@@ -1,0 +1,12 @@
+### Changed
+- Promote 10 Localization handlers to executed envelope (#94)
+  - `open_localization_dashboard` — Show the Localization Dashboard editor tab
+  - `add_localization_culture` — Add a culture to a localization target
+  - `run_text_gather` — Launch GatherText commandlet
+  - `export_po_files` — Export PO files for a target
+  - `import_po_files` — Import PO files for a target
+  - `localization_create_string_table` — Create a UStringTable asset
+  - `edit_string_table` — Add/update entries in a UStringTable
+  - `localize_widget_text` — Register localized widget text
+  - `localize_dialogue_wave` — Register localized dialogue wave
+  - `configure_font_fallback` — Configure font fallback chain
