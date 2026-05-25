@@ -230,8 +230,12 @@ pub struct SceneComponent {
     pub updated_by: Option<String>,
 }
 
-fn default_sync_status_pending() -> String { "pending".to_string() }
-fn default_revision() -> i64 { 1 }
+fn default_sync_status_pending() -> String {
+    "pending".to_string()
+}
+fn default_revision() -> i64 {
+    1
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneAsset {

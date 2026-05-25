@@ -1,4 +1,4 @@
-﻿//! Component applier (PR7) for React-for-UE v3.0.
+//! Component applier (PR7) for React-for-UE v3.0.
 //!
 //! Hybrid: handles `material` and `light` component_types in Rust by mapping
 //! component properties to UE bridge commands via `UnrealClient`. Other types
@@ -8,9 +8,7 @@
 use crate::db::SurrealSceneRepository;
 use crate::domain::SceneComponent;
 use crate::error::AppError;
-use crate::sync::component_planner::{
-    plan_component_sync, ComponentAction, ComponentPlan,
-};
+use crate::sync::component_planner::{plan_component_sync, ComponentAction, ComponentPlan};
 use crate::unreal::client::UnrealClient;
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +52,9 @@ pub async fn apply_pending(
     unreal: &UnrealClient,
     scene_id: &str,
 ) -> Result<ApplyComponentReport, AppError> {
-    let components: Vec<SceneComponent> = db.list_components(scene_id, None, None, Some("pending")).await?;
+    let components: Vec<SceneComponent> = db
+        .list_components(scene_id, None, None, Some("pending"))
+        .await?;
     let plan: ComponentPlan = plan_component_sync(scene_id, &components);
     let mut report = ApplyComponentReport {
         scene_id: scene_id.to_string(),
@@ -146,7 +146,10 @@ async fn apply_component(unreal: &UnrealClient, comp: &SceneComponent) -> ApplyO
     }
 }
 
-async fn resolve_actor_name(unreal: &UnrealClient, mcp_id_or_name: &str) -> Result<String, AppError> {
+async fn resolve_actor_name(
+    unreal: &UnrealClient,
+    mcp_id_or_name: &str,
+) -> Result<String, AppError> {
     if mcp_id_or_name.is_empty() {
         return Err(AppError::Validation("empty actor_mcp_id".to_string()));
     }

@@ -62,7 +62,14 @@ CPP_ONLY_WHITELIST: Set[str] = {
     "set_ai_setting",
     "set_navigation_setting",
     "set_packaging_setting",
+    "set_camera_look_at",
     "import_mp3",
+}
+
+# Commands that are intentionally python-only because they are called
+# through dialog/intent layers and gracefully handle missing C++ handlers.
+PYTHON_ONLY_WHITELIST: Set[str] = {
+    "get_actor_property",
 }
 
 
@@ -303,9 +310,10 @@ def main(argv: List[str] | None = None) -> int:
     print_summary(layer_index, args.output)
 
     if args.strict:
-        # python_only is always a hard drift; cpp_only is allowed if whitelisted.
+        # Both python_only and cpp_only are allowed if whitelisted.
+        unexpected_python_only = layer_index["python_only"] - PYTHON_ONLY_WHITELIST
         unexpected_cpp_only = layer_index["cpp_only"] - CPP_ONLY_WHITELIST
-        drift = layer_index["python_only"] | unexpected_cpp_only
+        drift = unexpected_python_only | unexpected_cpp_only
         if drift:
             print("\nDrift detected (Python or unwhitelisted Cpp commands):")
             for name in sorted(drift):

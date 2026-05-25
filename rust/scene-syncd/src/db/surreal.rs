@@ -1357,7 +1357,13 @@ impl SurrealSceneRepository {
         let mut updated = 0;
         for c in comps {
             let hash = crate::sync::component_planner::compute_desired_hash(&c.properties);
-            let key = format!("{}:{}:{}:{}", c.scene.strip_prefix("scene:").unwrap_or(&c.scene), c.entity_id, c.component_type, c.name);
+            let key = format!(
+                "{}:{}:{}:{}",
+                c.scene.strip_prefix("scene:").unwrap_or(&c.scene),
+                c.entity_id,
+                c.component_type,
+                c.name
+            );
             self.db
                 .query(
                     "UPDATE type::thing($table, $key) MERGE { desired_hash: $hash, sync_status: 'pending' }",

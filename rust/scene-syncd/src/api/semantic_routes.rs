@@ -462,7 +462,6 @@ pub async fn update_realization_status(
     )))
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct RecordOperationRequest {
     pub scene_id: String,
@@ -508,7 +507,9 @@ pub struct RecentOperationsRequest {
     pub limit: usize,
 }
 
-fn default_recent_operations_limit() -> usize { 10 }
+fn default_recent_operations_limit() -> usize {
+    10
+}
 
 pub async fn recent_operations(
     State(state): State<AppState>,

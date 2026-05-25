@@ -1,4 +1,4 @@
-﻿//! Component planner for React-for-UE v3.0.
+//! Component planner for React-for-UE v3.0.
 //!
 //! Computes Create / Update / Delete / Noop / Conflict actions for the
 //! `scene_component` table based on the desired_hash vs last_applied_hash
@@ -207,7 +207,13 @@ mod tests {
 
     #[test]
     fn create_when_no_last_applied_hash() {
-        let c = _component("material", serde_json::json!({"x":1}), None, false, "pending");
+        let c = _component(
+            "material",
+            serde_json::json!({"x":1}),
+            None,
+            false,
+            "pending",
+        );
         let plan = plan_component_sync("test", &[c]);
         assert_eq!(plan.summary.create, 1);
         assert_eq!(plan.operations[0].action, ComponentAction::Create);
@@ -224,28 +230,52 @@ mod tests {
 
     #[test]
     fn update_when_hashes_differ() {
-        let c = _component("material", serde_json::json!({"x":1}), Some("deadbeef"), false, "synced");
+        let c = _component(
+            "material",
+            serde_json::json!({"x":1}),
+            Some("deadbeef"),
+            false,
+            "synced",
+        );
         let plan = plan_component_sync("test", &[c]);
         assert_eq!(plan.summary.update, 1);
     }
 
     #[test]
     fn delete_when_deleted_and_was_applied() {
-        let c = _component("material", serde_json::json!({"x":1}), Some("aa"), true, "synced");
+        let c = _component(
+            "material",
+            serde_json::json!({"x":1}),
+            Some("aa"),
+            true,
+            "synced",
+        );
         let plan = plan_component_sync("test", &[c]);
         assert_eq!(plan.summary.delete, 1);
     }
 
     #[test]
     fn delete_becomes_noop_when_never_applied() {
-        let c = _component("material", serde_json::json!({"x":1}), None, true, "pending");
+        let c = _component(
+            "material",
+            serde_json::json!({"x":1}),
+            None,
+            true,
+            "pending",
+        );
         let plan = plan_component_sync("test", &[c]);
         assert_eq!(plan.summary.noop, 1);
     }
 
     #[test]
     fn conflict_status_short_circuits() {
-        let c = _component("material", serde_json::json!({"x":1}), Some("aa"), false, "conflict");
+        let c = _component(
+            "material",
+            serde_json::json!({"x":1}),
+            Some("aa"),
+            false,
+            "conflict",
+        );
         let plan = plan_component_sync("test", &[c]);
         assert_eq!(plan.summary.conflict, 1);
         assert_eq!(plan.operations[0].action, ComponentAction::Conflict);

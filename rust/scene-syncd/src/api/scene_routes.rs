@@ -443,9 +443,7 @@ pub async fn restore_snapshot_by_name(
     } else {
         Vec::new()
     };
-    let summary = repo
-        .restore_snapshot(&chosen.id, &req.restore_mode)
-        .await?;
+    let summary = repo.restore_snapshot(&chosen.id, &req.restore_mode).await?;
     Ok(Json(json!({
         "success": true,
         "data": {
