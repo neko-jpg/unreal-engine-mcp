@@ -27,6 +27,8 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "UObject/UObjectIterator.h"
+#include "UObject/MetaData.h"
+#include "UObject/Package.h"
 #include "Engine/Selection.h"
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -249,6 +251,18 @@ bool FEpicUnrealMCPCommonUtils::TryGetVectorFromJson(const TSharedPtr<FJsonObjec
     OutVector.Y = (float)(*JsonArray)[1]->AsNumber();
     OutVector.Z = (float)(*JsonArray)[2]->AsNumber();
 
+    return true;
+}
+
+bool FEpicUnrealMCPCommonUtils::SetPackageMetadata(UPackage* Package, const UObject* Object, FName Key, const TCHAR* Value)
+{
+    if (!Package || !Object || !Value)
+    {
+        return false;
+    }
+
+    Package->GetMetaData().SetValue(Object, Key, Value);
+    Package->MarkPackageDirty();
     return true;
 }
 

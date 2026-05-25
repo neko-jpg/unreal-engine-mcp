@@ -32,4 +32,11 @@ private:
     TSharedPtr<FJsonObject> HandleSetConstraintLimits(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetConstraintMotor(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSpawnPhysicsVolume(const TSharedPtr<FJsonObject>& Params);
+
+    // Spatial queries (React-for-UE v3.0)
+    TSharedPtr<FJsonObject> HandleGetActorBounds(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpatialOverlapSphere(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpatialRaycast(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpatialLinecast(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSpatialNearest(const TSharedPtr<FJsonObject>& Params);
 };

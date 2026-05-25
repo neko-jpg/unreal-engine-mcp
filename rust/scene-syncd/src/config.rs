@@ -27,7 +27,7 @@ impl Config {
             surreal_user: env_or("SURREAL_USER", "root"),
             surreal_pass: env_or("SURREAL_PASS", ""),
             unreal_host: env_or("UNREAL_MCP_HOST", "127.0.0.1"),
-            unreal_port: env_or_parse("UNREAL_MCP_PORT", 55557),
+            unreal_port: env_or_parse("UNREAL_MCP_PORT", 55771),
             autosync: env_or_parse("SCENE_SYNCD_AUTOSYNC", false),
             log_level: env_or("SCENE_SYNCD_LOG", "info"),
         }

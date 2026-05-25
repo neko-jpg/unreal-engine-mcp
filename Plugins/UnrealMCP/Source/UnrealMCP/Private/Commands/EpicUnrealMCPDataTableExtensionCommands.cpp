@@ -5,7 +5,7 @@
 #include "Interfaces/IPluginManager.h"
 
 #include "Engine/DataTable.h"
-#include "Engine/UserDefinedStruct.h"
+#include "StructUtils/UserDefinedStruct.h"
 #include "Engine/DataAsset.h"
 #include "Engine/Blueprint.h"
 #include "GameplayTagsModule.h"
@@ -134,7 +134,7 @@ static TSharedPtr<FJsonObject> DataTableMetaPersist(
         for (const TPair<FString, FString>& KvPair : Kv)
         {
             const FName Key(*FString::Printf(TEXT("MCP.%s.%s"), *CommandName, *KvPair.Key));
-            Pkg->SetMetaData(*Obj, Key, *KvPair.Value);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Obj, Key, *KvPair.Value);
             ++KeysPersisted;
         }
         Pkg->MarkPackageDirty();
@@ -406,7 +406,7 @@ static TSharedPtr<FJsonObject> GenerateDbTemplate(
     for (const FString& Col : ColumnNames)
     {
         const FName Key(*FString::Printf(TEXT("MCP.%s.template_column"), *CommandName));
-        Pkg->SetMetaData(*Table, Key, *Col);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Table, Key, *Col);
     }
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

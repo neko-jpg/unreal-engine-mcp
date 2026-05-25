@@ -9,6 +9,12 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Float.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Int.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_String.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Vector.h"
 #include "BehaviorTree/BTTaskNode.h"
 #include "BehaviorTree/BTService.h"
 #include "BehaviorTree/BTDecorator.h"
@@ -30,6 +36,7 @@
 #include "Perception/AISense_Team.h"
 #include "EnvironmentQuery/EnvQuery.h"
 #include "EnvironmentQuery/EnvQueryManager.h"
+#include "StateTree.h"
 
 bool FEpicUnrealMCPAiNavExtensionCommands::IsModuleAvailable()
 {
@@ -120,6 +127,24 @@ static AActor* FindActorInEditorWorld(UWorld* World, const FString& ActorName)
     return nullptr;
 }
 
+static AActor* ResolveAiNavActor(UWorld* World, const TSharedPtr<FJsonObject>& Params)
+{
+    if (!World || !Params.IsValid()) return nullptr;
+
+    FString ActorName;
+    Params->TryGetStringField(TEXT("actor_name"), ActorName);
+    if (ActorName.IsEmpty())
+    {
+        Params->TryGetStringField(TEXT("target_actor"), ActorName);
+    }
+    if (ActorName.IsEmpty())
+    {
+        Params->TryGetStringField(TEXT("name"), ActorName);
+    }
+
+    return FindActorInEditorWorld(World, ActorName);
+}
+
 // ---------------------------------------------------------------------------
 // add_behavior_tree_node — Persist metadata indicating a BT node should be added.
 // ---------------------------------------------------------------------------
@@ -147,8 +172,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleAddBehaviorT
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        Pkg->SetMetaData(*BT, FName(*FString::Printf(TEXT("MCP.bt_node.%s.type"), *NodeName)), *NodeType);
-        Pkg->SetMetaData(*BT, FName(*FString::Printf(TEXT("MCP.bt_node.%s.added"), *NodeName)), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, BT, FName(*FString::Printf(TEXT("MCP.bt_node.%s.type"), *NodeName)), *NodeType);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, BT, FName(*FString::Printf(TEXT("MCP.bt_node.%s.added"), *NodeName)), TEXT("true"));
         Pkg->MarkPackageDirty();
         KeysPersisted = 2;
     }
@@ -191,7 +216,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConnectBehav
     if (Pkg)
     {
         FString ConnKey = FString::Printf(TEXT("MCP.bt_connect.%s_to_%s"), *ParentNode, *ChildNode);
-        Pkg->SetMetaData(*BT, FName(*ConnKey), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, BT, FName(*ConnKey), TEXT("true"));
         Pkg->MarkPackageDirty();
         KeysPersisted = 1;
     }
@@ -400,19 +425,19 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleSetBlackboar
                     NewEntry->EntryName = FName(*KeyName);
                     // Create appropriate key type
                     if (KeyType == TEXT("Bool"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Bool>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Bool>(NewBB);
                     else if (KeyType == TEXT("Float"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Float>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Float>(NewBB);
                     else if (KeyType == TEXT("Int"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Int>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Int>(NewBB);
                     else if (KeyType == TEXT("String"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_String>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_String>(NewBB);
                     else if (KeyType == TEXT("Vector"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Vector>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Vector>(NewBB);
                     else if (KeyType == TEXT("Object"))
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Object>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Object>(NewBB);
                     else
-                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Bool>(NewEntry);
+                        NewEntry->KeyType = NewObject<UBlackboardKeyType_Bool>(NewBB);
                 }
             }
         }
@@ -566,7 +591,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureAiS
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.ai.hearing_range")), *FString::SanitizeFloat(HearingRange));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.ai.hearing_range")), *FString::SanitizeFloat(HearingRange));
         Pkg->MarkPackageDirty();
     }
 
@@ -604,7 +629,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureAiS
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.ai.damage_max_age")), *FString::SanitizeFloat(MaxAge));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.ai.damage_max_age")), *FString::SanitizeFloat(MaxAge));
         Pkg->MarkPackageDirty();
     }
 
@@ -642,7 +667,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureAiS
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.ai.team_max_age")), *FString::SanitizeFloat(MaxAge));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.ai.team_max_age")), *FString::SanitizeFloat(MaxAge));
         Pkg->MarkPackageDirty();
     }
 
@@ -681,7 +706,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureEqs
     UPackage* Pkg = EQS->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*EQS, FName(TEXT("MCP.eqs.generator_class")), *GeneratorClass);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, EQS, FName(TEXT("MCP.eqs.generator_class")), *GeneratorClass);
         Pkg->MarkPackageDirty();
     }
 
@@ -720,7 +745,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureEqs
     UPackage* Pkg = EQS->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*EQS, FName(TEXT("MCP.eqs.test_class")), *TestClass);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, EQS, FName(TEXT("MCP.eqs.test_class")), *TestClass);
         Pkg->MarkPackageDirty();
     }
 
@@ -779,10 +804,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleSetSmartNavL
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_smart_nav_link"));
     NavLink->Modify();
 
-    if (NavLink->SmartLinkComp)
-    {
-        NavLink->SmartLinkComp->SetSmartLinkEnabled(bSmartLinkEnabled);
-    }
+    NavLink->bSmartLinkIsRelevant = bSmartLinkEnabled;
+    NavLink->SetSmartLinkEnabled(bSmartLinkEnabled);
     NavLink->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -900,7 +923,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleBridgeMassEn
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.mass_entity.config_path")), *ConfigPath);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.mass_entity.config_path")), *ConfigPath);
         Pkg->MarkPackageDirty();
     }
 
@@ -963,7 +986,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleAddStateTree
         if (Pkg)
         {
             FString Key = FString::Printf(TEXT("MCP.state_tree.state.%s"), *StateName);
-            Pkg->SetMetaData(*ST, FName(*Key), TEXT("added"));
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, ST, FName(*Key), TEXT("added"));
             Pkg->MarkPackageDirty();
         }
     }
@@ -1008,7 +1031,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleAddStateTree
         if (Pkg)
         {
             FString Key = FString::Printf(TEXT("MCP.state_tree.task.%s"), *TaskName);
-            Pkg->SetMetaData(*ST, FName(*Key), *TaskClass);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, ST, FName(*Key), *TaskClass);
             Pkg->MarkPackageDirty();
         }
     }
@@ -1048,7 +1071,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleSetAiBehavio
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(*FString::Printf(TEXT("MCP.ai.behavior_tag.%s"), *TagName)), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(*FString::Printf(TEXT("MCP.ai.behavior_tag.%s"), *TagName)), TEXT("true"));
         Pkg->MarkPackageDirty();
     }
 
@@ -1086,7 +1109,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAiNavExtensionCommands::HandleConfigureCog
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.ai.cognitive_enabled")), bCognitiveEnabled ? TEXT("true") : TEXT("false"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.ai.cognitive_enabled")), bCognitiveEnabled ? TEXT("true") : TEXT("false"));
         Pkg->MarkPackageDirty();
     }
 

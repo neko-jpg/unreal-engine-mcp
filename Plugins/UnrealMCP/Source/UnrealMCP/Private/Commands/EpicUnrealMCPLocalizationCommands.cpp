@@ -5,6 +5,7 @@
 #include "Interfaces/IPluginManager.h"
 
 #include "Internationalization/StringTableCore.h"
+#include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableRegistry.h"
 #include "Internationalization/TextLocalizationManager.h"
 #include "Internationalization/Culture.h"
@@ -16,7 +17,7 @@
 
 #include "LocalizationTargetTypes.h"
 #include "LocalizationSettings.h"
-#include "LocalizationDashboard.h"
+#include "ILocalizationDashboardModule.h"
 #include "LocalizationCommandletTasks.h"
 
 bool FEpicUnrealMCPLocalizationCommands::IsModuleAvailable()
@@ -101,15 +102,13 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleCommand(const 
 
 // ---------------------------------------------------------------------------
 // open_localization_dashboard — Show the localization dashboard editor tab.
-// UE 5.7 API: FLocalizationDashboard::Get()->Show()
+// UE 5.7 API: ILocalizationDashboardModule::Get().Show()
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleOpenLocalizationDashboard(const TSharedPtr<FJsonObject>& Params)
 {
     if (!IsModuleAvailable()) return MakeUnavailable(TEXT("open_localization_dashboard"));
 
-    FLocalizationDashboard* Dashboard = FLocalizationDashboard::Get();
-    if (!Dashboard) return LocErr(TEXT("LocalizationDashboard singleton not available."));
-    Dashboard->Show();
+    ILocalizationDashboardModule::Get().Show();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("open_localization_dashboard"));
@@ -374,7 +373,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeWidget
     WidgetObj->Modify();
 
     FString MetaKey = FString::Printf(TEXT("MCP.loc.%s"), *TextId);
-    FMetaData::SetObjectMetaData(WidgetObj, *MetaKey, *Translation);
+    if (UPackage* Pkg = WidgetObj->GetOutermost())
+    {
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, WidgetObj, FName(*MetaKey), *Translation);
+    }
     WidgetObj->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -414,7 +416,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLocalizationCommands::HandleLocalizeDialog
     DlgWave->Modify();
 
     FString MetaKey = FString::Printf(TEXT("Localization_%s"), *CultureCode);
-    FMetaData::SetObjectMetaData(DlgWave, *MetaKey, TEXT("true"));
+    if (UPackage* Pkg = DlgWave->GetOutermost())
+    {
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, DlgWave, FName(*MetaKey), TEXT("true"));
+    }
     DlgWave->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

@@ -3,7 +3,7 @@
 Requires:
   - SurrealDB running on ws://127.0.0.1:8000
   - scene-syncd running on http://127.0.0.1:8787
-  - (Optional) Unreal Editor with MCP Bridge on 127.0.0.1:55557
+  - (Optional) Unreal Editor with MCP Bridge on 127.0.0.1:55771
 
 Usage:
     pytest tests/e2e                    # Full E2E (needs all services)
@@ -46,7 +46,7 @@ def pytest_collection_modifyitems(config, items):
 
 SCENE_SYNCD_URL = "http://127.0.0.1:8787"
 UNREAL_HOST = "127.0.0.1"
-UNREAL_PORT = 55557
+UNREAL_PORT = 55771
 
 
 def api_post(path: str, payload: dict) -> dict:

@@ -35,7 +35,7 @@ cd /home/arat2/Project-MUSE && mkdir -p .surreal && surreal start --user root --
 ## 4. Start Rust service
 
 ```bash
-cd /home/arat2/Project-MUSE/rust/scene-syncd && SURREAL_URL=ws://127.0.0.1:8000 SURREAL_NS=unreal_mcp SURREAL_DB=scene SURREAL_USER=root SURREAL_PASS=secret UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55557 cargo run
+cd /home/arat2/Project-MUSE/rust/scene-syncd && SURREAL_URL=ws://127.0.0.1:8000 SURREAL_NS=unreal_mcp SURREAL_DB=scene SURREAL_USER=root SURREAL_PASS=secret UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55771 cargo run
 ```
 
 Health check:

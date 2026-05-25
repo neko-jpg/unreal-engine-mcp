@@ -117,7 +117,7 @@ static TAutoConsoleVariable<int32> CVarMCPPort(
 );
 
 #define MCP_SERVER_HOST "127.0.0.1"
-#define MCP_SERVER_PORT 55557
+#define MCP_SERVER_PORT 55771
 
 namespace
 {
@@ -733,4 +733,3 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 
     return Future.Get();
 }
-

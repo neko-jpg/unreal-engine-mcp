@@ -116,7 +116,7 @@ static TSharedPtr<FJsonObject> AnimMetaPersist(
         for (const TPair<FString, FString>& Pair : Kv)
         {
             const FName Key(*FString::Printf(TEXT("MCP.%s.%s"), *CommandName, *Pair.Key));
-            Package->SetMetaData(*Asset, Key, *Pair.Value);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Package, Asset, Key, *Pair.Value);
             ++PersistedKeyCount;
         }
         Package->MarkPackageDirty();
@@ -216,7 +216,7 @@ static TSharedPtr<FJsonObject> AnimMetaFallback(
         for (const TPair<FString,FString>& KvPair : Kv)
         {
             const FName K(*FString::Printf(TEXT("MCP.%s.%s"), *CommandName, *KvPair.Key));
-            Pkg->SetMetaData(*Host, K, *KvPair.Value);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Host, K, *KvPair.Value);
             ++KeysPersisted;
         }
         Pkg->MarkPackageDirty();
@@ -454,7 +454,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateAimO
         if (!SkeletonPath.IsEmpty())
         {
             UPackage* Pkg = Asset->GetOutermost();
-            if (Pkg) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_aim_offset.skeleton_path")), *SkeletonPath);
+            if (Pkg) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_aim_offset.skeleton_path")), *SkeletonPath);
         }
         TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
         Data->SetStringField(TEXT("command"), TEXT("create_aim_offset"));
@@ -552,7 +552,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRi
         if (!SkeletalMeshPath.IsEmpty())
         {
             UPackage* Pkg = Asset->GetOutermost();
-            if (Pkg) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_rig.skeletal_mesh_path")), *SkeletalMeshPath);
+            if (Pkg) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_ik_rig.skeletal_mesh_path")), *SkeletalMeshPath);
         }
         TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
         Data->SetStringField(TEXT("command"), TEXT("create_ik_rig"));
@@ -653,8 +653,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateIkRe
         UPackage* Pkg = Asset->GetOutermost();
         if (Pkg)
         {
-            if (!SourceIkRigPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_retargeter.source_ik_rig_path")), *SourceIkRigPath);
-            if (!TargetIkRigPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_ik_retargeter.target_ik_rig_path")), *TargetIkRigPath);
+            if (!SourceIkRigPath.IsEmpty()) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_ik_retargeter.source_ik_rig_path")), *SourceIkRigPath);
+            if (!TargetIkRigPath.IsEmpty()) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_ik_retargeter.target_ik_rig_path")), *TargetIkRigPath);
         }
         TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
         Data->SetStringField(TEXT("command"), TEXT("create_ik_retargeter"));
@@ -733,8 +733,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleCreateCont
         UPackage* Pkg = Asset->GetOutermost();
         if (Pkg)
         {
-            if (!SkeletonPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_control_rig.skeleton_path")), *SkeletonPath);
-            if (!SkeletalMeshPath.IsEmpty()) Pkg->SetMetaData(*Asset, FName(TEXT("MCP.create_control_rig.skeletal_mesh_path")), *SkeletalMeshPath);
+            if (!SkeletonPath.IsEmpty()) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_control_rig.skeleton_path")), *SkeletonPath);
+            if (!SkeletalMeshPath.IsEmpty()) FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Asset, FName(TEXT("MCP.create_control_rig.skeletal_mesh_path")), *SkeletalMeshPath);
         }
         TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
         Data->SetStringField(TEXT("command"), TEXT("create_control_rig"));
@@ -937,7 +937,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPAnimationRiggingCommands::HandleSetMorphTa
     if (Package)
     {
         const FName Key(*FString::Printf(TEXT("MCP.set_morph_target.%s"), *MorphName));
-        Package->SetMetaData(*Mesh, Key, *FString::Printf(TEXT("%f"), Weight));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Package, Mesh, Key, *FString::Printf(TEXT("%f"), Weight));
         Package->MarkPackageDirty();
     }
     Mesh->PostEditChange();

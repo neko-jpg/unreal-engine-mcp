@@ -151,10 +151,10 @@ All destructive C++ operations (spawn, delete, transform, Blueprint creation/edi
 python unreal_mcp_server_advanced.py
 ```
 
-The server connects to `127.0.0.1:55557` by default. Override with environment variables:
+The server connects to `127.0.0.1:55771` by default. Override with environment variables:
 
 ```bash
-UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55558 python unreal_mcp_server_advanced.py
+UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55772 python unreal_mcp_server_advanced.py
 ```
 
 ## Differences from Upstream

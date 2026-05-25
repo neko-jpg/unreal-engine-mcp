@@ -316,6 +316,7 @@ async fn record_operation_and_sync_run() {
         instance_set_creates: 0,
         instance_set_updates: 0,
         instance_set_deletes: 0,
+        ..Default::default()
     };
     repo.finish_sync_run("run_001", &summary).await.unwrap();
 }
@@ -371,7 +372,7 @@ async fn test_component_crud() {
 
     // List components
     let components = repo
-        .list_components("test_scene", Some("entity_01"), None)
+        .list_components("test_scene", Some("entity_01"), None, None)
         .await
         .expect("list components");
     assert!(!components.is_empty());
@@ -384,7 +385,7 @@ async fn test_component_crud() {
 
     // Verify deletion
     let components_after = repo
-        .list_components("test_scene", Some("entity_01"), None)
+        .list_components("test_scene", Some("entity_01"), None, None)
         .await
         .expect("list components after delete");
     assert!(components_after.is_empty());

@@ -23,6 +23,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "PhysicsEngine/RadialForceComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Components/SphereComponent.h"
 #include "PhysicsEngine/RadialForceActor.h"
 #include "PhysicsEngine/PhysicsConstraintActor.h"
 #include "PhysicsEngine/PhysicsConstraintComponent.h"
@@ -61,6 +63,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleCommand(const FStri
         {TEXT("set_constraint_limits"), &FEpicUnrealMCPPhysicsCommands::HandleSetConstraintLimits},  // W1-B
         {TEXT("set_constraint_motor"), &FEpicUnrealMCPPhysicsCommands::HandleSetConstraintMotor},  // W1-B
         {TEXT("spawn_physics_volume"), &FEpicUnrealMCPPhysicsCommands::HandleSpawnPhysicsVolume},  // W1-B
+        // Spatial queries (React-for-UE v3.0)
+        {TEXT("get_actor_bounds"),         &FEpicUnrealMCPPhysicsCommands::HandleGetActorBounds},
+        {TEXT("spatial_overlap_sphere"),   &FEpicUnrealMCPPhysicsCommands::HandleSpatialOverlapSphere},
+        {TEXT("spatial_raycast"),          &FEpicUnrealMCPPhysicsCommands::HandleSpatialRaycast},
+        {TEXT("spatial_linecast"),         &FEpicUnrealMCPPhysicsCommands::HandleSpatialLinecast},
+        {TEXT("spatial_nearest"),          &FEpicUnrealMCPPhysicsCommands::HandleSpatialNearest},
     };
 
     const Handler* H = Dispatch.Find(CommandType);
@@ -650,5 +658,362 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleSpawnPhysicsVolume(
     Result->SetNumberField(TEXT("priority"), Volume->Priority);
     Result->SetBoolField(TEXT("water_volume"), Volume->bWaterVolume);
     Result->SetNumberField(TEXT("fluid_friction"), Volume->FluidFriction);
+    return Result;
+}
+
+// =====================================================================
+// Spatial Queries (React-for-UE v3.0)
+// =====================================================================
+
+namespace
+{
+    static bool TryReadVectorArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, FVector& Out)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+        if (!Params->TryGetArrayField(Field, Arr) || !Arr || Arr->Num() < 3)
+        {
+            return false;
+        }
+        Out = FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+        return true;
+    }
+
+    static TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V)
+    {
+        TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Add(MakeShared<FJsonValueNumber>(V.X));
+        Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
+        Arr.Add(MakeShared<FJsonValueNumber>(V.Z));
+        return Arr;
+    }
+
+    static AActor* FindActorByName(UWorld* World, const FString& Name)
+    {
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetName() == Name || It->GetActorLabel() == Name)
+            {
+                return *It;
+            }
+        }
+        return nullptr;
+    }
+
+    static TArray<FString> ReadStringArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field)
+    {
+        TArray<FString> Values;
+        const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+        if (Params->TryGetArrayField(Field, Arr) && Arr)
+        {
+            for (const TSharedPtr<FJsonValue>& Value : *Arr)
+            {
+                FString Text = Value->AsString();
+                if (!Text.IsEmpty())
+                {
+                    Values.Add(Text);
+                }
+            }
+        }
+        return Values;
+    }
+
+    static bool ActorMatchesTags(AActor* Actor, const TArray<FString>& FilterTags)
+    {
+        for (const FString& RequiredTag : FilterTags)
+        {
+            bool bFound = false;
+            for (const FName& ActorTag : Actor->Tags)
+            {
+                if (ActorTag.ToString().Equals(RequiredTag, ESearchCase::IgnoreCase))
+                {
+                    bFound = true;
+                    break;
+                }
+            }
+            if (!bFound)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool ActorMatchesKind(AActor* Actor, const FString& FilterKind)
+    {
+        if (FilterKind.IsEmpty())
+        {
+            return true;
+        }
+        return Actor->GetName().Contains(FilterKind, ESearchCase::IgnoreCase)
+            || Actor->GetActorLabel().Contains(FilterKind, ESearchCase::IgnoreCase)
+            || Actor->GetClass()->GetName().Contains(FilterKind, ESearchCase::IgnoreCase);
+    }
+
+    static bool ActorMatchesFilters(AActor* Actor, const TArray<FString>& FilterTags, const FString& FilterKind)
+    {
+        return Actor
+            && !Actor->IsHiddenEd()
+            && ActorMatchesTags(Actor, FilterTags)
+            && ActorMatchesKind(Actor, FilterKind);
+    }
+
+    static TSharedPtr<FJsonObject> MakeHitJson(
+        AActor* Actor,
+        float Distance,
+        const FVector& HitPoint,
+        const FVector& HitNormal,
+        UPrimitiveComponent* HitComponent = nullptr)
+    {
+        TSharedPtr<FJsonObject> Hit = MakeShared<FJsonObject>();
+        Hit->SetStringField(TEXT("mcp_id"), Actor->GetName());
+        Hit->SetStringField(TEXT("name"), Actor->GetActorLabel());
+        Hit->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
+        Hit->SetNumberField(TEXT("distance"), Distance);
+        Hit->SetArrayField(TEXT("hit_point"), VectorToJsonArray(HitPoint));
+        Hit->SetArrayField(TEXT("hit_normal"), VectorToJsonArray(HitNormal));
+        if (HitComponent)
+        {
+            Hit->SetStringField(TEXT("hit_component"), HitComponent->GetName());
+        }
+        return Hit;
+    }
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleGetActorBounds(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* Actor = FindActorByName(World, ActorName);
+    if (!Actor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Actor '%s' not found"), *ActorName));
+    }
+
+    FVector Origin;
+    FVector Extent;
+    Actor->GetActorBounds(true, Origin, Extent);
+
+    const FVector Min = Origin - Extent;
+    const FVector Max = Origin + Extent;
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("actor_name"), ActorName);
+    Result->SetStringField(TEXT("name"), Actor->GetActorLabel());
+    Result->SetArrayField(TEXT("center"), VectorToJsonArray(Origin));
+    Result->SetArrayField(TEXT("size"), VectorToJsonArray(Extent * 2.0));
+    Result->SetArrayField(TEXT("min"), VectorToJsonArray(Min));
+    Result->SetArrayField(TEXT("max"), VectorToJsonArray(Max));
+    Result->SetArrayField(TEXT("location"), VectorToJsonArray(Actor->GetActorLocation()));
+    Result->SetArrayField(TEXT("rotation"), VectorToJsonArray(FVector(
+        Actor->GetActorRotation().Pitch,
+        Actor->GetActorRotation().Yaw,
+        Actor->GetActorRotation().Roll)));
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleSpatialOverlapSphere(const TSharedPtr<FJsonObject>& Params)
+{
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    FVector Center;
+    if (!TryReadVectorArray(Params, TEXT("center"), Center))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or invalid 'center' array [x,y,z]"));
+    }
+
+    double Radius = 100.0;
+    Params->TryGetNumberField(TEXT("radius"), Radius);
+    const double RadiusSq = Radius * Radius;
+    const TArray<FString> FilterTags = ReadStringArray(Params, TEXT("filter_tags"));
+    FString FilterKind;
+    Params->TryGetStringField(TEXT("filter_kind"), FilterKind);
+
+    TArray<TSharedPtr<FJsonValue>> HitsArr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        AActor* Actor = *It;
+        if (!ActorMatchesFilters(Actor, FilterTags, FilterKind))
+        {
+            continue;
+        }
+
+        FVector Origin;
+        FVector Extent;
+        Actor->GetActorBounds(true, Origin, Extent);
+        const FBox Bounds(Origin - Extent, Origin + Extent);
+        if (Bounds.ComputeSquaredDistanceToPoint(Center) > RadiusSq)
+        {
+            continue;
+        }
+
+        const float Distance = FVector::Dist(Center, Actor->GetActorLocation());
+        HitsArr.Add(MakeShared<FJsonValueObject>(
+            MakeHitJson(Actor, Distance, Actor->GetActorLocation(), FVector::ZeroVector)));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetArrayField(TEXT("hits"), HitsArr);
+    Result->SetNumberField(TEXT("count"), HitsArr.Num());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleSpatialRaycast(const TSharedPtr<FJsonObject>& Params)
+{
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    FVector Origin;
+    FVector Direction;
+    if (!TryReadVectorArray(Params, TEXT("origin"), Origin))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'origin' array [x,y,z]"));
+    }
+    if (!TryReadVectorArray(Params, TEXT("direction"), Direction))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'direction' array [x,y,z]"));
+    }
+    if (!Direction.Normalize())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("'direction' must be non-zero"));
+    }
+
+    double MaxDistance = 10000.0;
+    Params->TryGetNumberField(TEXT("max_distance"), MaxDistance);
+    const FVector End = Origin + Direction * static_cast<float>(MaxDistance);
+
+    FHitResult Hit;
+    FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UnrealMCPSpatialRaycast), true);
+    const bool bHit = World->LineTraceSingleByChannel(Hit, Origin, End, ECC_Visibility, QueryParams);
+
+    TArray<TSharedPtr<FJsonValue>> HitsArr;
+    if (bHit && Hit.GetActor())
+    {
+        const float Distance = Hit.Distance > 0.0f ? Hit.Distance : FVector::Dist(Origin, Hit.ImpactPoint);
+        HitsArr.Add(MakeShared<FJsonValueObject>(
+            MakeHitJson(Hit.GetActor(), Distance, Hit.ImpactPoint, Hit.ImpactNormal, Hit.GetComponent())));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetArrayField(TEXT("hits"), HitsArr);
+    Result->SetNumberField(TEXT("count"), HitsArr.Num());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleSpatialLinecast(const TSharedPtr<FJsonObject>& Params)
+{
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    FVector Origin;
+    FVector End;
+    if (!TryReadVectorArray(Params, TEXT("origin"), Origin))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'origin' array [x,y,z]"));
+    }
+    if (!TryReadVectorArray(Params, TEXT("end"), End))
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'end' array [x,y,z]"));
+    }
+
+    TArray<FHitResult> Hits;
+    FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UnrealMCPSpatialLinecast), true);
+    World->LineTraceMultiByChannel(Hits, Origin, End, ECC_Visibility, QueryParams);
+
+    TArray<TSharedPtr<FJsonValue>> HitsArr;
+    for (const FHitResult& Hit : Hits)
+    {
+        if (!Hit.GetActor())
+        {
+            continue;
+        }
+        const float Distance = Hit.Distance > 0.0f ? Hit.Distance : FVector::Dist(Origin, Hit.ImpactPoint);
+        HitsArr.Add(MakeShared<FJsonValueObject>(
+            MakeHitJson(Hit.GetActor(), Distance, Hit.ImpactPoint, Hit.ImpactNormal, Hit.GetComponent())));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetArrayField(TEXT("hits"), HitsArr);
+    Result->SetNumberField(TEXT("count"), HitsArr.Num());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPPhysicsCommands::HandleSpatialNearest(const TSharedPtr<FJsonObject>& Params)
+{
+    FString ReferenceActor;
+    if (!Params->TryGetStringField(TEXT("reference_actor"), ReferenceActor) || ReferenceActor.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'reference_actor' parameter"));
+    }
+
+    UWorld* World = GetEditorWorld();
+    if (!World)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* RefActor = FindActorByName(World, ReferenceActor);
+    if (!RefActor)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Reference actor '%s' not found"), *ReferenceActor));
+    }
+
+    const TArray<FString> FilterTags = ReadStringArray(Params, TEXT("filter_tags"));
+    FString FilterKind;
+    Params->TryGetStringField(TEXT("filter_kind"), FilterKind);
+    const FVector RefLocation = RefActor->GetActorLocation();
+    AActor* NearestActor = nullptr;
+    float NearestDistance = TNumericLimits<float>::Max();
+
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        AActor* Actor = *It;
+        if (Actor == RefActor || !ActorMatchesFilters(Actor, FilterTags, FilterKind))
+        {
+            continue;
+        }
+
+        const float Distance = FVector::Dist(RefLocation, Actor->GetActorLocation());
+        if (Distance < NearestDistance)
+        {
+            NearestDistance = Distance;
+            NearestActor = Actor;
+        }
+    }
+
+    TArray<TSharedPtr<FJsonValue>> HitsArr;
+    if (NearestActor)
+    {
+        HitsArr.Add(MakeShared<FJsonValueObject>(
+            MakeHitJson(NearestActor, NearestDistance, NearestActor->GetActorLocation(), FVector::ZeroVector)));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetArrayField(TEXT("hits"), HitsArr);
+    Result->SetNumberField(TEXT("count"), HitsArr.Num());
     return Result;
 }

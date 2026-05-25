@@ -1445,8 +1445,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateSubstrateMat
         Slab->MaterialExpressionEditorX = -300;
         Slab->MaterialExpressionEditorY = 0;
         Material->GetExpressionCollection().AddExpression(Slab);
-        Material->FrontMaterial.Expression = Slab;
-        Material->FrontMaterial.OutputIndex = 0;
+        if (UMaterialEditorOnlyData* EditorData = Material->GetEditorOnlyData())
+        {
+            EditorData->FrontMaterial.Expression = Slab;
+            EditorData->FrontMaterial.OutputIndex = 0;
+        }
     }
 
     FinalizeMaterialAsset(Material);
@@ -1547,8 +1550,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateLayeredMater
         }
 
         Material->GetExpressionCollection().AddExpression(LayersNode);
-        Material->MaterialAttributes.Expression = LayersNode;
-        Material->MaterialAttributes.OutputIndex = 0;
+        if (UMaterialEditorOnlyData* EditorData = Material->GetEditorOnlyData())
+        {
+            EditorData->MaterialAttributes.Expression = LayersNode;
+            EditorData->MaterialAttributes.OutputIndex = 0;
+        }
     }
 
     FinalizeMaterialAsset(Material);
@@ -1572,4 +1578,3 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCreateLayeredMater
     if (MissingBlends.Num() > 0) Data->SetArrayField(TEXT("missing_blend_paths"), ToJsonArray(MissingBlends));
     return FEpicUnrealMCPCommonUtils::MakeExecutedEnvelope(Data);
 }
-

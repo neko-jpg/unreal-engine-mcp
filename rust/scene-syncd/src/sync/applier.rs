@@ -57,6 +57,16 @@ pub struct SyncApplySummary {
     pub instance_set_creates: usize,
     pub instance_set_updates: usize,
     pub instance_set_deletes: usize,
+    #[serde(default)]
+    pub component_succeeded: usize,
+    #[serde(default)]
+    pub component_noops: usize,
+    #[serde(default)]
+    pub component_failed: usize,
+    #[serde(default)]
+    pub component_conflicts: usize,
+    #[serde(default)]
+    pub component_unsupported: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -542,6 +552,42 @@ pub async fn apply_sync(
                 .warnings
                 .push(format!("Failed to record instance set operations: {e}"));
         }
+    }
+
+    // --- Component apply phase (React-for-UE v3.0) ----------------------
+    match crate::sync::component_applier::apply_pending(db, unreal, &plan.scene_id).await {
+        Ok(component_report) => {
+            result.summary.component_succeeded = component_report.succeeded;
+            result.summary.component_noops = component_report.noop;
+            result.summary.component_failed = component_report.failed;
+            result.summary.component_conflicts = component_report.conflict;
+            result.summary.component_unsupported = component_report.unsupported;
+            for op in component_report.operations {
+                let status = format!("{:?}", op.outcome).to_lowercase();
+                result.operations.push(AppliedOperation {
+                    mcp_id: op.entity_id.clone(),
+                    action: format!("component_{}", op.component_type),
+                    status,
+                    unreal_actor_name: None,
+                    error: None,
+                });
+                if op.outcome == crate::sync::component_applier::ApplyOutcome::Conflict {
+                    let _ = db
+                        .record_operation(
+                            &run_id,
+                            &plan.scene_id,
+                            &op.entity_id,
+                            &format!("component_{}", op.component_type),
+                            "conflict",
+                            &op.reason,
+                        )
+                        .await;
+                }
+            }
+        }
+        Err(e) => result
+            .warnings
+            .push(format!("Component apply phase failed: {e}")),
     }
 
     if let Err(e) = db.finish_sync_run(&run_id, &result.summary).await {

@@ -6,7 +6,7 @@ import socket
 
 def unreal_command(command: str, params: dict = None) -> dict:
     payload = json.dumps({"command": command, "params": params or {}}).encode("utf-8") + b"\n"
-    with socket.create_connection(("127.0.0.1", 55557), timeout=10) as s:
+    with socket.create_connection(("127.0.0.1", 55771), timeout=10) as s:
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         s.sendall(payload)
         data = bytearray()

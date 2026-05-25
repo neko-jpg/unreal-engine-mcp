@@ -213,7 +213,25 @@ pub struct SceneComponent {
     pub metadata: serde_json::Value,
     pub created_at: Datetime,
     pub updated_at: Datetime,
+    /// React-for-UE v3.0 desired-state fields.
+    #[serde(default)]
+    pub desired_hash: String,
+    #[serde(default)]
+    pub last_applied_hash: Option<String>,
+    #[serde(default = "default_sync_status_pending")]
+    pub sync_status: String,
+    #[serde(default)]
+    pub deleted: bool,
+    #[serde(default = "default_revision")]
+    pub revision: i64,
+    #[serde(default)]
+    pub last_operation_id: Option<String>,
+    #[serde(default)]
+    pub updated_by: Option<String>,
 }
+
+fn default_sync_status_pending() -> String { "pending".to_string() }
+fn default_revision() -> i64 { 1 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneAsset {

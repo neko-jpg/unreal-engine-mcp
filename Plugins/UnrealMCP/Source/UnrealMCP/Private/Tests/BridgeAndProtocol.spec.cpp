@@ -57,13 +57,13 @@ bool FUnrealMCPBridgeConfigTest::RunTest(const FString& Parameters)
 	}
 
 	HostCVar->Set(TEXT("127.0.0.2"), ECVF_SetByCode);
-	PortCVar->Set(55558, ECVF_SetByCode);
+	PortCVar->Set(55772, ECVF_SetByCode);
 	UEpicUnrealMCPBridge* Bridge = NewObject<UEpicUnrealMCPBridge>();
 	TestNotNull(TEXT("Bridge instance should be created"), Bridge);
 	if (Bridge)
 	{
 		TestEqual(TEXT("Bridge should use CVar host override"), Bridge->GetServerAddress().ToString(), FString(TEXT("127.0.0.2")));
-		TestEqual(TEXT("Bridge should use CVar port override"), static_cast<int32>(Bridge->GetServerPort()), 55558);
+		TestEqual(TEXT("Bridge should use CVar port override"), static_cast<int32>(Bridge->GetServerPort()), 55772);
 	}
 
 	HostCVar->Set(TEXT(""), ECVF_SetByCode);

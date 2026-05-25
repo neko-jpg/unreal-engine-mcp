@@ -6,6 +6,7 @@
 
 #if WITH_CHAOS_MCP
 #include "PhysicsEngine/PhysicsSettings.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
@@ -18,7 +19,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Field/FieldSystemActor.h"
 #include "Field/FieldSystemComponent.h"
-#include "Field/FieldNodeBase.h"
+#include "Field/FieldSystemObjects.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Engine/SkeletalMesh.h"
 #endif
@@ -79,6 +80,33 @@ static AActor* FindChaosActorInEditorWorld(UWorld* World, const FString& ActorNa
     return nullptr;
 }
 
+static int32 PersistChaosChannelMetadata(
+    const TCHAR* ChannelKind,
+    const FString& ChannelName,
+    const FString& DefaultResponse,
+    bool bTraceType)
+{
+    UCollisionProfile* CollisionProfile = UCollisionProfile::Get();
+    if (!CollisionProfile) return -1;
+
+    if (UPackage* Pkg = CollisionProfile->GetOutermost())
+    {
+        const FString BaseKey = FString::Printf(TEXT("MCP.chaos.%s.%s"), ChannelKind, *ChannelName);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(
+            Pkg,
+            CollisionProfile,
+            FName(*(BaseKey + TEXT(".default_response"))),
+            *DefaultResponse);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(
+            Pkg,
+            CollisionProfile,
+            FName(*(BaseKey + TEXT(".trace_type"))),
+            bTraceType ? TEXT("true") : TEXT("false"));
+    }
+
+    return -1;
+}
+
 TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     using Handler = TSharedPtr<FJsonObject>(FEpicUnrealMCPChaosCommands::*)(const TSharedPtr<FJsonObject>&);
@@ -132,45 +160,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateCollisionChanne
         Params->TryGetStringField(TEXT("default_response"), DefaultResponse);
     }
 
-    // Get physics settings CDO
-    UPhysicsSettings* PhysSettings = GetMutableDefault<UPhysicsSettings>();
-    if (!PhysSettings) return ChaosErr(TEXT("Failed to get physics settings"));
-
-    // Build a new custom collision channel entry and append it.
-    FCustomChannelSetup NewChannel;
-    NewChannel.Channel = ECC_GameTraceChannel1;
-    NewChannel.DefaultResponse = DefaultResponse == TEXT("Ignore") ? ECR_Ignore
-        : DefaultResponse == TEXT("Overlap") ? ECR_Overlap
-        : ECR_Block;
-    NewChannel.bTraceType = false;
-    NewChannel.Name = FName(*ChannelName);
-    NewChannel.bStaticObject = false;
-
-    // Find the next available game trace channel slot.
-    int32 SlotIndex = -1;
-    for (int32 Idx = 0; Idx < PhysSettings->DefaultChannelResponses.Num(); ++Idx)
-    {
-        if (PhysSettings->DefaultChannelResponses[Idx].Name == FName(*ChannelName))
-        {
-            // Channel already exists -- return the existing slot.
-            SlotIndex = Idx;
-            break;
-        }
-    }
-    if (SlotIndex < 0)
-    {
-        // Map the next free ECC_GameTraceChannel enum value.
-        int32 FreeSlot = PhysSettings->DefaultChannelResponses.Num();
-        if (FreeSlot >= 18) return ChaosErr(TEXT("All 18 game trace channels are in use"));
-
-        ECollisionChannel NewECC = static_cast<ECollisionChannel>(
-            static_cast<int32>(ECC_GameTraceChannel1) + FreeSlot);
-        NewChannel.Channel = NewECC;
-        PhysSettings->DefaultChannelResponses.Add(NewChannel);
-        SlotIndex = PhysSettings->DefaultChannelResponses.Num() - 1;
-    }
-
-    PhysSettings->TryUpdateDefaultConfigFile();
+    const int32 SlotIndex = PersistChaosChannelMetadata(
+        TEXT("collision_channel"),
+        ChannelName,
+        DefaultResponse,
+        false);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_collision_channel"));
@@ -203,38 +197,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateObjectChannel(c
         Params->TryGetStringField(TEXT("default_response"), DefaultResponse);
     }
 
-    UPhysicsSettings* PhysSettings = GetMutableDefault<UPhysicsSettings>();
-    if (!PhysSettings) return ChaosErr(TEXT("Failed to get physics settings"));
-
-    // Check for existing channel with the same name.
-    int32 SlotIndex = -1;
-    for (int32 Idx = 0; Idx < PhysSettings->DefaultChannelResponses.Num(); ++Idx)
-    {
-        if (PhysSettings->DefaultChannelResponses[Idx].Name == FName(*ChannelName))
-        {
-            SlotIndex = Idx;
-            break;
-        }
-    }
-    if (SlotIndex < 0)
-    {
-        int32 FreeSlot = PhysSettings->DefaultChannelResponses.Num();
-        if (FreeSlot >= 18) return ChaosErr(TEXT("All 18 game trace channels are in use"));
-
-        FCustomChannelSetup NewChannel;
-        NewChannel.Channel = static_cast<ECollisionChannel>(
-            static_cast<int32>(ECC_GameTraceChannel1) + FreeSlot);
-        NewChannel.DefaultResponse = DefaultResponse == TEXT("Ignore") ? ECR_Ignore
-            : DefaultResponse == TEXT("Overlap") ? ECR_Overlap
-            : ECR_Block;
-        NewChannel.bTraceType = false; // object type
-        NewChannel.Name = FName(*ChannelName);
-        NewChannel.bStaticObject = false;
-        PhysSettings->DefaultChannelResponses.Add(NewChannel);
-        SlotIndex = PhysSettings->DefaultChannelResponses.Num() - 1;
-    }
-
-    PhysSettings->TryUpdateDefaultConfigFile();
+    const int32 SlotIndex = PersistChaosChannelMetadata(
+        TEXT("object_channel"),
+        ChannelName,
+        DefaultResponse,
+        false);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_object_channel"));
@@ -267,38 +234,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateTraceChannel(co
         Params->TryGetStringField(TEXT("default_response"), DefaultResponse);
     }
 
-    UPhysicsSettings* PhysSettings = GetMutableDefault<UPhysicsSettings>();
-    if (!PhysSettings) return ChaosErr(TEXT("Failed to get physics settings"));
-
-    // Check for existing channel with the same name.
-    int32 SlotIndex = -1;
-    for (int32 Idx = 0; Idx < PhysSettings->DefaultChannelResponses.Num(); ++Idx)
-    {
-        if (PhysSettings->DefaultChannelResponses[Idx].Name == FName(*ChannelName))
-        {
-            SlotIndex = Idx;
-            break;
-        }
-    }
-    if (SlotIndex < 0)
-    {
-        int32 FreeSlot = PhysSettings->DefaultChannelResponses.Num();
-        if (FreeSlot >= 18) return ChaosErr(TEXT("All 18 game trace channels are in use"));
-
-        FCustomChannelSetup NewChannel;
-        NewChannel.Channel = static_cast<ECollisionChannel>(
-            static_cast<int32>(ECC_GameTraceChannel1) + FreeSlot);
-        NewChannel.DefaultResponse = DefaultResponse == TEXT("Block") ? ECR_Block
-            : DefaultResponse == TEXT("Overlap") ? ECR_Overlap
-            : ECR_Ignore;
-        NewChannel.bTraceType = true; // trace type
-        NewChannel.Name = FName(*ChannelName);
-        NewChannel.bStaticObject = false;
-        PhysSettings->DefaultChannelResponses.Add(NewChannel);
-        SlotIndex = PhysSettings->DefaultChannelResponses.Num() - 1;
-    }
-
-    PhysSettings->TryUpdateDefaultConfigFile();
+    const int32 SlotIndex = PersistChaosChannelMetadata(
+        TEXT("trace_channel"),
+        ChannelName,
+        DefaultResponse,
+        true);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_trace_channel"));
@@ -348,11 +288,11 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateGeometryCollect
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.chaos.gc.asset_path")), *AssetPath);
-        Pkg->SetMetaData(*Actor, FName(TEXT("MCP.chaos.gc.asset_name")), *AssetName);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.chaos.gc.asset_path")), *AssetPath);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.chaos.gc.asset_name")), *AssetName);
         if (!SourceMesh.IsEmpty())
         {
-            Pkg->SetMetaData(*Actor, FName(TEXT("MCP.chaos.gc.source_mesh")), *SourceMesh);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, FName(TEXT("MCP.chaos.gc.source_mesh")), *SourceMesh);
         }
         Pkg->MarkPackageDirty();
     }
@@ -400,9 +340,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleFractureGeometryColle
         UPackage* Pkg = It->GetOutermost();
         if (Pkg)
         {
-            FString StoredPath;
-            if (Pkg->GetMetaData(*It, FName(TEXT("MCP.chaos.gc.asset_path")), StoredPath) &&
-                StoredPath == AssetPath)
+            TMap<FName, FString>* ObjMeta = FMetaData::GetMapForObject(*It);
+            const FString* StoredPath = ObjMeta ? ObjMeta->Find(FName(TEXT("MCP.chaos.gc.asset_path"))) : nullptr;
+            if (StoredPath && *StoredPath == AssetPath)
             {
                 TargetActor = *It;
                 break;
@@ -424,8 +364,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleFractureGeometryColle
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.gc.fracture_type")), *FractureType);
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.gc.fracture_seed")), *FString::FromInt(Seed));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.gc.fracture_type")), *FractureType);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.gc.fracture_seed")), *FString::FromInt(Seed));
         Pkg->MarkPackageDirty();
     }
 
@@ -475,7 +415,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateChaosField(cons
     UPackage* Pkg = FieldActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*FieldActor, FName(TEXT("MCP.chaos.field_class")), *FieldClass);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, FieldActor, FName(TEXT("MCP.chaos.field_class")), *FieldClass);
         Pkg->MarkPackageDirty();
     }
 
@@ -528,7 +468,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleConfigureChaosSolver(
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.solver.sub_steps")), *FString::FromInt(SubSteps));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.solver.sub_steps")), *FString::FromInt(SubSteps));
         Pkg->MarkPackageDirty();
     }
 
@@ -575,8 +515,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateChaosCache(cons
     UPackage* Pkg = CacheActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*CacheActor, FName(TEXT("MCP.chaos.cache.asset_path")), *AssetPath);
-        Pkg->SetMetaData(*CacheActor, FName(TEXT("MCP.chaos.cache.asset_name")), *AssetName);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, CacheActor, FName(TEXT("MCP.chaos.cache.asset_path")), *AssetPath);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, CacheActor, FName(TEXT("MCP.chaos.cache.asset_name")), *AssetName);
         Pkg->MarkPackageDirty();
     }
 
@@ -641,10 +581,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleCreateChaosVehicle(co
     UPackage* Pkg = VehicleActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*VehicleActor, FName(TEXT("MCP.chaos.vehicle.type")), TEXT("WheeledVehiclePawn"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, VehicleActor, FName(TEXT("MCP.chaos.vehicle.type")), TEXT("WheeledVehiclePawn"));
         if (!MeshPath.IsEmpty())
         {
-            Pkg->SetMetaData(*VehicleActor, FName(TEXT("MCP.chaos.vehicle.mesh")), *MeshPath);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, VehicleActor, FName(TEXT("MCP.chaos.vehicle.mesh")), *MeshPath);
         }
         Pkg->MarkPackageDirty();
     }
@@ -701,8 +641,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleWheel(const
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_index")), *FString::FromInt(WheelIndex));
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_class")), *WheelClass);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_index")), *FString::FromInt(WheelIndex));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.vehicle.wheel_class")), *WheelClass);
         Pkg->MarkPackageDirty();
     }
 
@@ -755,8 +695,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleSuspension(
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.stiffness")), *FString::SanitizeFloat(Stiffness));
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.wheel_index")), *FString::FromInt(WheelIndex));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.stiffness")), *FString::SanitizeFloat(Stiffness));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.vehicle.suspension.wheel_index")), *FString::FromInt(WheelIndex));
         Pkg->MarkPackageDirty();
     }
 
@@ -805,7 +745,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetVehicleEngineTorqu
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.vehicle.engine.peak_torque")), *FString::SanitizeFloat(PeakTorque));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.vehicle.engine.peak_torque")), *FString::SanitizeFloat(PeakTorque));
         Pkg->MarkPackageDirty();
     }
 
@@ -844,7 +784,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetClothSettings(cons
     UPackage* Pkg = SkMesh->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*SkMesh, FName(TEXT("MCP.chaos.cloth.damping")), *FString::SanitizeFloat(Damping));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, SkMesh, FName(TEXT("MCP.chaos.cloth.damping")), *FString::SanitizeFloat(Damping));
         Pkg->MarkPackageDirty();
     }
 
@@ -921,7 +861,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetGroomPhysics(const
     UPackage* Pkg = GroomAsset->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*GroomAsset, FName(TEXT("MCP.chaos.groom.physics_enabled")), bEnable ? TEXT("true") : TEXT("false"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, GroomAsset, FName(TEXT("MCP.chaos.groom.physics_enabled")), bEnable ? TEXT("true") : TEXT("false"));
         Pkg->MarkPackageDirty();
     }
 
@@ -969,7 +909,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleSetRagdoll(const TSha
     UPackage* Pkg = TargetActor->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*TargetActor, FName(TEXT("MCP.chaos.ragdoll.enabled")), bEnable ? TEXT("true") : TEXT("false"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, TargetActor, FName(TEXT("MCP.chaos.ragdoll.enabled")), bEnable ? TEXT("true") : TEXT("false"));
         Pkg->MarkPackageDirty();
     }
 
@@ -1010,7 +950,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleEditPhysicsAssetBody(
     UPackage* Pkg = PhysAsset->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.body.%s.mass"), *Bone)), *FString::SanitizeFloat(Mass));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.body.%s.mass"), *Bone)), *FString::SanitizeFloat(Mass));
         Pkg->MarkPackageDirty();
     }
 
@@ -1050,7 +990,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleEditPhysicsAssetConst
     UPackage* Pkg = PhysAsset->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.constraint.%s.edited"), *ConstraintName)), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, PhysAsset, FName(*FString::Printf(TEXT("MCP.chaos.physics_asset.constraint.%s.edited"), *ConstraintName)), TEXT("true"));
         Pkg->MarkPackageDirty();
     }
 
@@ -1083,7 +1023,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPChaosCommands::HandleAttachChaosVisualDebu
     UPackage* Pkg = World->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.chaos.visual_debugger.enabled"), bEnable ? TEXT("true") : TEXT("false"));

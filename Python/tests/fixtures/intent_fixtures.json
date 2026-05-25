@@ -1,0 +1,430 @@
+{
+  "fixtures": [
+    {
+      "id": "creepy_cave",
+      "raw": "make this cave creepy",
+      "expect_action": "modify",
+      "expect_mood": "creepy",
+      "expect_domains": [
+        "lighting",
+        "material",
+        "atmosphere",
+        "audio",
+        "vfx"
+      ],
+      "target": "the cave"
+    },
+    {
+      "id": "spooky_cave",
+      "raw": "the cave should feel spooky",
+      "expect_action": "modify",
+      "expect_mood": "creepy",
+      "expect_domains": [
+        "lighting",
+        "material",
+        "atmosphere",
+        "audio",
+        "vfx"
+      ],
+      "target": null
+    },
+    {
+      "id": "creepier",
+      "raw": "make it creepier",
+      "expect_action": "modify",
+      "expect_mood": "creepy",
+      "expect_domains": [
+        "lighting",
+        "material",
+        "atmosphere",
+        "audio",
+        "vfx"
+      ],
+      "target": null
+    },
+    {
+      "id": "creepy_haunted",
+      "raw": "this place feels haunted, more creepy lighting",
+      "expect_action": "modify",
+      "expect_mood": "creepy",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": null
+    },
+    {
+      "id": "moonlit_field",
+      "raw": "make the field moonlit",
+      "expect_action": "modify",
+      "expect_mood": "moonlit",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "the field"
+    },
+    {
+      "id": "moonlit_night",
+      "raw": "moonlight bathing the courtyard",
+      "expect_action": "modify",
+      "expect_mood": "moonlit",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "the courtyard"
+    },
+    {
+      "id": "heroic_castle",
+      "raw": "make the castle heroic",
+      "expect_action": "modify",
+      "expect_mood": "heroic",
+      "expect_domains_min": [],
+      "target": "the castle"
+    },
+    {
+      "id": "epic_battle",
+      "raw": "make it epic for the boss battle",
+      "expect_action": "modify",
+      "expect_mood": "heroic",
+      "target": null
+    },
+    {
+      "id": "majestic_throne",
+      "raw": "throne hall should be majestic",
+      "expect_action": "modify",
+      "expect_mood": "heroic",
+      "target": "throne hall"
+    },
+    {
+      "id": "osaka_castle",
+      "raw": "build like Osaka castle samurai feel",
+      "expect_action": "create",
+      "expect_mood": "osaka_castle",
+      "target": null
+    },
+    {
+      "id": "cinematic_warm",
+      "raw": "give it cinematic warm grading",
+      "expect_action": "modify",
+      "expect_mood": "cinematic_warm",
+      "expect_domains_min": [],
+      "target": null
+    },
+    {
+      "id": "calm_serene",
+      "raw": "make the lake calm and serene",
+      "expect_action": "modify",
+      "expect_mood": "calm",
+      "target": "the lake"
+    },
+    {
+      "id": "intense_dramatic",
+      "raw": "intense dramatic dungeon",
+      "expect_action": "modify",
+      "expect_mood": "intense",
+      "target": "dungeon"
+    },
+    {
+      "id": "lighting_only",
+      "raw": "increase the torch light intensity",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "torch"
+    },
+    {
+      "id": "lighting_dim",
+      "raw": "dim the lights in the cave",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "lights in the cave"
+    },
+    {
+      "id": "material_wet",
+      "raw": "make the stone material wet",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "material"
+      ],
+      "target": "stone"
+    },
+    {
+      "id": "material_rough",
+      "raw": "rougher metal surface",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "material"
+      ],
+      "target": "metal"
+    },
+    {
+      "id": "fog_dense",
+      "raw": "denser fog throughout",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "atmosphere"
+      ],
+      "target": null
+    },
+    {
+      "id": "fog_mist",
+      "raw": "add some morning mist",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "atmosphere"
+      ],
+      "target": null
+    },
+    {
+      "id": "sky_clouds",
+      "raw": "more clouds in the sky",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "atmosphere"
+      ],
+      "target": "sky"
+    },
+    {
+      "id": "audio_drip",
+      "raw": "add water dripping sound",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "audio"
+      ],
+      "target": null
+    },
+    {
+      "id": "audio_wind",
+      "raw": "wind ambient sound please",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "audio"
+      ],
+      "target": null
+    },
+    {
+      "id": "vfx_dust",
+      "raw": "dust particle in the air",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "vfx"
+      ],
+      "target": null
+    },
+    {
+      "id": "vfx_embers",
+      "raw": "embers floating around the fire",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "vfx"
+      ],
+      "target": "fire"
+    },
+    {
+      "id": "post_bloom",
+      "raw": "tone down the bloom",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "post_process"
+      ],
+      "target": null
+    },
+    {
+      "id": "post_saturation",
+      "raw": "lower the saturation",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "post_process"
+      ],
+      "target": null
+    },
+    {
+      "id": "camera_framing",
+      "raw": "improve the camera framing on the tower",
+      "expect_action": "refine",
+      "expect_domains_min": [
+        "camera"
+      ],
+      "target": "the tower"
+    },
+    {
+      "id": "describe_scene",
+      "raw": "describe the scene",
+      "expect_action": "describe",
+      "expect_domains_min": [],
+      "target": null
+    },
+    {
+      "id": "summarize",
+      "raw": "summarize all the lights",
+      "expect_action": "describe",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "all the lights"
+    },
+    {
+      "id": "what_is",
+      "raw": "what is this cave used for",
+      "expect_action": "describe",
+      "target": "this cave"
+    },
+    {
+      "id": "restore_name",
+      "raw": "restore to snapshot before_creepy",
+      "expect_action": "restore",
+      "target": null
+    },
+    {
+      "id": "rollback",
+      "raw": "rollback the last change",
+      "expect_action": "restore",
+      "target": null
+    },
+    {
+      "id": "undo",
+      "raw": "undo it",
+      "expect_action": "restore",
+      "target": null
+    },
+    {
+      "id": "compare_snap",
+      "raw": "compare current to before_creepy snapshot",
+      "expect_action": "compare",
+      "target": null
+    },
+    {
+      "id": "diff_changes",
+      "raw": "diff against last apply",
+      "expect_action": "compare",
+      "target": null
+    },
+    {
+      "id": "create_wall",
+      "raw": "create a stone wall along the south",
+      "expect_action": "create",
+      "target": "south"
+    },
+    {
+      "id": "create_torch",
+      "raw": "spawn a new torch light",
+      "expect_action": "create",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": null
+    },
+    {
+      "id": "create_pyramid",
+      "raw": "build a small pyramid",
+      "expect_action": "create",
+      "target": null
+    },
+    {
+      "id": "refine_more",
+      "raw": "more dust please",
+      "expect_action": "modify",
+      "target": null
+    },
+    {
+      "id": "refine_less",
+      "raw": "less fog",
+      "expect_action": "modify",
+      "target": null
+    },
+    {
+      "id": "refine_brighter",
+      "raw": "improve the lighting in the throne hall",
+      "expect_action": "refine",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "throne hall"
+    },
+    {
+      "id": "ambig_short",
+      "raw": "make it nicer",
+      "expect_action": "modify",
+      "expect_ambiguous_target": true,
+      "target": null
+    },
+    {
+      "id": "ambig_target_it",
+      "raw": "make it darker",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": null
+    },
+    {
+      "id": "ambig_pronoun_that",
+      "raw": "make that fog denser",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "atmosphere"
+      ],
+      "target": null
+    },
+    {
+      "id": "destructive_delete",
+      "raw": "delete all torch lights",
+      "expect_action": "modify",
+      "expect_risk": "destructive",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "torch lights"
+    },
+    {
+      "id": "destructive_wipe",
+      "raw": "wipe the lighting setup",
+      "expect_action": "modify",
+      "expect_risk": "destructive",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": null
+    },
+    {
+      "id": "tag_torches",
+      "raw": "all wall torches brighter",
+      "expect_action": "modify",
+      "expect_domains_min": [
+        "lighting"
+      ],
+      "target": "all wall torches"
+    },
+    {
+      "id": "spawn_blueprint",
+      "raw": "add an actor of type AmbientSound",
+      "expect_action": "create",
+      "expect_domains_min": [
+        "audio"
+      ],
+      "target": null
+    },
+    {
+      "id": "style_creepy_only",
+      "raw": "apply creepy style preset",
+      "expect_action": "modify",
+      "expect_mood": "creepy",
+      "target": null
+    },
+    {
+      "id": "style_heroic_only",
+      "raw": "apply heroic style preset",
+      "expect_action": "modify",
+      "expect_mood": "heroic",
+      "target": null
+    },
+    {
+      "id": "explain_request",
+      "raw": "explain the last patch plan",
+      "expect_action": "describe",
+      "target": null
+    }
+  ]
+}

@@ -101,7 +101,7 @@ def scene_upsert_actors(
 
     payload: Dict[str, Any] = {
         "scene_id": scene_id,
-        "objects": objects,
+        "objects": [{**obj, "scene_id": obj.get("scene_id", scene_id)} for obj in objects],
     }
     if group_id is not None:
         payload["group_id"] = group_id

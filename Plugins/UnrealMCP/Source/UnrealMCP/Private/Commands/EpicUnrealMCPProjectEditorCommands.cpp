@@ -127,6 +127,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPProjectEditorCommands::HandleCommand(const
         {TEXT("start_simulate"), &FEpicUnrealMCPProjectEditorCommands::HandleStartSimulate},
         {TEXT("get_camera_position"), &FEpicUnrealMCPProjectEditorCommands::HandleGetCameraPosition},
         {TEXT("set_camera_position"), &FEpicUnrealMCPProjectEditorCommands::HandleSetCameraPosition},
+        {TEXT("set_camera_look_at"), &FEpicUnrealMCPProjectEditorCommands::HandleSetCameraPosition},
         {TEXT("viewport_action"), &FEpicUnrealMCPProjectEditorCommands::HandleViewportAction},
         {TEXT("take_screenshot"), &FEpicUnrealMCPProjectEditorCommands::HandleTakeScreenshot},
         {TEXT("export_level"), &FEpicUnrealMCPProjectEditorCommands::HandleExportLevel},
@@ -1340,30 +1341,74 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPProjectEditorCommands::HandleSetCameraPosi
     FEditorViewportClient* Client = GetSafeEditorViewportClient();
     if (!Client) { return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("No editor viewport client available")); }
     const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+    bool bHasLocation = false;
+    bool bHasRotation = false;
+    bool bHasLookAt = false;
+    FVector Loc = Client->GetViewLocation();
+    FRotator Rot = Client->GetViewRotation();
+    FVector LookAt = FVector::ZeroVector;
+
     if (Params->TryGetArrayField(TEXT("location"), Arr) && Arr && Arr->Num() >= 3)
     {
-        FVector Loc(
+        Loc = FVector(
             (*Arr)[0]->AsNumber(),
             (*Arr)[1]->AsNumber(),
             (*Arr)[2]->AsNumber()
         );
         Client->SetViewLocation(Loc);
+        bHasLocation = true;
     }
     if (Params->TryGetArrayField(TEXT("rotation"), Arr) && Arr && Arr->Num() >= 3)
     {
-        FRotator Rot(
+        Rot = FRotator(
             (*Arr)[0]->AsNumber(),
             (*Arr)[1]->AsNumber(),
             (*Arr)[2]->AsNumber()
         );
         Client->SetViewRotation(Rot);
+        bHasRotation = true;
+    }
+    if (Params->TryGetArrayField(TEXT("look_at"), Arr) && Arr && Arr->Num() >= 3)
+    {
+        LookAt = FVector(
+            (*Arr)[0]->AsNumber(),
+            (*Arr)[1]->AsNumber(),
+            (*Arr)[2]->AsNumber()
+        );
+        if (bHasLocation && !bHasRotation)
+        {
+            Rot = (LookAt - Loc).Rotation();
+            Client->SetViewRotation(Rot);
+        }
+        Client->SetLookAtLocation(LookAt, false);
+        bHasLookAt = true;
     }
     if (Client->Viewport)
     {
         Client->Viewport->Invalidate();
     }
     TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
-    R->SetBoolField(TEXT("success"), true); R->SetStringField(TEXT("message"), TEXT("Camera position updated")); return R;
+    R->SetBoolField(TEXT("success"), true);
+    R->SetStringField(TEXT("message"), TEXT("Camera position updated"));
+    TArray<TSharedPtr<FJsonValue>> LocationArr;
+    LocationArr.Add(MakeShared<FJsonValueNumber>(Loc.X));
+    LocationArr.Add(MakeShared<FJsonValueNumber>(Loc.Y));
+    LocationArr.Add(MakeShared<FJsonValueNumber>(Loc.Z));
+    R->SetArrayField(TEXT("location"), LocationArr);
+    TArray<TSharedPtr<FJsonValue>> RotationArr;
+    RotationArr.Add(MakeShared<FJsonValueNumber>(Rot.Pitch));
+    RotationArr.Add(MakeShared<FJsonValueNumber>(Rot.Yaw));
+    RotationArr.Add(MakeShared<FJsonValueNumber>(Rot.Roll));
+    R->SetArrayField(TEXT("rotation"), RotationArr);
+    if (bHasLookAt)
+    {
+        TArray<TSharedPtr<FJsonValue>> LookAtArr;
+        LookAtArr.Add(MakeShared<FJsonValueNumber>(LookAt.X));
+        LookAtArr.Add(MakeShared<FJsonValueNumber>(LookAt.Y));
+        LookAtArr.Add(MakeShared<FJsonValueNumber>(LookAt.Z));
+        R->SetArrayField(TEXT("look_at"), LookAtArr);
+    }
+    return R;
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPProjectEditorCommands::HandleViewportAction(const TSharedPtr<FJsonObject>& Params)

@@ -37,6 +37,12 @@ async fn main() -> anyhow::Result<()> {
     repo.ensure_default_scene().await?;
     tracing::info!("Default scene:main ready");
 
+    // React-for-UE v3.0: backfill desired_hash for any pre-v3 scene_component rows.
+    match repo.backfill_component_desired_hashes().await {
+        Ok(n) => tracing::info!("scene_component backfill completed (rows updated: {})", n),
+        Err(e) => tracing::warn!("scene_component backfill failed: {}", e),
+    }
+
     let bind_addr = config.bind_addr();
 
     let state = AppState {

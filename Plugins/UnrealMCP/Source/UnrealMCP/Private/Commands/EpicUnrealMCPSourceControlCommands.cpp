@@ -8,6 +8,7 @@
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
 #include "ISourceControlOperation.h"
+#include "ISourceControlRevision.h"
 #include "ISourceControlState.h"
 #include "ISourceControlChangelist.h"
 #include "SourceControlOperations.h"
@@ -116,10 +117,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSourceControlCommands::HandleRegisterGitPr
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("repo_path"), RepoPath);
-        const TSharedPtr<FJsonValue>* LfsVal = nullptr;
-        if (Params->TryGetField(TEXT("lfs_enabled"), LfsVal) && LfsVal.IsValid())
+        TSharedPtr<FJsonValue> LfsVal = Params->TryGetField(TEXT("lfs_enabled"));
+        if (LfsVal.IsValid())
         {
-            bLfsEnabled = (*LfsVal)->AsBool();
+            bLfsEnabled = LfsVal->AsBool();
         }
     }
     if (RepoPath.IsEmpty()) return ScmErr(TEXT("register_git_provider: 'repo_path' is required."));
@@ -217,7 +218,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSourceControlCommands::HandleSourceControl
     if (Params.IsValid()) Params->TryGetStringField(TEXT("description"), Description);
 
     ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-    FSourceControlOperationRef Op = ISourceControlOperation::Create<FCheckIn>();
+    TSharedRef<FCheckIn, ESPMode::ThreadSafe> Op = ISourceControlOperation::Create<FCheckIn>();
     Op->SetDescription(FText::FromString(Description));
     ECommandResult::Type Result = Provider.Execute(Op, Paths, EConcurrency::Synchronous);
 
@@ -322,7 +323,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSourceControlCommands::HandleSourceControl
     if (Params.IsValid()) Params->TryGetStringField(TEXT("description"), Description);
 
     ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-    FSourceControlOperationRef Op = ISourceControlOperation::Create<FNewChangelist>();
+    TSharedRef<FNewChangelist, ESPMode::ThreadSafe> Op = ISourceControlOperation::Create<FNewChangelist>();
     Op->SetDescription(FText::FromString(Description));
     ECommandResult::Type Result = Provider.Execute(Op, EConcurrency::Synchronous);
 

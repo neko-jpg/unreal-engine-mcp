@@ -8,7 +8,6 @@
 #include "FoliageType_InstancedStaticMesh.h"
 #include "FoliageType_Actor.h"
 #include "Engine/StaticMesh.h"
-#include "Engine/AssetTools.h"
 #include "UObject/Package.h"
 #include "Editor.h"
 #include "EngineUtils.h"
@@ -111,31 +110,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleCommand(const FStri
     R->SetBoolField(TEXT("success"), false);
     R->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *CommandType));
     return R;
-}
-
-// ---------------------------------------------------------------------------
-// 234-stubs W3 (#90): Foliage executed-envelope helpers.
-// ---------------------------------------------------------------------------
-static TSharedPtr<FJsonObject> FoliageOk(TSharedPtr<FJsonObject> Data)
-{
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), true);
-    Out->SetObjectField(TEXT("data"), Data.ToSharedRef());
-    return Out;
-}
-
-static TSharedPtr<FJsonObject> FoliageErr(const FString& Msg)
-{
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetBoolField(TEXT("success"), false);
-    Out->SetStringField(TEXT("error"), Msg);
-    return Out;
-}
-
-static UFoliageType* LoadFoliageType(const FString& Path)
-{
-    if (Path.IsEmpty()) return nullptr;
-    return LoadObject<UFoliageType>(nullptr, *Path);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,7 +451,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleFoliagePaint(const 
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.foliage_paint.foliage_type"), *FoliageTypePath);
@@ -531,7 +505,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleFoliageErase(const 
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.foliage_erase.foliage_type"), *FoliageTypePath);
@@ -582,9 +556,20 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageLod(const
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_foliage_lod"));
     Ft->Modify();
 
+    const float DistanceScale = ScreenSizeOverrides.Num() > 0
+        ? static_cast<float>(ScreenSizeOverrides[0])
+        : 1.0f;
     if (ScreenSizeOverrides.Num() > 0)
     {
-        Ft->DistanceScale = static_cast<float>(ScreenSizeOverrides[0]);
+        if (UPackage* Pkg = Ft->GetOutermost())
+        {
+            const FString StoredDistanceScale = FString::SanitizeFloat(DistanceScale);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(
+                Pkg,
+                Ft,
+                FName(TEXT("MCP.foliage.lod.distance_scale")),
+                *StoredDistanceScale);
+        }
     }
 
     Ft->MarkPackageDirty();
@@ -592,7 +577,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageLod(const
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_foliage_lod"));
     Data->SetStringField(TEXT("foliage_type_path"), Ft->GetPathName());
-    Data->SetNumberField(TEXT("distance_scale"), Ft->DistanceScale);
+    Data->SetNumberField(TEXT("distance_scale"), DistanceScale);
     Data->SetBoolField(TEXT("executed"), true);
     return FoliageOk(Data);
 #else
@@ -972,16 +957,25 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPFoliageCommands::HandleSetFoliageNanite(co
     UFoliageType_InstancedStaticMesh* IsmType = Cast<UFoliageType_InstancedStaticMesh>(Ft);
     if (!IsmType) return FoliageErr(FString::Printf(
         TEXT("FoliageType at '%s' is not a UFoliageType_InstancedStaticMesh."), *FoliageTypePath));
+    UStaticMesh* Mesh = IsmType->GetStaticMesh();
+    if (!Mesh) return FoliageErr(FString::Printf(
+        TEXT("FoliageType at '%s' has no StaticMesh assigned."), *FoliageTypePath));
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: set_foliage_nanite"));
     IsmType->Modify();
-    IsmType->NaniteSettings.bEnabled = bEnable;
+    Mesh->Modify();
+    FMeshNaniteSettings NaniteSettings = Mesh->GetNaniteSettings();
+    NaniteSettings.bEnabled = bEnable;
+    Mesh->SetNaniteSettings(NaniteSettings);
+    Mesh->NotifyNaniteSettingsChanged();
+    Mesh->MarkPackageDirty();
     IsmType->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_foliage_nanite"));
     Data->SetStringField(TEXT("foliage_type_path"), IsmType->GetPathName());
-    Data->SetBoolField(TEXT("nanite_enabled"), IsmType->NaniteSettings.bEnabled);
+    Data->SetStringField(TEXT("static_mesh_path"), Mesh->GetPathName());
+    Data->SetBoolField(TEXT("nanite_enabled"), Mesh->IsNaniteEnabled());
     Data->SetBoolField(TEXT("executed"), true);
     return FoliageOk(Data);
 #else

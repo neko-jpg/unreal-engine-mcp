@@ -12,6 +12,7 @@ public class UnrealMCP : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicDefinitions.Add("UNREALMCP_EXPORTS=1");
+        PublicDefinitions.Add("WITH_AI_NAV_MCP=1");
 
         PublicIncludePaths.AddRange(
             new string[] {
@@ -266,8 +267,17 @@ public class UnrealMCP : ModuleRules
         string[] RuntimeMetaSound = new string[] { "MetasoundEngine", "MetasoundFrontend", "MetasoundGenerator", "MetasoundGraphCore" };
         foreach (string ModuleName in RuntimeMetaSound) AddOptionalModuleGate(Target, ModuleName, false);
         AddOptionalModuleGate(Target, "MetasoundEditor", true);
-        string[] RuntimeXr = new string[] { "XRBase", "HeadMountedDisplay", "OpenXRHMD", "OpenXRInput", "AndroidPermission", "AndroidDeviceProfileSelector", "IOSDeviceProfileSelector" };
+        string[] RuntimeXr = new string[] { "XRBase", "HeadMountedDisplay", "OpenXRHMD", "OpenXRInput" };
         foreach (string ModuleName in RuntimeXr) AddOptionalModuleGate(Target, ModuleName, false);
+        if (Target.Platform == UnrealTargetPlatform.Android)
+        {
+            AddOptionalModuleGate(Target, "AndroidPermission", false);
+            AddOptionalModuleGate(Target, "AndroidDeviceProfileSelector", false);
+        }
+        if (Target.Platform == UnrealTargetPlatform.IOS)
+        {
+            AddOptionalModuleGate(Target, "IOSDeviceProfileSelector", false);
+        }
         string[] TestingModules = new string[] { "AutomationTest", "DataValidation", "EditorValidator" };
         foreach (string ModuleName in TestingModules) AddOptionalModuleGate(Target, ModuleName, true);
         AddOptionalModuleGate(Target, "AutomationController", true);
@@ -380,6 +390,7 @@ public class UnrealMCP : ModuleRules
         AddGate("LOCALIZATION", true, null, new string[] { "Localization" }, Target);
         bool bLocEditor = File.Exists(Path.Combine(EngineDirectory, "Source", "Editor", "LocalizationCommandletExecution", "Public", "LocalizationCommandletExecution.h"));
         AddGate("LOCALIZATION_EDITOR", bLocEditor, new string[] { }, new string[] { "LocalizationCommandletExecution" }, Target);
+        AddOptionalModuleGate(Target, "LocalizationDashboard", true);
 
         // -- Source Control --
         bool bScm = File.Exists(Path.Combine(EngineDirectory, "Source", "Developer", "SourceControl", "Public", "ISourceControlModule.h"));

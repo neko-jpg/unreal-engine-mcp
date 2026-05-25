@@ -154,6 +154,16 @@ impl UnrealClient {
         .await
     }
 
+    /// Public wrapper around the private send_command used by the
+    /// component_applier (PR7) for generic UE bridge calls.
+    pub async fn send_command_value(
+        &self,
+        command: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, AppError> {
+        self.send_command(command, params).await
+    }
+
     pub async fn set_mesh_material_color(
         &self,
         actor_name: &str,

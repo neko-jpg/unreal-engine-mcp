@@ -3,7 +3,7 @@
 Requires:
     - SurrealDB on ws://127.0.0.1:8000
     - scene-syncd on http://127.0.0.1:8787
-    - Unreal Editor with MCP Bridge on 127.0.0.1:55557
+    - Unreal Editor with MCP Bridge on 127.0.0.1:55771
 
 Run:
     pytest tests/e2e/test_castle_generation.py --skip-unreal   # DB + planner only

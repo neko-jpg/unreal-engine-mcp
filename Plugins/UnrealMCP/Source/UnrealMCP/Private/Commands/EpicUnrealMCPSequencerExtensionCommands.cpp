@@ -5,7 +5,7 @@
 #include "Interfaces/IPluginManager.h"
 
 #include "Engine/World.h"
-#include "Engine/LevelSequence.h"
+#include "LevelSequence.h"
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
 #include "MovieScene.h"
@@ -245,7 +245,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerExtensionCommands::HandleSequence
     UPackage* Pkg = Seq->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Seq, FName(TEXT("MCP.sequencer_render_preview.requested")), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Seq, FName(TEXT("MCP.sequencer_render_preview.requested")), TEXT("true"));
         Pkg->MarkPackageDirty();
     }
 
@@ -301,8 +301,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerExtensionCommands::HandleRegister
         UPackage* Pkg = Target->GetOutermost();
         if (Pkg)
         {
-            Pkg->SetMetaData(*Target, FName(TEXT("MCP.take_recorder.source_class")), *SourceClass);
-            Pkg->SetMetaData(*Target, FName(TEXT("MCP.take_recorder.enabled")), TEXT("true"));
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.take_recorder.source_class")), *SourceClass);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.take_recorder.enabled")), TEXT("true"));
             Pkg->MarkPackageDirty();
             KeysPersisted = 2;
         }
@@ -349,9 +349,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerExtensionCommands::HandleAddContr
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        Pkg->SetMetaData(*Seq, FName(TEXT("MCP.add_control_rig_track.binding_id")), *BindingId);
-        Pkg->SetMetaData(*Seq, FName(TEXT("MCP.add_control_rig_track.control_rig_path")), *ControlRigPath);
-        Pkg->SetMetaData(*Seq, FName(TEXT("MCP.add_control_rig_track.status")), TEXT("track_noted"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Seq, FName(TEXT("MCP.add_control_rig_track.binding_id")), *BindingId);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Seq, FName(TEXT("MCP.add_control_rig_track.control_rig_path")), *ControlRigPath);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Seq, FName(TEXT("MCP.add_control_rig_track.status")), TEXT("track_noted"));
         Pkg->MarkPackageDirty();
         KeysPersisted = 3;
     }
@@ -404,7 +404,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPSequencerExtensionCommands::HandleSpawnLev
     Data->SetStringField(TEXT("command"), TEXT("spawn_level_sequence_actor"));
     Data->SetStringField(TEXT("actor_name"), Actor->GetName());
     Data->SetStringField(TEXT("level_sequence_path"), Seq->GetPathName());
-    Data->SetBoolField(TEXT("auto_play"), Actor->bAutoPlay);
+    Data->SetBoolField(TEXT("auto_play"), Actor->PlaybackSettings.bAutoPlay);
     Data->SetBoolField(TEXT("executed"), true);
     return SequencerOk(Data);
 }

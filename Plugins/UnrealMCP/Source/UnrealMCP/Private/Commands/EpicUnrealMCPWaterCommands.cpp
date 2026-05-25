@@ -141,7 +141,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleEnableWaterPlugin(con
 #if WITH_EDITOR
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.water_plugin.enabled"), TEXT("true"));

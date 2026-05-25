@@ -44,7 +44,7 @@ else:
 DEFAULT_SURREAL_BIND = "127.0.0.1:8000"
 DEFAULT_SCENE_SYNCD_URL = "http://127.0.0.1:8787"
 DEFAULT_UNREAL_HOST = "127.0.0.1"
-DEFAULT_UNREAL_PORT = 55557
+DEFAULT_UNREAL_PORT = 55771
 
 NO_COLOR = os.getenv("NO_COLOR") is not None
 
@@ -552,7 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--surreal-bind", default=DEFAULT_SURREAL_BIND, help=f"SurrealDB bind address (default: {DEFAULT_SURREAL_BIND})")
     parser.add_argument("--headless", action="store_true", help="Run Unreal Engine in headless mode (no window)")
     parser.add_argument("--render-offscreen", action="store_true", help="Use -RenderOffScreen for Unreal Engine")
-    parser.add_argument("--cleanup", action="store_true", help="Cleanup ports (55557, 8787, 8000) before starting")
+    parser.add_argument("--cleanup", action="store_true", help="Cleanup ports (55771, 8787, 8000) before starting")
     return parser
 
 

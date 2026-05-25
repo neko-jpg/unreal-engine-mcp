@@ -33,7 +33,7 @@ def cleanup_ports(ports):
             print(f"Error cleaning up port {port}: {e}")
 
 if __name__ == "__main__":
-    target_ports = [55557, 8787, 8000]
+    target_ports = [55771, 8787, 8000]
     if len(sys.argv) > 1:
         target_ports = [int(p) for p in sys.argv[1:]]
     cleanup_ports(target_ports)

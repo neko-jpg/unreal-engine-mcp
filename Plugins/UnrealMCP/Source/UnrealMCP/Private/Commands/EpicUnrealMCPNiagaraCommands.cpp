@@ -247,9 +247,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleAddEmitterToSystem(
         if (Package)
         {
             const FName TagKey(*FString::Printf(TEXT("MCP.NiagaraEmitterSlot.%s"), *Emitter->GetName()));
-            Package->SetMetaData(*System, TagKey, *EmitterPath);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Package, System, TagKey, *EmitterPath);
             // Count existing MCP-tagged slots so callers can verify monotonicity.
-            UMetaData* MetaData = Package->GetMetaData();
+            FMetaData* MetaData = &Package->GetMetaData();
             if (MetaData)
             {
                 TMap<FName, FString>* TagMap = MetaData->GetMapForObject(System);
@@ -309,7 +309,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleAddNiagaraModule(co
         if (Package)
         {
             const FName TagKey(*FString::Printf(TEXT("MCP.NiagaraModule.%s"), *Stage));
-            Package->SetMetaData(*Emitter, TagKey, *ModuleName);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Package, Emitter, TagKey, *ModuleName);
         }
     }
     Emitter->PostEditChange();
@@ -347,7 +347,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleRemoveNiagaraModule
         UPackage* Package = Emitter->GetOutermost();
         if (Package)
         {
-            UMetaData* MetaData = Package->GetMetaData();
+            FMetaData* MetaData = &Package->GetMetaData();
             if (MetaData)
             {
                 TMap<FName, FString>* TagMap = MetaData->GetMapForObject(Emitter);
@@ -852,11 +852,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleSetNiagaraScalabili
     if (!EffectType) return NiagaraErrorEnvelope(TEXT("Niagara EffectType asset not found"));
     EffectType->Modify();
 
-    // UE 5.7: UNiagaraEffectType exposes UpdateScalability() which rebinds
-    // scalability overrides for every component using the type.  We toggle
-    // the requested quality level in EffectType->SystemScalabilitySettings
-    // (UNiagaraSystemScalabilitySettings::Platforms is the canonical
-    // selector) and call UpdateScalability so live components pick it up.
+    // UE 5.7 no longer exposes the older UpdateScalability() helper here.
+    // Mark the asset dirty after recording the requested quality tier so the
+    // editor rebuilds affected Niagara data through its normal change path.
     int32 ScalabilityIndex = -1;
     if (QualityLevel.Equals(TEXT("Low"), ESearchCase::IgnoreCase))      ScalabilityIndex = 0;
     else if (QualityLevel.Equals(TEXT("Medium"), ESearchCase::IgnoreCase)) ScalabilityIndex = 1;
@@ -864,7 +862,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleSetNiagaraScalabili
     else if (QualityLevel.Equals(TEXT("Epic"), ESearchCase::IgnoreCase)) ScalabilityIndex = 3;
     else if (QualityLevel.Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase)) ScalabilityIndex = 4;
 
-    EffectType->UpdateScalability();
     EffectType->PostEditChange();
     EffectType->MarkPackageDirty();
 

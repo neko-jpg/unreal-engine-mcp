@@ -170,7 +170,7 @@ pub struct UpsertAssetRequest {
     pub semantic_tags: Vec<String>,
     #[serde(default = "default_asset_quality")]
     pub quality: String,
-    #[serde(default)]
+    #[serde(default = "default_asset_variants")]
     pub variants: serde_json::Value,
     #[serde(default)]
     pub metadata: serde_json::Value,
@@ -182,6 +182,10 @@ fn default_asset_status() -> String {
 
 fn default_asset_quality() -> String {
     "prototype".to_string()
+}
+
+fn default_asset_variants() -> serde_json::Value {
+    json!({})
 }
 
 pub async fn upsert_asset(
@@ -265,6 +269,8 @@ pub struct ListComponentsRequest {
     pub entity_id: Option<String>,
     #[serde(default)]
     pub component_type: Option<String>,
+    #[serde(default)]
+    pub sync_status: Option<String>,
 }
 
 pub async fn list_components(
@@ -278,6 +284,7 @@ pub async fn list_components(
             &scene_id,
             req.entity_id.as_deref(),
             req.component_type.as_deref(),
+            req.sync_status.as_deref(),
         )
         .await?;
     Ok(Json(success_response(json!({ "components": components }))))
@@ -455,6 +462,65 @@ pub async fn update_realization_status(
     )))
 }
 
+
+#[derive(Debug, Deserialize)]
+pub struct RecordOperationRequest {
+    pub scene_id: String,
+    #[serde(default)]
+    pub operation_id: Option<String>,
+    #[serde(default)]
+    pub patch_id: Option<String>,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub command: Option<String>,
+    pub status: String,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub target: serde_json::Value,
+}
+
+pub async fn record_operation_external(
+    State(state): State<AppState>,
+    Json(req): Json<RecordOperationRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    repo.record_external_operation(
+        &scene_id,
+        req.operation_id,
+        req.patch_id,
+        req.capability_id,
+        req.command,
+        &req.status,
+        &req.reason,
+        req.target,
+    )
+    .await?;
+    Ok(Json(success_response(json!({ "recorded": true }))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecentOperationsRequest {
+    pub scene_id: String,
+    #[serde(default = "default_recent_operations_limit")]
+    pub limit: usize,
+}
+
+fn default_recent_operations_limit() -> usize { 10 }
+
+pub async fn recent_operations(
+    State(state): State<AppState>,
+    Json(req): Json<RecentOperationsRequest>,
+) -> Result<Json<Value>, AppError> {
+    let scene_id = normalize_scene_id_input(&req.scene_id)?;
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let limit = req.limit.clamp(1, 100);
+    let operations = repo.list_recent_operations(&scene_id, limit).await?;
+    Ok(Json(success_response(json!({ "operations": operations }))))
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/entities/bulk-upsert", post(bulk_upsert_entities))
@@ -466,6 +532,8 @@ pub fn router() -> Router<AppState> {
         .route("/components/upsert", post(upsert_component))
         .route("/components/list", post(list_components))
         .route("/components/delete", post(delete_component))
+        .route("/operations/record", post(record_operation_external))
+        .route("/operations/recent", post(recent_operations))
         .route("/blueprints/upsert", post(upsert_blueprint))
         .route("/blueprints/list", post(list_blueprints))
         .route("/blueprints/delete", post(delete_blueprint))

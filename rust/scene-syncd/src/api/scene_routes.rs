@@ -61,6 +61,7 @@ pub async fn list_scenes(
 
 #[derive(Debug, Deserialize)]
 pub struct UpsertObjectRequest {
+    #[serde(default)]
     pub scene_id: String,
     pub mcp_id: String,
     #[serde(default)]
@@ -411,6 +412,53 @@ pub async fn restore_snapshot(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RestoreSnapshotByNameRequest {
+    pub scene_id: String,
+    pub name: String,
+    #[serde(default = "default_restore_mode")]
+    pub restore_mode: String,
+}
+
+pub async fn restore_snapshot_by_name(
+    State(state): State<AppState>,
+    Json(req): Json<RestoreSnapshotByNameRequest>,
+) -> Result<Json<Value>, AppError> {
+    let repo = SurrealSceneRepository::new(state.db.clone());
+    let (chosen, sorted) = repo
+        .find_snapshot_by_name(&req.scene_id, &req.name)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "snapshot named '{}' not found in scene '{}'",
+                req.name, req.scene_id
+            ))
+        })?;
+    let candidates: Vec<String> = sorted.iter().map(|s| s.id.clone()).collect();
+    let warnings: Vec<String> = if sorted.len() > 1 {
+        vec![format!(
+            "multiple snapshots match name '{}' ({}); restored latest by created_at",
+            req.name,
+            sorted.len()
+        )]
+    } else {
+        Vec::new()
+    };
+    let summary = repo
+        .restore_snapshot(&chosen.id, &req.restore_mode)
+        .await?;
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "snapshot_id": chosen.id,
+            "name": chosen.name,
+            "restore": summary,
+            "candidates": candidates,
+        },
+        "warnings": warnings,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct BulkUpsertRequest {
     pub scene_id: String,
     #[serde(default)]
@@ -540,6 +588,7 @@ pub fn router() -> Router<AppState> {
         .route("/snapshots/create", post(create_snapshot))
         .route("/snapshots/list", post(list_snapshots))
         .route("/snapshots/restore", post(restore_snapshot))
+        .route("/snapshots/restore_by_name", post(restore_snapshot_by_name))
 }
 
 #[cfg(test)]

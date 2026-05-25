@@ -13,7 +13,6 @@
 #include "Engine/NetConnection.h"
 #include "Editor.h"
 #include "EngineUtils.h"
-#include "Blueprints/BlueprintSupport.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #endif
@@ -81,7 +80,7 @@ static void PersistWorldMetadata(UWorld* World, const FString& Key, const FStrin
     if (!World) return;
     UPackage* Pkg = World->GetOutermost();
     if (!Pkg) return;
-    UMetaData* Meta = Pkg->GetMetaData();
+    FMetaData* Meta = &Pkg->GetMetaData();
     if (Meta)
     {
         Meta->SetValue(World, *Key, *Value);
@@ -154,10 +153,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleCreateRpcServerF
     {
         Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath);
         Params->TryGetStringField(TEXT("function_name"), FunctionName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("with_validation"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("with_validation"));
+        if (ValField.IsValid())
         {
-            bWithValidation = (*ValField)->AsBool();
+            bWithValidation = ValField->AsBool();
         }
     }
 
@@ -172,7 +171,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleCreateRpcServerF
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.rpc.server.%s.type"), *FunctionName);
@@ -230,7 +229,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleCreateRpcClientF
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.rpc.client.%s.type"), *FunctionName);
@@ -285,7 +284,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleCreateRpcMultica
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.rpc.multicast.%s.type"), *FunctionName);
@@ -329,10 +328,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetRpcReliabilit
     {
         Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath);
         Params->TryGetStringField(TEXT("function_name"), FunctionName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("reliable"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("reliable"));
+        if (ValField.IsValid())
         {
-            bReliable = (*ValField)->AsBool();
+            bReliable = ValField->AsBool();
         }
     }
 
@@ -345,7 +344,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetRpcReliabilit
     UPackage* Pkg = BP->GetOutermost();
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.rpc.%s.reliable"), *FunctionName);
@@ -393,18 +392,21 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetRepNotify(con
 
     UBlueprint* BP = LoadBlueprintForNetworking(BlueprintPath);
     if (!BP) return NetworkingErr(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
+    const FString RepNotifyValue = RepNotifyFunc.IsEmpty()
+        ? FString::Printf(TEXT("OnRep_%s"), *VariableName)
+        : RepNotifyFunc;
 
     UPackage* Pkg = BP->GetOutermost();
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.repnotify.%s.enabled"), *VariableName);
             Meta->SetValue(BP, *MetaKey, TEXT("true"));
             MetaKey = FString::Printf(TEXT("MCP.repnotify.%s.function"), *VariableName);
-            Meta->SetValue(BP, *MetaKey, RepNotifyFunc.IsEmpty() ? FString::Printf(TEXT("OnRep_%s"), *VariableName) : RepNotifyFunc);
+            Meta->SetValue(BP, *MetaKey, *RepNotifyValue);
             Pkg->MarkPackageDirty();
             KeysPersisted = 2;
         }
@@ -414,7 +416,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetRepNotify(con
     Data->SetStringField(TEXT("command"), TEXT("set_rep_notify"));
     Data->SetStringField(TEXT("blueprint_path"), BlueprintPath);
     Data->SetStringField(TEXT("variable_name"), VariableName);
-    Data->SetStringField(TEXT("repnotify_function"), RepNotifyFunc.IsEmpty() ? FString::Printf(TEXT("OnRep_%s"), *VariableName) : RepNotifyFunc);
+    Data->SetStringField(TEXT("repnotify_function"), RepNotifyValue);
     Data->SetNumberField(TEXT("mcp_metadata_keys_persisted"), KeysPersisted);
     Data->SetBoolField(TEXT("executed"), true);
     return NetworkingOk(Data);
@@ -447,23 +449,24 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleListReplicatedVa
     UPackage* Pkg = BP->GetOutermost();
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
-            TMap<FString, FString>* ObjMeta = Meta->GetMapForObject(BP);
+            TMap<FName, FString>* ObjMeta = Meta->GetMapForObject(BP);
             if (ObjMeta)
             {
                 for (const auto& Pair : *ObjMeta)
                 {
-                    if (Pair.Key.StartsWith(TEXT("MCP.repnotify.")) && Pair.Key.EndsWith(TEXT(".enabled")) && Pair.Value == TEXT("true"))
+                    const FString KeyString = Pair.Key.ToString();
+                    if (KeyString.StartsWith(TEXT("MCP.repnotify.")) && KeyString.EndsWith(TEXT(".enabled")) && Pair.Value == TEXT("true"))
                     {
                         // Extract variable name from "MCP.repnotify.VARNAME.enabled"
-                        FString VarName = Pair.Key.Mid(14, Pair.Key.Len() - 23); // strip "MCP.repnotify." and ".enabled"
+                        FString VarName = KeyString.Mid(14, KeyString.Len() - 23); // strip "MCP.repnotify." and ".enabled"
                         TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
                         Entry->SetStringField(TEXT("variable_name"), VarName);
                         FString FuncKey = FString::Printf(TEXT("MCP.repnotify.%s.function"), *VarName);
-                        FString* FuncVal = ObjMeta->Find(FuncKey);
-                        Entry->SetStringField(TEXT("repnotify_function"), FuncVal ? **FuncVal : TEXT(""));
+                        FString* FuncVal = ObjMeta->Find(FName(*FuncKey));
+                        Entry->SetStringField(TEXT("repnotify_function"), FuncVal ? *FuncVal : TEXT(""));
                         Variables.Add(MakeShared<FJsonValueObject>(Entry));
                     }
                 }
@@ -500,10 +503,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetNetworkPredic
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("actor_name"), ActorName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("enable"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("enable"));
+        if (ValField.IsValid())
         {
-            bEnable = (*ValField)->AsBool();
+            bEnable = ValField->AsBool();
         }
     }
 
@@ -519,7 +522,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetNetworkPredic
     UPackage* Pkg = Actor->GetOutermost();
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             Meta->SetValue(Actor, TEXT("MCP.network_prediction.enabled"), bEnable ? TEXT("true") : TEXT("false"));
@@ -562,10 +565,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleConfigureDedicat
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("map_name"), MapName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("port"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("port"));
+        if (ValField.IsValid())
         {
-            Port = static_cast<int32>((*ValField)->AsNumber());
+            Port = static_cast<int32>(ValField->AsNumber());
         }
     }
 
@@ -605,10 +608,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleStartListenServe
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("map_name"), MapName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("port"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("port"));
+        if (ValField.IsValid())
         {
-            Port = static_cast<int32>((*ValField)->AsNumber());
+            Port = static_cast<int32>(ValField->AsNumber());
         }
     }
 
@@ -653,10 +656,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleStartClient(cons
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("host"), Host);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("port"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("port"));
+        if (ValField.IsValid())
         {
-            Port = static_cast<int32>((*ValField)->AsNumber());
+            Port = static_cast<int32>(ValField->AsNumber());
         }
     }
 
@@ -692,10 +695,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleConfigureMultiPi
 
     if (Params.IsValid())
     {
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("client_count"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("client_count"));
+        if (ValField.IsValid())
         {
-            ClientCount = static_cast<int32>((*ValField)->AsNumber());
+            ClientCount = static_cast<int32>(ValField->AsNumber());
         }
     }
 
@@ -767,10 +770,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleCreateSession(co
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("session_name"), SessionName);
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("max_players"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("max_players"));
+        if (ValField.IsValid())
         {
-            MaxPlayers = static_cast<int32>((*ValField)->AsNumber());
+            MaxPlayers = static_cast<int32>(ValField->AsNumber());
         }
     }
 
@@ -808,10 +811,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleFindSessions(con
 
     if (Params.IsValid())
     {
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("timeout_seconds"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("timeout_seconds"));
+        if (ValField.IsValid())
         {
-            TimeoutSeconds = static_cast<float>((*ValField)->AsNumber());
+            TimeoutSeconds = static_cast<float>(ValField->AsNumber());
         }
     }
 
@@ -823,14 +826,14 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleFindSessions(con
     UPackage* Pkg = World->GetOutermost();
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
-            TMap<FString, FString>* ObjMeta = Meta->GetMapForObject(World);
+            TMap<FName, FString>* ObjMeta = Meta->GetMapForObject(World);
             if (ObjMeta)
             {
-                FString* Found = ObjMeta->Find(TEXT("MCP.oss.subsystem"));
-                if (Found) OSSName = **Found;
+                FString* Found = ObjMeta->Find(FName(TEXT("MCP.oss.subsystem")));
+                if (Found) OSSName = *Found;
             }
         }
     }
@@ -898,10 +901,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetIrisReplicati
 
     if (Params.IsValid())
     {
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("enable"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("enable"));
+        if (ValField.IsValid())
         {
-            bEnable = (*ValField)->AsBool();
+            bEnable = ValField->AsBool();
         }
     }
 
@@ -967,10 +970,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleStartBandwidthPr
 
     if (Params.IsValid())
     {
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("seconds"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("seconds"));
+        if (ValField.IsValid())
         {
-            Seconds = static_cast<float>((*ValField)->AsNumber());
+            Seconds = static_cast<float>(ValField->AsNumber());
         }
     }
 
@@ -1022,10 +1025,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleAttachNetworkPro
 
     if (Params.IsValid())
     {
-        const TSharedPtr<FJsonValue>* ValField = nullptr;
-        if (Params->TryGetField(TEXT("enable"), ValField))
+        TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("enable"));
+        if (ValField.IsValid())
         {
-            bEnable = (*ValField)->AsBool();
+            bEnable = ValField->AsBool();
         }
     }
 
@@ -1131,13 +1134,13 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNetworkingCommands::HandleSetBlueprintVari
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        UMetaData* Meta = Pkg->GetMetaData();
+        FMetaData* Meta = &Pkg->GetMetaData();
         if (Meta)
         {
             FString MetaKey = FString::Printf(TEXT("MCP.replication.%s.enabled"), *VariableName);
             Meta->SetValue(BP, *MetaKey, TEXT("true"));
             MetaKey = FString::Printf(TEXT("MCP.replication.%s.condition"), *VariableName);
-            Meta->SetValue(BP, *MetaKey, Condition);
+            Meta->SetValue(BP, *MetaKey, *Condition);
             Pkg->MarkPackageDirty();
             KeysPersisted = 2;
         }

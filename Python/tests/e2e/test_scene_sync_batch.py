@@ -5,7 +5,7 @@ Converted from scripts/verify_phase7.py to proper pytest.
 Requires:
     - SurrealDB on ws://127.0.0.1:8000
     - scene-syncd on http://127.0.0.1:8787
-    - (Optional) Unreal Editor with MCP Bridge on 127.0.0.1:55557
+    - (Optional) Unreal Editor with MCP Bridge on 127.0.0.1:55771
 
 Run:
     pytest tests/e2e/test_scene_sync_batch.py --skip-unreal   # DB + planner only

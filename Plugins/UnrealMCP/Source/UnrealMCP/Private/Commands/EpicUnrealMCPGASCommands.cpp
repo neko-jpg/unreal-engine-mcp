@@ -3,6 +3,7 @@
 
 #include "Modules/ModuleManager.h"
 #include "Interfaces/IPluginManager.h"
+#include "EngineUtils.h"
 
 #if WITH_GAS_MCP
 #include "AbilitySystemComponent.h"
@@ -19,7 +20,6 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
 #include "Editor.h"
-#include "EngineUtils.h"
 #include "UObject/Package.h"
 #include "UObject/MetaData.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -153,8 +153,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleEnableGasPlugin(const T
     int32 KeysPersisted = 0;
     if (Pkg)
     {
-        Pkg->SetMetaData(*World, FName(TEXT("MCP.gas_plugin.enabled")), TEXT("true"));
-        Pkg->SetMetaData(*World, FName(TEXT("MCP.gas_plugin.status")), TEXT("active"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, World, FName(TEXT("MCP.gas_plugin.enabled")), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, World, FName(TEXT("MCP.gas_plugin.status")), TEXT("active"));
         Pkg->MarkPackageDirty();
         KeysPersisted = 2;
     }
@@ -601,7 +601,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleConfigureAbilityActivat
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(TEXT("MCP.gas.activation_policy")), *ActivationPolicy);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.gas.activation_policy")), *ActivationPolicy);
         Pkg->MarkPackageDirty();
     }
 
@@ -642,7 +642,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleConfigureAbilityCooldow
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(TEXT("MCP.gas.cooldown_seconds")), *FString::SanitizeFloat(CooldownSeconds));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.gas.cooldown_seconds")), *FString::SanitizeFloat(CooldownSeconds));
         Pkg->MarkPackageDirty();
     }
 
@@ -683,7 +683,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleConfigureAbilityCost(co
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(TEXT("MCP.gas.cost_value")), *FString::SanitizeFloat(CostValue));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.gas.cost_value")), *FString::SanitizeFloat(CostValue));
         Pkg->MarkPackageDirty();
     }
 
@@ -727,7 +727,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleInitializeAttribute(con
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(*FString::Printf(TEXT("MCP.gas.attr.%s.init"), *AttributeName)), *FString::SanitizeFloat(InitialValue));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(*FString::Printf(TEXT("MCP.gas.attr.%s.init"), *AttributeName)), *FString::SanitizeFloat(InitialValue));
         Pkg->MarkPackageDirty();
     }
 
@@ -768,7 +768,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleBindAttributeChangeEven
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(*FString::Printf(TEXT("MCP.gas.attr.%s.callback"), *AttributeName)), *CallbackFunction);
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(*FString::Printf(TEXT("MCP.gas.attr.%s.callback"), *AttributeName)), *CallbackFunction);
         Pkg->MarkPackageDirty();
     }
 
@@ -809,7 +809,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleLinkGameplayTag(const T
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(*FString::Printf(TEXT("MCP.gas.tag.%s.linked"), *TagName)), TEXT("true"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(*FString::Printf(TEXT("MCP.gas.tag.%s.linked"), *TagName)), TEXT("true"));
         Pkg->MarkPackageDirty();
     }
 
@@ -892,7 +892,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPGASCommands::HandleConfigureGasPrediction(
     UPackage* Pkg = Target->GetOutermost();
     if (Pkg)
     {
-        Pkg->SetMetaData(*Target, FName(TEXT("MCP.gas.prediction.enabled")), bPredictionEnabled ? TEXT("true") : TEXT("false"));
+        FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Target, FName(TEXT("MCP.gas.prediction.enabled")), bPredictionEnabled ? TEXT("true") : TEXT("false"));
         Pkg->MarkPackageDirty();
     }
 

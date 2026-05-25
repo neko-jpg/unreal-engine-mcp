@@ -70,7 +70,8 @@ def bootstrap():
     from server import sequencer_extension_tools    # noqa: F401  Sub-batch Z
     from server import packaging_extension_tools   # noqa: F401  Sub-batch AA
     from server import packaging_tools             # noqa: F401
-    from server import vertical_test_tools        # noqa: F401
+    from server import vertical_test_tools
+    from server import dialog_tools        # noqa: F401  React-for-UE v3.0        # noqa: F401
 
 
 if __name__ == "__main__":

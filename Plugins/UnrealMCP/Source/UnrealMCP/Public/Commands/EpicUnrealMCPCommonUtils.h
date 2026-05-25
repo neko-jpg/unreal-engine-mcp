@@ -6,6 +6,7 @@
 // Forward declarations
 class AActor;
 class UBlueprint;
+class UPackage;
 class UWorld;
 class UEdGraph;
 class UEdGraphNode;
@@ -77,6 +78,7 @@ public:
     // Property utilities
     static bool SetObjectProperty(UObject* Object, const FString& PropertyName,
                                  const TSharedPtr<FJsonValue>& Value, FString& OutErrorMessage);
+    static bool SetPackageMetadata(UPackage* Package, const UObject* Object, FName Key, const TCHAR* Value);
 
     // Tag / actor lookup helpers (moved from EpicUnrealMCPEditorCommands.cpp)
     static void ApplyMcpIdAndTags(AActor* Actor, const FString& McpId, const TArray<FString>& ExtraTags);

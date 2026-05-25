@@ -1,0 +1,33 @@
+﻿name: cinematic_warm
+description: Filmic warm/teal grading suitable for general cinematic shots.
+
+lighting:
+  intensity_multiplier: 1.15
+  color_bias: [1.0, 0.92, 0.8]
+  temperature_kelvin: 5000
+  shadow_enabled: true
+
+material:
+  base_color_bias: [1.0, 0.95, 0.85, 1.0]
+  roughness: 0.6
+  metallic: 0.1
+
+atmosphere:
+  fog_density_scale: 0.4
+  fog_color: [0.88, 0.82, 0.78]
+  volumetric_fog: true
+  sky_brightness: 1.1
+
+audio:
+  ambient_sounds: ["wind_low", "score_bed"]
+  volume: 0.5
+
+vfx:
+  dust: true
+  embers: low
+  density_multiplier: 0.5
+
+post_process:
+  saturation: 1.05
+  contrast: 1.15
+  bloom_intensity: 0.8

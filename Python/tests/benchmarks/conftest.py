@@ -3,7 +3,7 @@
 All benchmarks REQUIRE all three services:
     - SurrealDB on ws://127.0.0.1:8000
     - scene-syncd on http://127.0.0.1:8787
-    - Unreal Editor with MCP Bridge on 127.0.0.1:55557
+    - Unreal Editor with MCP Bridge on 127.0.0.1:55771
 
 If any service is unavailable, benchmarks are SKIPPED.
 """
@@ -21,7 +21,7 @@ from .bench_metrics import MetricsCollector, BenchmarkReport, build_comparison_m
 
 SCENE_SYNCD_URL = "http://127.0.0.1:8787"
 UNREAL_HOST = "127.0.0.1"
-UNREAL_PORT = 55557
+UNREAL_PORT = 55771
 RESULTS_DIR = Path(__file__).parent / "results"
 
 

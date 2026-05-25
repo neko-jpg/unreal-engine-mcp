@@ -1,5 +1,7 @@
 pub mod applier;
 pub mod cell_aware;
+pub mod component_applier;
+pub mod component_planner;
 pub mod instance_set_planner;
 pub mod planner;
 

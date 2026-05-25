@@ -1,7 +1,7 @@
 """E2E tests for Material & Rendering MCP commands (Phase 1-3).
 
 Requires:
-    - Unreal Editor with MCP Bridge on 127.0.0.1:55557
+    - Unreal Editor with MCP Bridge on 127.0.0.1:55771
 
 Run:
     pytest tests/e2e/test_material_e2e.py --skip-unreal   # Skip tests requiring Unreal

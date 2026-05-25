@@ -232,7 +232,7 @@ static TSharedPtr<FJsonObject> LandscapeMetaPersist(
         for (const TPair<FString, FString>& KvPair : Kv)
         {
             const FName Key(*FString::Printf(TEXT("MCP.%s.%s"), *CommandName, *KvPair.Key));
-            Pkg->SetMetaData(*Actor, Key, *KvPair.Value);
+            FEpicUnrealMCPCommonUtils::SetPackageMetadata(Pkg, Actor, Key, *KvPair.Value);
             ++KeysPersisted;
         }
         Pkg->MarkPackageDirty();
@@ -760,9 +760,14 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPLandscapeCommands::HandleSetLandscapeNanit
     return LandscapeMetaPersist(TEXT("set_landscape_nanite"), P,
         [&](ALandscape* L, TMap<FString,FString>& Kv, TSharedPtr<FJsonObject>& Out) -> TOptional<FString>
         {
-            bool bEnable = L->bEnableNanite;
+            bool bEnable = L->IsNaniteEnabled();
             P->TryGetBoolField(TEXT("enable_nanite"), bEnable);
-            L->bEnableNanite = bEnable;
+            FBoolProperty* EnableNaniteProperty = FindFProperty<FBoolProperty>(L->GetClass(), TEXT("bEnableNanite"));
+            if (!EnableNaniteProperty)
+            {
+                return TOptional<FString>(TEXT("ALandscapeProxy.bEnableNanite property not found."));
+            }
+            EnableNaniteProperty->SetPropertyValue_InContainer(L, bEnable);
             Kv.Add(TEXT("enable_nanite"), bEnable ? TEXT("true") : TEXT("false"));
             Out->SetBoolField(TEXT("enable_nanite"), bEnable);
             return TOptional<FString>();

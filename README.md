@@ -289,23 +289,23 @@ cd Python
 uv run unreal_mcp_server_advanced.py
 ```
 
-The Python server connects to Unreal at `127.0.0.1:55557` by default. Override this with environment variables when running multiple Editors or using a non-default bind address:
+The Python server connects to Unreal at `127.0.0.1:55771` by default. Override this with environment variables when running multiple Editors or using a non-default bind address:
 
 ```bash
-UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55558 uv run unreal_mcp_server_advanced.py
+UNREAL_MCP_HOST=127.0.0.1 UNREAL_MCP_PORT=55772 uv run unreal_mcp_server_advanced.py
 ```
 
 On PowerShell:
 
 ```powershell
-$env:UNREAL_MCP_HOST = "127.0.0.1"; $env:UNREAL_MCP_PORT = "55558"; uv run unreal_mcp_server_advanced.py
+$env:UNREAL_MCP_HOST = "127.0.0.1"; $env:UNREAL_MCP_PORT = "55772"; uv run unreal_mcp_server_advanced.py
 ```
 
 The Unreal plugin listens on the same defaults. In the Editor, change them under **Project Settings → Plugins → Unreal MCP**, or use console variables before the bridge starts:
 
 ```text
 unreal.mcp.host 127.0.0.1
-unreal.mcp.port 55558
+unreal.mcp.port 55772
 ```
 
 ### 3. Configure Your AI Client

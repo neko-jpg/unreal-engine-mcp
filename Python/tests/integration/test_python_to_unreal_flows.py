@@ -16,7 +16,7 @@ PROJECT_PATH = REPO_ROOT.parent / "FlopperamUnrealMCP" / "FlopperamUnrealMCP.upr
 DEFAULT_ENGINE_ROOT = Path(r"C:\Program Files\Epic Games\UE_5.7")
 EDITOR_CMD = "UnrealEditor-Cmd.exe"
 UNREAL_HOST = "127.0.0.1"
-UNREAL_PORT = 55557
+UNREAL_PORT = 55771
 
 
 def _engine_root() -> Path:

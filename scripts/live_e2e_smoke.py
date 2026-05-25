@@ -1,7 +1,7 @@
 ﻿"""Live E2E smoke runner for the 13 commands in priority A-2.
 
 Requires (any subset works; missing services degrade gracefully):
-  - Unreal Editor with UnrealMCP plugin bridge on 127.0.0.1:55557
+  - Unreal Editor with UnrealMCP plugin bridge on 127.0.0.1:55771
   - scene-syncd on 127.0.0.1:8787  (for /sync/* and /procedural/* endpoints)
   - SurrealDB on 127.0.0.1:8000    (backing store for scene_create etc.)
 
@@ -31,7 +31,7 @@ ARTIFACTS = ROOT / "artifacts"
 ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
 UNREAL_HOST = "127.0.0.1"
-UNREAL_PORT = 55557
+UNREAL_PORT = 55771
 SCENE_SYNCD = "http://127.0.0.1:8787"
 
 
@@ -453,7 +453,7 @@ def run(selected: Optional[List[str]] = None) -> int:
     have_cesium_token = bool(os.environ.get("CESIUM_ION_TOKEN"))
     if have_unreal:
         have_cesium, cesium_reason = _cesium_available()
-    print(f"[env] unreal-bridge :55557 = {have_unreal}, scene-syncd :8787 = {have_syncd}, "
+    print(f"[env] unreal-bridge :55771 = {have_unreal}, scene-syncd :8787 = {have_syncd}, "
           f"cesium = {have_cesium} ({cesium_reason or 'ok'}), CESIUM_ION_TOKEN set = {have_cesium_token}")
     state: Dict[str, Any] = {}
     report: List[Dict[str, Any]] = []
@@ -599,5 +599,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

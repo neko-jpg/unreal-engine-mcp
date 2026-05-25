@@ -14,6 +14,7 @@
 #include "Elements/PCGSplineSampler.h"
 #include "Elements/PCGSurfaceSampler.h"
 #include "Elements/PCGStaticMeshSpawner.h"
+#include "Components/BrushComponent.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
@@ -212,7 +213,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgVolume(const T
         {
             for (int32 i = 0; i < 3; ++i)
             {
-                ExtentXYZ[i] = (*ExtArr)[i]->AsNumber(ExtentXYZ[i]);
+                ExtentXYZ[i] = (*ExtArr)[i]->AsNumber();
             }
         }
     }
@@ -230,7 +231,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleCreatePcgVolume(const T
     }
 
     // Build a brush for the volume bounds
-    Volume->BrushComponent->SetMobility(EComponentMobility::Static);
+    if (UBrushComponent* BrushComponent = Volume->GetBrushComponent())
+    {
+        BrushComponent->SetMobility(EComponentMobility::Static);
+    }
     Volume->SetActorScale3D(Extent / 100.0); // AVolume uses a 100-unit brush by default
     Volume->MarkPackageDirty();
 
@@ -266,7 +270,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleAddPcgNode(const TShare
     Graph->Modify();
 
     // Create settings of the requested type, add a node wrapping them
-    UClass* SettingsClass = FindObject<UClass>(ANY_PACKAGE, *NodeType);
+    UClass* SettingsClass = FindFirstObject<UClass>(*NodeType);
     if (!SettingsClass || !SettingsClass->IsChildOf(UPCGSettings::StaticClass()))
     {
         return PCGErr(FString::Printf(TEXT("add_pcg_node: '%s' is not a valid UPCGSettings class."), *NodeType));
@@ -371,14 +375,18 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleSetPcgGraphParameter(co
     Graph->Modify();
 
     // Set a string parameter on the graph's user parameters
-    FInstancedPropertyBag* UserParams = Graph->GetMutableUserParametersStruct();
+    FInstancedPropertyBag* UserParams = Graph->GetMutableUserParametersStruct_Unsafe();
     if (!UserParams)
     {
         return PCGErr(TEXT("set_pcg_graph_parameter: graph has no user parameters struct."));
     }
 
     FName PropName(*Parameter);
-    EPropertyBagResult Result = UserParams->SetStringValueByName(PropName, Value);
+    if (!UserParams->FindPropertyDescByName(PropName))
+    {
+        UserParams->AddProperty(PropName, EPropertyBagPropertyType::String);
+    }
+    EPropertyBagResult Result = UserParams->SetValueString(PropName, Value);
     if (Result != EPropertyBagResult::Success)
     {
         return PCGErr(FString::Printf(TEXT("set_pcg_graph_parameter: failed to set parameter '%s'."), *Parameter));
@@ -551,7 +559,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleConfigurePcgRule(const 
     UPCGSettings* Settings = nullptr;
     UPCGNode* Node = Graph->AddNodeOfType<UPCGSettings>(Settings);
     if (!Node) return PCGErr(TEXT("configure_pcg_rule: failed to add node to graph."));
-    Node->NodeTitle = FText::FromString(RuleName);
+    Node->SetNodeTitle(FName(*RuleName));
     Graph->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -623,7 +631,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleOperatePcgPointData(con
     UPackage* Pkg = Graph->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(Graph, TEXT("MCP.pcg_point_data.operation"), *Operation);
@@ -666,7 +674,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleOperatePcgAttribute(con
     UPackage* Pkg = Graph->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(Graph, TEXT("MCP.pcg_attribute.name"), *AttributeName);
@@ -820,7 +828,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleUsePcgEditorMode(const 
     UPackage* Pkg = World->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.pcg.editor_mode"), *Mode);
@@ -889,7 +897,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleSetPcgDebugDisplay(cons
     UPackage* Pkg = World->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(World, TEXT("MCP.pcg.debug_display"), bEnable ? TEXT("true") : TEXT("false"));
@@ -931,7 +939,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPPCGCommands::HandleConfigurePcgSelfPruning
     UPackage* Pkg = Graph->GetOutermost();
     if (Pkg)
     {
-        UMetaData* MetaData = Pkg->GetMetaData();
+        FMetaData* MetaData = &Pkg->GetMetaData();
         if (MetaData)
         {
             MetaData->SetValue(Graph, TEXT("MCP.pcg.self_pruning.radius"), *FString::SanitizeFloat(Radius));

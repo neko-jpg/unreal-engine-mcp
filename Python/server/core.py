@@ -47,7 +47,7 @@ def _get_env_int(name: str, default: int) -> int:
 
 
 UNREAL_HOST = os.environ.get("UNREAL_MCP_HOST", "127.0.0.1")
-UNREAL_PORT = _get_env_int("UNREAL_MCP_PORT", 55557)
+UNREAL_PORT = _get_env_int("UNREAL_MCP_PORT", 55771)
 
 
 class UnrealConnection:
