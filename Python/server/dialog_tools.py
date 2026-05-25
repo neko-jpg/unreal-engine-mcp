@@ -1,6 +1,6 @@
 ﻿"""React for UE v3.0 dialog tools.
 
-User-facing @mcp.tool() entry points: scene_edit, scene_refine, scene_preview,
+User-facing tool entry points: scene_edit, scene_refine, scene_preview,
 scene_describe, scene_explain_plan, scene_snapshot_restore_by_name,
 scene_snapshot_create, scene_list_snapshots.
 """
