@@ -61,7 +61,7 @@ def _mixed_patch() -> DesignPatch:
                 entity_id="audio:scene",
                 component_type="audio",
                 name="ambient_drip",
-                properties={"sound_name": "drip", "volume": 0.4},
+                properties={"sound_path": "/Game/Audio/Ambient_Drip", "volume": 0.4},
                 capability_id="audio.spawn_ambient",
             ),
             ComponentPatch(
@@ -69,7 +69,7 @@ def _mixed_patch() -> DesignPatch:
                 entity_id="vfx:scene",
                 component_type="vfx",
                 name="dust",
-                properties={"system_path": "/Game/MCP/VFX/NS_Dust", "density": 0.4},
+                properties={"system_path": "/Game/VFX/NS_Dust", "density": 0.4},
                 capability_id="vfx.add_niagara_component",
             ),
         ],
