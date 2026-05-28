@@ -42,6 +42,11 @@ pub enum SdfPrimitive {
         min: [f32; 3],
         max: [f32; 3],
     },
+    Capsule {
+        start: [f32; 3],
+        end: [f32; 3],
+        radius: f32,
+    },
     Torus {
         center: [f32; 3],
         major_radius: f32,
@@ -63,6 +68,7 @@ pub enum SdfTree {
     Difference(Box<SdfTree>, Box<SdfTree>, f32),
     Intersection(Box<SdfTree>, Box<SdfTree>, f32),
     Transform(Box<SdfTree>, [f32; 16]),
+    DomainWarp(Box<SdfTree>, f32, f32),
 }
 
 impl SdfPrimitive {
@@ -79,6 +85,19 @@ impl SdfPrimitive {
                 let half = (bmax - bmin) * 0.5;
                 let d = (point - center).abs() - half;
                 d.max(Vec3::ZERO).length() + d.x.max(d.y).max(d.z).min(0.0)
+            }
+            SdfPrimitive::Capsule { start, end, radius } => {
+                let a = Vec3::from(*start);
+                let b = Vec3::from(*end);
+                let pa = point - a;
+                let ba = b - a;
+                let denom = ba.dot(ba);
+                let h = if denom > 0.0 {
+                    (pa.dot(ba) / denom).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                (pa - ba * h).length() - *radius
             }
             SdfPrimitive::Torus {
                 center,
@@ -117,6 +136,12 @@ impl SdfPrimitive {
             }
             SdfPrimitive::Box { min, max } => {
                 Some(SdfBounds::new(Vec3::from(*min), Vec3::from(*max)))
+            }
+            SdfPrimitive::Capsule { start, end, radius } => {
+                let a = Vec3::from(*start);
+                let b = Vec3::from(*end);
+                let r = Vec3::splat(*radius);
+                Some(SdfBounds::new(a.min(b) - r, a.max(b) + r))
             }
             SdfPrimitive::Torus {
                 center,
@@ -172,6 +197,15 @@ impl SdfTree {
                 let transformed = inv.transform_point3(point);
                 child.evaluate(transformed)
             }
+            SdfTree::DomainWarp(child, amplitude, frequency) => {
+                let f = *frequency;
+                let warp = Vec3::new(
+                    f32::sin(point.y * f + 11.17) * f32::cos(point.z * f + 3.31),
+                    f32::sin(point.z * f + 17.71) * f32::cos(point.x * f + 5.37),
+                    f32::sin(point.x * f + 23.13) * f32::cos(point.y * f + 7.91),
+                ) * *amplitude;
+                child.evaluate(point + warp)
+            }
         }
     }
 
@@ -221,6 +255,9 @@ impl SdfTree {
                 let max = transformed.iter().fold(Vec3::MIN, |a, &b| a.max(b));
                 SdfBounds::new(min, max)
             }),
+            SdfTree::DomainWarp(child, amplitude, _) => {
+                child.estimate_bounds().map(|bounds| bounds.expand(*amplitude))
+            }
         }
     }
 }
@@ -254,6 +291,17 @@ mod tests {
         };
         assert!(box_.evaluate(Vec3::ZERO) < 0.0);
         assert!(box_.evaluate(Vec3::new(2.0, 0.0, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn test_capsule_sdf() {
+        let capsule = SdfPrimitive::Capsule {
+            start: [0.0, 0.0, 0.0],
+            end: [2.0, 0.0, 0.0],
+            radius: 0.5,
+        };
+        assert!(capsule.evaluate(Vec3::new(1.0, 0.0, 0.0)) < 0.0);
+        assert!(capsule.evaluate(Vec3::new(1.0, 1.0, 0.0)) > 0.0);
     }
 
     #[test]
@@ -362,5 +410,17 @@ mod tests {
         let union = SdfTree::Union(Box::new(a), Box::new(b), 0.0);
         let bounds = union.estimate_bounds().unwrap();
         assert!(bounds.max.x > 5.0);
+    }
+
+    #[test]
+    fn test_domain_warp_expands_bounds() {
+        let sphere = SdfTree::Primitive(SdfPrimitive::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+        });
+        let warped = SdfTree::DomainWarp(Box::new(sphere), 0.5, 1.0);
+        let bounds = warped.estimate_bounds().unwrap();
+        assert!(bounds.min.x < -1.0);
+        assert!(bounds.max.x > 1.0);
     }
 }

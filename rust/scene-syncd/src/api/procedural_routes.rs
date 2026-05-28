@@ -164,6 +164,10 @@ pub struct SdfTreeDesc {
     pub min: [f32; 3],
     #[serde(default = "default_one")]
     pub max: [f32; 3],
+    #[serde(default)]
+    pub start: [f32; 3],
+    #[serde(default = "default_capsule_end")]
+    pub end: [f32; 3],
     #[serde(default = "default_major_radius")]
     pub major_radius: f32,
     #[serde(default = "default_minor_radius")]
@@ -174,6 +178,8 @@ pub struct SdfTreeDesc {
     pub thickness: f32,
     #[serde(default)]
     pub smoothness: f32,
+    #[serde(default = "default_warp_amplitude")]
+    pub amplitude: f32,
     #[serde(default)]
     pub left: Option<Box<SdfTreeDesc>>,
     #[serde(default)]
@@ -217,11 +223,17 @@ fn default_major_radius() -> f32 {
 fn default_minor_radius() -> f32 {
     0.3
 }
+fn default_capsule_end() -> [f32; 3] {
+    [1.0, 0.0, 0.0]
+}
 fn default_frequency() -> f32 {
     1.0
 }
 fn default_thickness() -> f32 {
     0.1
+}
+fn default_warp_amplitude() -> f32 {
+    0.0
 }
 
 fn identity_matrix() -> [f32; 16] {
@@ -277,6 +289,11 @@ fn build_sdf_tree(desc: &SdfTreeDesc) -> Result<crate::procedural::sdf::SdfTree,
             min: desc.min,
             max: desc.max,
         })),
+        "capsule" => Ok(SdfTree::Primitive(SdfPrimitive::Capsule {
+            start: desc.start,
+            end: desc.end,
+            radius: desc.radius,
+        })),
         "torus" => Ok(SdfTree::Primitive(SdfPrimitive::Torus {
             center: desc.center,
             major_radius: desc.major_radius,
@@ -307,6 +324,18 @@ fn build_sdf_tree(desc: &SdfTreeDesc) -> Result<crate::procedural::sdf::SdfTree,
             Ok(SdfTree::Transform(
                 Box::new(build_sdf_tree(child)?),
                 desc.matrix.unwrap_or_else(identity_matrix),
+            ))
+        }
+        "domain_warp" | "domainwarp" => {
+            let child = desc
+                .child
+                .as_deref()
+                .or_else(|| desc.children.first())
+                .ok_or_else(|| "domain_warp requires a child".to_string())?;
+            Ok(SdfTree::DomainWarp(
+                Box::new(build_sdf_tree(child)?),
+                desc.amplitude,
+                desc.frequency,
             ))
         }
         other => Err(format!("unsupported SDF node type '{other}'")),
