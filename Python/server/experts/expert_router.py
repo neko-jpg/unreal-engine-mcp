@@ -40,7 +40,7 @@ class ExpertRouter:
             profile = load_profile(profile_name)
         out: List[Any] = []
         for expert in self.experts:
-            if expert.applies_to(intent):
+            if expert.applies_to(intent) or (profile and profile.domain(expert.domain)):
                 out.extend(expert.propose(intent, context, profile))
         return out
 

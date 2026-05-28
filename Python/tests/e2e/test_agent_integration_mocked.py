@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent to path
@@ -68,6 +69,7 @@ def create_mock_registry():
     return registry
 
 
+@pytest.mark.asyncio
 async def test_lighting_auto_adjust_for_cave():
     """Test LightingDomainAgent auto-adjusts for cave context."""
     print("Testing LightingDomainAgent cave auto-adjust...")
@@ -89,6 +91,7 @@ async def test_lighting_auto_adjust_for_cave():
     print("  ✓ Cave auto-adjust works")
 
 
+@pytest.mark.asyncio
 async def test_material_cave_material():
     """Test MaterialDomainAgent cave material workflow."""
     print("Testing MaterialDomainAgent cave material...")
@@ -102,6 +105,7 @@ async def test_material_cave_material():
     print("  ✓ Cave material workflow works")
 
 
+@pytest.mark.asyncio
 async def test_validation_full_pipeline():
     """Test ValidationDomainAgent full pipeline with workers."""
     print("Testing ValidationDomainAgent full pipeline...")
@@ -125,6 +129,7 @@ async def test_validation_full_pipeline():
     print("  ✓ Full validation pipeline works")
 
 
+@pytest.mark.asyncio
 async def test_architecture_post_construction():
     """Test ArchitectureDomainAgent post-construction coordination."""
     print("Testing ArchitectureDomainAgent post-construction...")
@@ -152,6 +157,7 @@ async def test_architecture_post_construction():
     print("  ✓ Post-construction coordination works")
 
 
+@pytest.mark.asyncio
 async def test_landscape_post_generation():
     """Test LandscapeDomainAgent post-generation coordination."""
     print("Testing LandscapeDomainAgent post-generation...")
@@ -179,6 +185,7 @@ async def test_landscape_post_generation():
     print("  ✓ Post-generation coordination works")
 
 
+@pytest.mark.asyncio
 async def test_master_orchestrator_coordination():
     """Test MasterOrchestrator cross-domain coordination."""
     print("Testing MasterOrchestrator coordination...")
@@ -200,6 +207,7 @@ async def test_master_orchestrator_coordination():
     print("  ✓ Cross-domain coordination works")
 
 
+@pytest.mark.asyncio
 async def test_context_propagation():
     """Test automatic context propagation."""
     print("Testing context propagation...")

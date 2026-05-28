@@ -26,6 +26,8 @@ sys.modules['mcp'] = MockMCP()
 sys.modules['mcp.server'] = MockMCP()
 sys.modules['mcp.server.fastmcp'] = MockMCP()
 
+import pytest
+
 # Now import our code
 from server.agents.base_agent import BaseAgent, AgentContext, AgentResult, ToolRegistry
 from server.agents.domain_agents import (
@@ -164,6 +166,7 @@ def test_intent_resolution():
     print("  ✓ Lighting intent resolved")
 
 
+@pytest.mark.asyncio
 async def test_async_execution():
     """Test async agent execution."""
     print("Testing async execution...")
