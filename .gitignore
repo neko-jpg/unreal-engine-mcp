@@ -181,3 +181,14 @@ FlopperamUnrealMCP/Plugins/
 /artifacts/*
 !/artifacts/queued_baseline.json
 
+# Dev stack logs
+.launch-dev-stack*.log
+.launch-dev-stack*.err
+.pytest-e2e-results.log
+
+# Python cache
+Python/.cache/
+
+# Rust target variants
+rust/**/target-*/
+

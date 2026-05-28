@@ -57,6 +57,18 @@ def test_object_info_returns_all_objects(monkeypatch):
     assert res["count"] == 4
 
 
+def test_object_info_falls_back_when_summarizer_client_is_none(monkeypatch):
+    monkeypatch.setattr(dt, "_summarizer_client", lambda: None)
+    monkeypatch.setattr(
+        "server.scene_client.call_scene_syncd",
+        lambda path, payload: {"success": True, "data": {"objects": [{"mcp_id": "cave", "name": "cave"}]}},
+    )
+    monkeypatch.setattr("server.core.get_unreal_connection", _no_ue)
+    res = dt.scene_object_info(scene_id="test")
+    assert res["success"] is True
+    assert res["count"] == 1
+
+
 def test_object_info_filter_by_mcp_id(monkeypatch):
     _patch_summarizer(monkeypatch)
     monkeypatch.setattr("server.core.get_unreal_connection", _no_ue)

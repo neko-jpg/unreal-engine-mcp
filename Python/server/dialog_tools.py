@@ -7,6 +7,7 @@ scene_snapshot_create, scene_list_snapshots.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -74,8 +75,31 @@ def get_patch_store() -> _PatchStore:
     return _PATCH_STORE
 
 
+class _SceneSyncdClientWrapper:
+    """Lightweight wrapper so SceneSummarizer can call scene-syncd directly."""
+
+    @staticmethod
+    def call_scene_syncd(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        from server.scene_client import call_scene_syncd
+        return call_scene_syncd(path, payload)
+
+
 def _summarizer_client():
-    """Indirection point so tests can monkeypatch the scene-syncd transport."""
+    """Indirection point so tests can monkeypatch the scene-syncd transport.
+
+    Returns a client wrapper if scene-syncd is reachable, otherwise None
+    (SceneSummarizer falls back to lazy-importing the default client).
+    """
+    # Check connectivity without side-effects using a lightweight endpoint.
+    try:
+        from server.scene_client import call_scene_syncd, SCENE_SYNCD_URL
+        import requests
+
+        resp = requests.get(f"{SCENE_SYNCD_URL}/health", timeout=2)
+        if resp.status_code == 200:
+            return _SceneSyncdClientWrapper()
+    except Exception:
+        pass
     return None
 
 
@@ -175,8 +199,9 @@ def scene_edit(
 
     mode:
       - ``dry_run``   : build a DesignPatch and return it. Default.
-      - ``apply_safe``: apply patches with risk<=review. Requires PR6 patch executor.
+      - ``apply_safe``: apply patches with risk<=review via PatchExecutor.
       - ``apply_all`` : apply all patches including destructive (needs approve=True).
+      - ``agent``     : route intent through the Agent System (MasterOrchestrator).
     """
     try:
         dp = _build_design_patch(
@@ -214,7 +239,6 @@ def scene_edit(
     }
 
     if mode != "dry_run":
-        # PR6 will wire executor; for now, dry_run is the only supported mode.
         if mode == "apply_safe":
             from server.planning.patch_executor import apply_patch_safe  # type: ignore
             return apply_patch_safe(
@@ -231,6 +255,59 @@ def scene_edit(
                 approve=approve,
                 response=response,
             )
+        if mode == "agent":
+            # Natural language intent -> Agent System -> MCP tool execution
+            from server.agents import execute_intent
+
+            try:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Already inside a running event loop - run in a thread
+                        import concurrent.futures
+
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(
+                                lambda: asyncio.run(
+                                    execute_intent(
+                                        intent=intent,
+                                        scene_id=scene_id,
+                                        target=target,
+                                        style_profile=style_profile,
+                                    )
+                                )
+                            )
+                            agent_result = future.result()
+                    else:
+                        agent_result = loop.run_until_complete(
+                            execute_intent(
+                                intent=intent,
+                                scene_id=scene_id,
+                                target=target,
+                                style_profile=style_profile,
+                            )
+                        )
+                except RuntimeError:
+                    # No event loop - create one
+                    agent_result = asyncio.run(
+                        execute_intent(
+                            intent=intent,
+                            scene_id=scene_id,
+                            target=target,
+                            style_profile=style_profile,
+                        )
+                    )
+
+                response["agent_result"] = agent_result.to_dict()
+                response["mode"] = "agent"
+                if not agent_result.success:
+                    response["warnings"].append(
+                        f"agent execution warning: {agent_result.error}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("agent execution failed")
+                response["warnings"].append(f"agent execution failed: {exc}")
+            return response
         response["warnings"].append(f"unsupported mode {mode}, treated as dry_run")
 
     return response
@@ -544,7 +621,33 @@ def scene_preview(
         except Exception:  # noqa: BLE001
             pass
 
-    return {
+    cave_metrics = None
+    should_compute_cave = bool(target and target.lower() in {"cave", "cavern", "dungeon", "洞窟"})
+    if not should_compute_cave:
+        for obj in objects:
+            obj_text = " ".join(
+                str(v)
+                for v in [
+                    obj.get("mcp_id"),
+                    obj.get("name"),
+                    obj.get("desired_name"),
+                    obj.get("kind"),
+                    " ".join(obj.get("tags") or []) if isinstance(obj.get("tags"), list) else "",
+                ]
+                if v
+            ).lower()
+            if any(term in obj_text for term in ("cave", "cavern", "dungeon", "洞窟")):
+                should_compute_cave = True
+                break
+    if should_compute_cave:
+        try:
+            from server.cave_metrics import compute_cave_metrics
+
+            cave_metrics = compute_cave_metrics(objects, per_image_metrics)
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"cave metrics unavailable: {exc}")
+
+    response = {
         "success": True,
         "scene_id": scene_id,
         "context": pack.to_dict(),
@@ -554,6 +657,9 @@ def scene_preview(
         "vlm_status": "delegated_to_agent",
         "warnings": warnings,
     }
+    if cave_metrics is not None:
+        response["cave_metrics"] = cave_metrics
+    return response
 
 
 @mcp.tool()
@@ -574,7 +680,12 @@ def scene_object_info(
     from server.core import get_unreal_connection
 
     # Fetch from scene-syncd.
-    resp = _summarizer_client().call_scene_syncd("/objects/list", {"scene_id": scene_id})
+    _client = _summarizer_client()
+    if _client is not None:
+        resp = _client.call_scene_syncd("/objects/list", {"scene_id": scene_id})
+    else:
+        from server.scene_client import call_scene_syncd
+        resp = call_scene_syncd("/objects/list", {"scene_id": scene_id})
     if not resp.get("success"):
         return {"success": False, "error": resp.get("error", "scene-syncd error")}
 

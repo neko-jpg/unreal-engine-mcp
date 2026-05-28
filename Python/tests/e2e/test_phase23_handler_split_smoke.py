@@ -136,12 +136,22 @@ class TestRoute1ActorCommands:
             },
         )
         _assert_dispatched(spawn_response, "spawn_actor")
+        assert _is_success_envelope(spawn_response), (
+            f"spawn_actor must succeed for clone test: {spawn_response!r}"
+        )
+
+        # C++ may rename the actor; use the returned name if available.
+        actual_source_name = (
+            spawn_response.get("name")
+            or spawn_response.get("actor_name")
+            or source_name
+        )
 
         try:
             response = _safe_unreal_command(
                 "clone_actor",
                 {
-                    "source_actor_name": source_name,
+                    "source_actor_name": actual_source_name,
                     "new_actor_name": clone_name,
                     "location": [400.0, 0.0, 100.0],
                 },
@@ -156,7 +166,7 @@ class TestRoute1ActorCommands:
                     f"clone_actor should succeed when source exists: {response!r}"
                 )
         finally:
-            for name in (clone_name, source_name):
+            for name in (clone_name, actual_source_name):
                 try:
                     unreal_command("delete_actor", {"name": name})
                 except Exception:
@@ -224,12 +234,22 @@ class TestPhase4SplitCommands:
             },
         )
         _assert_dispatched(spawn_response, "spawn_actor")
+        assert _is_success_envelope(spawn_response), (
+            f"spawn_actor must succeed for collision test: {spawn_response!r}"
+        )
+
+        # C++ may rename the actor; use the returned name if available.
+        actual_actor_name = (
+            spawn_response.get("name")
+            or spawn_response.get("actor_name")
+            or actor_name
+        )
 
         try:
             response = _safe_unreal_command(
                 "set_actor_collision_preset",
                 {
-                    "actor_name": actor_name,
+                    "actor_name": actual_actor_name,
                     "preset": "BlockAll",
                 },
             )
@@ -240,7 +260,7 @@ class TestPhase4SplitCommands:
                 )
         finally:
             try:
-                unreal_command("delete_actor", {"name": actor_name})
+                unreal_command("delete_actor", {"name": actual_actor_name})
             except Exception:
                 pass
 

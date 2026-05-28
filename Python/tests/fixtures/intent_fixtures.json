@@ -6,11 +6,13 @@
       "expect_action": "modify",
       "expect_mood": "creepy",
       "expect_domains": [
+        "cave",
         "lighting",
         "material",
         "atmosphere",
         "audio",
-        "vfx"
+        "vfx",
+        "post_process"
       ],
       "target": "the cave"
     },
@@ -20,11 +22,13 @@
       "expect_action": "modify",
       "expect_mood": "creepy",
       "expect_domains": [
+        "cave",
         "lighting",
         "material",
         "atmosphere",
         "audio",
-        "vfx"
+        "vfx",
+        "post_process"
       ],
       "target": null
     },

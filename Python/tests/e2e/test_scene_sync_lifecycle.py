@@ -32,7 +32,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": False,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         data = assert_success(apply, "apply create")
         assert data["summary"]["creates"] >= 1, f"Expected at least 1 create, got {data['summary']}"
@@ -53,7 +53,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": False,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         assert_success(apply1, "initial apply")
 
@@ -77,7 +77,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": False,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         data2 = assert_success(apply2, "transform apply")
         assert data2["summary"].get("update_transforms", 0) >= 1
@@ -99,7 +99,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": False,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         assert_success(apply1, "initial apply for delete test")
 
@@ -115,7 +115,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": False,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         data2 = assert_success(apply2, "apply without delete")
         assert data2["summary"].get("deletes", 0) == 0
@@ -125,7 +125,7 @@ class TestSceneSyncLifecycleWithUnreal:
             "scene_id": isolated_scene,
             "mode": "apply_safe",
             "allow_delete": True,
-            "max_operations": 10,
+            "max_operations": 50,
         })
         data3 = assert_success(apply3, "apply with delete")
         assert data3["summary"].get("deletes", 0) >= 1

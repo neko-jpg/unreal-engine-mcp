@@ -7,9 +7,11 @@ from typing import Any, List, Optional
 from server.experts.atmosphere_expert import AtmosphereExpert
 from server.experts.audio_expert import AudioExpert
 from server.experts.base_expert import BaseDomainExpert
+from server.experts.cave_expert import CaveExpert
 from server.experts.lighting_expert import LightingExpert
 from server.experts.material_expert import MaterialExpert
 from server.experts.mood_profiles import MoodProfile, load_profile
+from server.experts.postprocess_expert import PostProcessExpert
 from server.experts.vfx_expert import VFXExpert
 from server.intent.intent_types import Intent
 from server.intent.scene_context import SceneContextPack
@@ -18,11 +20,13 @@ from server.intent.scene_context import SceneContextPack
 class ExpertRouter:
     def __init__(self, experts: Optional[List[BaseDomainExpert]] = None) -> None:
         self.experts: List[BaseDomainExpert] = experts or [
+            CaveExpert(),       # Highest priority: cave geometry orchestration
             LightingExpert(),
             MaterialExpert(),
             AtmosphereExpert(),
             AudioExpert(),
             VFXExpert(),
+            PostProcessExpert(),
         ]
 
     def propose_all(

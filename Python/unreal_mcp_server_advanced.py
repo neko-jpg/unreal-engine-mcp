@@ -113,6 +113,13 @@ from server.scene_tools import (
     scene_create_wfc_grid_unreal,
     scene_wfc_to_semantic_layout,
     scene_show_wfc_proxy,
+    scene_cave_audit,
+    scene_create_cave_sdf,
+    scene_apply_cave_pcg,
+    scene_apply_cave_mood,
+    scene_validate_cave,
+    scene_refine_cave_geometry,
+    scene_cave_generate_or_refine,
 )
 
 from server.project_editor_tools import (
@@ -312,6 +319,13 @@ __all__ = [
     "scene_create_wfc_grid_unreal",
     "scene_wfc_to_semantic_layout",
     "scene_show_wfc_proxy",
+    "scene_cave_audit",
+    "scene_create_cave_sdf",
+    "scene_apply_cave_pcg",
+    "scene_apply_cave_mood",
+    "scene_validate_cave",
+    "scene_refine_cave_geometry",
+    "scene_cave_generate_or_refine",
     "project_settings_tool",
     "plugin_tool",
     "engine_settings_tool",

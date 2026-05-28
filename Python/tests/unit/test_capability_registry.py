@@ -29,6 +29,14 @@ def test_default_registry_contains_core_capabilities():
         "navmesh.upsert",
         "ai_patrol.upsert",
         "ai_behavior.upsert",
+        "cave.audit",
+        "cave.generate_or_refine",
+        "procedural.sdf_mesh",
+        "pcg.configure_surface_sampler",
+        "mesh.collision_generate",
+        "validation.collision",
+        "postprocess.spawn",
+        "postprocess.apply",
     ]:
         assert cap_id in reg, f"missing capability: {cap_id}"
 
@@ -66,3 +74,10 @@ def test_canonical_domain_handles_aliases_and_passthrough():
     reg = get_default_registry()
     assert reg.canonical_domain("fog") == "atmosphere"
     assert reg.canonical_domain("material") == "material"
+
+
+def test_cave_capabilities_use_existing_command_names():
+    reg = get_default_registry()
+    assert reg.require("mesh.collision_generate").command == "generate_collision"
+    assert reg.require("mesh.nanite_enable").command == "set_nanite_settings"
+    assert reg.require("postprocess.apply").command == "set_post_process_volume"

@@ -49,7 +49,10 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
-markers = "requires_unreal: test needs a running Unreal Editor"
+markers = [
+    "requires_unreal: test needs a running Unreal Editor",
+    "e2e: end-to-end test",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning"

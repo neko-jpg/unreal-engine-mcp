@@ -141,6 +141,25 @@ def fake_conn(fake_conn_factory) -> FakeUnrealConnection:
     return fake_conn_factory()
 
 
+@pytest.fixture(scope="session")
+def unreal_available():
+    """Check if Unreal MCP bridge is reachable on TCP 55771."""
+    try:
+        with socket.create_connection(("127.0.0.1", 55771), timeout=3):
+            return True
+    except (ConnectionRefusedError, socket.timeout, OSError):
+        return False
+
+
+@pytest.fixture(scope="session")
+def unreal(unreal_available):
+    """Provide a live UnrealConnection to tests marked with requires_unreal."""
+    if not unreal_available:
+        pytest.skip("Unreal Editor not available")
+    from server.core import get_unreal_connection
+    return get_unreal_connection()
+
+
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """

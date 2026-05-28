@@ -45,6 +45,7 @@ def bootstrap():
     from server import scene_sync_tools          # noqa: F401
     from server import scene_layout_tools        # noqa: F401
     from server import scene_procedural_tools     # noqa: F401
+    from server import scene_cave_tools           # noqa: F401
     from server import scene_job_tools            # noqa: F401
     from server import scene_nav_ai_tools         # noqa: F401
     from server import scene_validate_tools       # noqa: F401

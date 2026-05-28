@@ -9,6 +9,7 @@ operation_id.
 from __future__ import annotations
 
 import logging
+import importlib
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -325,7 +326,7 @@ class PatchExecutor:
     ) -> None:
         for cap, params in compiled.direct_commands:
             try:
-                result = self.unreal.send_command(cap.command, params)
+                result = self._execute_direct_command(cap, params)
                 ok = bool(result.get("success", True)) if isinstance(result, dict) else True
                 report.operations.append(
                     OperationResult(
@@ -343,6 +344,31 @@ class PatchExecutor:
             except Exception as exc:  # noqa: BLE001
                 report.failed += 1
                 report.errors.append(f"{cap.capability_id}: {exc}")
+
+    # ------------------------------------------------------------------
+    def _execute_direct_command(self, cap: Capability, params: Dict[str, Any]) -> Dict[str, Any]:
+        if cap.transport == "python_tool":
+            return self._call_python_tool(cap.command, params)
+        if cap.transport == "scene_syncd":
+            return self.scene_syncd(cap.command, params)
+        return self.unreal.send_command(cap.command, params)
+
+    @staticmethod
+    def _call_python_tool(command: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        module_names = (
+            "server.scene_cave_tools",
+            "server.scene_procedural_tools",
+            "server.dialog_tools",
+            "server.testing_validation_tools",
+            "server.pcg_tools",
+            "server.rendering_tools",
+        )
+        for module_name in module_names:
+            module = importlib.import_module(module_name)
+            fn = getattr(module, command, None)
+            if callable(fn):
+                return fn(**params)
+        raise KeyError(f"unknown python_tool command: {command}")
 
     # ------------------------------------------------------------------
     @staticmethod

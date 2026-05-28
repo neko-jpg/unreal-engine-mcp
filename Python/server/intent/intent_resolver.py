@@ -28,13 +28,19 @@ _ACTION_KEYWORDS = [
 
 # Domain hints
 _DOMAIN_KEYWORDS = {
-    "lighting": ["light", "torch", "lamp", "bright", "dark", "shadow"],
+    "lighting": ["light", "torch", "lamp", "bright", "dark", "shadow", "明る", "暗", "灯", "光"],
     "material": ["material", "stone", "metal", "wood", "wet", "rough", "shiny", "color"],
     "atmosphere": ["fog", "mist", "haze", "sky", "atmosphere", "weather", "clouds"],
     "audio": ["sound", "audio", "drip", "wind", "music", "ambient"],
     "vfx": ["dust", "smoke", "embers", "particle", "vfx", "niagara"],
     "post_process": ["bloom", "exposure", "tonemap", "saturation", "post"],
     "camera": ["camera", "view", "framing"],
+    "cave": ["cave", "cavern", "洞窟", "洞穴", "鍾乳洞", "ダンジョン", "dungeon"],
+    "architecture": ["house", "building", "castle", "mansion", "tower", "bridge", "arch", "wall", "pyramid", "maze", "town", "aqueduct", "家", "建物", "城", "塔"],
+    "procedural": ["procedural", "sdf", "wfc", "generate terrain", "生成"],
+    "mesh_editing": ["remesh", "collision", "nanite", "uv unwrap", "voxel"],
+    "navigation": ["navmesh", "walkable", "pathfinding", "歩ける"],
+    "validation": ["validate", "check", "audit", "検証"],
 }
 
 # Mood markers (used to fill Intent.mood)
@@ -79,6 +85,12 @@ def _infer_domains(text_lower: str) -> List[str]:
         if any(k in text_lower for k in keys):
             domains.append(domain)
     return domains
+
+
+def _append_missing(domains: List[str], additions: List[str]) -> None:
+    for domain in additions:
+        if domain not in domains:
+            domains.append(domain)
 
 
 def _infer_mood(text_lower: str) -> Optional[str]:
@@ -129,6 +141,20 @@ class IntentResolver:
         if action == "modify" and not domains and effective_mood:
             domains = ["lighting", "material", "atmosphere", "audio", "vfx"]
             warnings.append("domains inferred from mood")
+
+        # Cave mood edits need both orchestration and the existing mood passes.
+        if action in {"modify", "refine", "create"} and "cave" in domains:
+            _append_missing(
+                domains,
+                [
+                    "lighting",
+                    "material",
+                    "atmosphere",
+                    "audio",
+                    "vfx",
+                    "post_process",
+                ],
+            )
 
         target_selector: Optional[Dict[str, Any]] = None
         if target:

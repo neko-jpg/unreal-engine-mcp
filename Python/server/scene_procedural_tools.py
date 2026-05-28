@@ -487,7 +487,9 @@ def scene_wfc_to_semantic_layout(
     if constraints is None:
         constraints = []
     if not tile_asset_map:
+        return make_error_response(
             "tile_asset_map cannot be empty. Provide tile_id to '/Game/.../SM_Asset' mappings."
+        )
 
     grid_result = scene_create_wfc_grid(
         width=width,
@@ -624,15 +626,17 @@ def scene_show_wfc_proxy(
     tile_mesh_map = tile_mesh_map or {}
     required_tags = set(tag_filter or [])
 
-    preview_result = _scene_syncd_error_response(
-        _stc.call_scene_syncd(f"/layouts/{scene_id}/preview", {}),
-        "scene_show_wfc_proxy/preview",
+    # scene_wfc_to_semantic_layout creates desired objects via /objects/upsert,
+    # not layout entities, so we query the object list directly.
+    list_result = _scene_syncd_error_response(
+        _stc.call_scene_syncd("/objects/list", {"scene_id": scene_id, "include_deleted": False}),
+        "scene_show_wfc_proxy/list",
     )
-    if preview_result.get("success") is False:
-        return preview_result
+    if list_result.get("success") is False:
+        return list_result
 
-    preview_data = _scene_syncd_data(preview_result)
-    objects = preview_data.get("objects") or []
+    list_data = _scene_syncd_data(list_result)
+    objects = list_data.get("objects") or []
     if not isinstance(objects, list):
         return make_error_response("scene-syncd preview did not include an objects list")
 

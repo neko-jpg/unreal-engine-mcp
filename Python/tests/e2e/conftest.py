@@ -183,6 +183,15 @@ def isolated_scene(scene_syncd_available):
         pass
 
 
+@pytest.fixture(scope="session")
+def unreal(unreal_available):
+    """Provide a live UnrealConnection to tests marked with requires_unreal."""
+    if not unreal_available:
+        pytest.skip("Unreal Editor not available")
+    from server.core import get_unreal_connection
+    return get_unreal_connection()
+
+
 @pytest.fixture
 def upsert_test_object(isolated_scene):
     """Factory fixture to upsert objects into the isolated scene."""

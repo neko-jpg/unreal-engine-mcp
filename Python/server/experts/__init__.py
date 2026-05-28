@@ -17,3 +17,5 @@ from server.experts.material_expert import MaterialExpert  # noqa: F401
 from server.experts.atmosphere_expert import AtmosphereExpert  # noqa: F401
 from server.experts.audio_expert import AudioExpert  # noqa: F401
 from server.experts.vfx_expert import VFXExpert  # noqa: F401
+from server.experts.cave_expert import CaveExpert  # noqa: F401
+from server.experts.postprocess_expert import PostProcessExpert  # noqa: F401

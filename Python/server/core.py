@@ -110,6 +110,12 @@ class UnrealConnection:
         "add_widget_to_viewport",
         "execute_python_script",
         "vroid_import_vrm",
+        "spawn_water_body_ocean",
+        "spawn_water_body_lake",
+        "spawn_water_body_river",
+        "spawn_water_body_custom",
+        "configure_water_wave",
+        "configure_water_flow",
     }
 
     COMMAND_RECV_TIMEOUT_OVERRIDES = {
@@ -117,6 +123,24 @@ class UnrealConnection:
         "execute_commandlet": 1800,
         "build_hlod": 3600,
         "rebuild_hlod": 3600,
+        "spawn_water_body_ocean": 300,
+        "spawn_water_body_lake": 300,
+        "spawn_water_body_river": 300,
+        "spawn_water_body_custom": 300,
+        "configure_water_wave": 180,
+        "configure_water_flow": 180,
+    }
+
+    # Water body spawn commands must not retry because the first attempt may
+    # still be running in UE (blocked by modal dialogs like landscape layer
+    # insertion). A retry with the same actor_name causes a fatal name-collision
+    # crash in LevelActor.cpp when UE tries to spawn two actors with identical
+    # FName in the same level.
+    NO_RETRY_COMMANDS = {
+        "spawn_water_body_ocean",
+        "spawn_water_body_lake",
+        "spawn_water_body_river",
+        "spawn_water_body_custom",
     }
 
     def __init__(self):
@@ -250,14 +274,15 @@ class UnrealConnection:
 
     def send_command(self, command: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         last_error = None
-        for attempt in range(self.MAX_RETRIES + 1):
+        max_retries = 0 if command in self.NO_RETRY_COMMANDS else self.MAX_RETRIES
+        for attempt in range(max_retries + 1):
             try:
                 return self._send_command_once(command, params, attempt)
             except (ConnectionError, TimeoutError, socket.error, OSError) as e:
                 last_error = str(e)
-                logger.warning(f"Command failed (attempt {attempt + 1}/{self.MAX_RETRIES + 1}): {e}")
+                logger.warning(f"Command failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
                 self.disconnect()
-                if attempt < self.MAX_RETRIES:
+                if attempt < max_retries:
                     delay = min(self.BASE_RETRY_DELAY * (2 ** attempt), self.MAX_RETRY_DELAY)
                     logger.info(f"Retrying command in {delay:.1f}s...")
                     time.sleep(delay)
@@ -265,7 +290,7 @@ class UnrealConnection:
                 logger.error(f"Unexpected error sending command: {e}")
                 self.disconnect()
                 return make_error_response(str(e))
-        return make_error_response(f"Command failed after {self.MAX_RETRIES + 1} attempts: {last_error}")
+        return make_error_response(f"Command failed after {max_retries + 1} attempts: {last_error}")
 
     @staticmethod
     def _normalize_response(response: Dict[str, Any]) -> Dict[str, Any]:

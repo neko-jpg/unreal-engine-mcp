@@ -11,6 +11,7 @@ from server.experts import (
     AudioExpert,
     LightingExpert,
     MaterialExpert,
+    PostProcessExpert,
     VFXExpert,
     default_router,
     list_profiles,
@@ -24,7 +25,7 @@ from server.intent.scene_context import (
     SceneContextPack,
     SceneObjectBrief,
 )
-from server.planning.design_patch import ComponentPatch, AssetPatch
+from server.planning.design_patch import ComponentPatch, AssetPatch, DirectCommandPatch
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ def _intent_creepy():
         raw_text="make this cave creepy",
         scene_id="cave_test",
         action="modify",
-        domains=["lighting", "material", "atmosphere", "audio", "vfx"],
+        domains=["cave", "lighting", "material", "atmosphere", "audio", "vfx", "post_process"],
         mood="creepy",
     )
 
@@ -117,8 +118,16 @@ def test_vfx_expert_emits_dust_and_embers(cave_pack):
     assert names == {"dust", "embers"}
 
 
+def test_postprocess_expert_emits_spawn_and_apply(cave_pack):
+    intent = _intent_creepy()
+    profile = load_profile("creepy")
+    patches = PostProcessExpert().propose(intent, cave_pack, profile)
+    assert [p.command for p in patches] == ["spawn_post_process_volume", "set_post_process_volume"]
+    assert all(isinstance(p, DirectCommandPatch) for p in patches)
+
+
 def test_router_returns_aggregated_patches(cave_pack):
     intent = _intent_creepy()
     patches = default_router().propose_all(intent, cave_pack)
-    # 2 lights + 1 asset + 2 materials + 1 atmosphere + 2 audio + 2 vfx = 10
-    assert len(patches) == 10
+    # 3 cave + 2 lights + 1 asset + 2 materials + 1 atmosphere + 2 audio + 2 vfx + 2 post-process = 15
+    assert len(patches) == 15

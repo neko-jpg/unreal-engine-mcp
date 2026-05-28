@@ -34,17 +34,17 @@ class TestWfcSemanticHismPipeline:
         # Import here so a missing Python dep cannot crash collection.
         from server import scene_procedural_tools as spt
 
-        scene_id = isolated_scene["scene_id"]
+        scene_id = isolated_scene
         tiles = [{"id": "T_A", "weight": 1.0}, {"id": "T_B", "weight": 1.0}]
         constraints = [
-            {"left": "T_A", "right": "T_A", "direction": "horizontal"},
-            {"left": "T_A", "right": "T_B", "direction": "horizontal"},
-            {"left": "T_B", "right": "T_A", "direction": "horizontal"},
-            {"left": "T_B", "right": "T_B", "direction": "horizontal"},
-            {"left": "T_A", "right": "T_A", "direction": "vertical"},
-            {"left": "T_A", "right": "T_B", "direction": "vertical"},
-            {"left": "T_B", "right": "T_A", "direction": "vertical"},
-            {"left": "T_B", "right": "T_B", "direction": "vertical"},
+            {"left": "T_A", "right": "T_A", "direction": "east"},
+            {"left": "T_A", "right": "T_B", "direction": "east"},
+            {"left": "T_B", "right": "T_A", "direction": "east"},
+            {"left": "T_B", "right": "T_B", "direction": "east"},
+            {"left": "T_A", "right": "T_A", "direction": "south"},
+            {"left": "T_A", "right": "T_B", "direction": "south"},
+            {"left": "T_B", "right": "T_A", "direction": "south"},
+            {"left": "T_B", "right": "T_B", "direction": "south"},
         ]
         tile_asset_map = {
             "T_A": "/Engine/BasicShapes/Cube.Cube",
@@ -69,16 +69,17 @@ class TestWfcSemanticHismPipeline:
         )
         assert semantic.get("success") is True, semantic
         data = semantic.get("data") or semantic
-        assert data.get("upserted_entity_count", 0) >= 9, data
+        assert data.get("upserted_count", 0) >= 9, data
 
         # Allow scene-syncd to persist.
         time.sleep(0.3)
 
         # Step 2: Show WFC proxy spawns HISM proxies in Unreal.
-        proxy = spt.scene_show_wfc_proxy(scene_id=scene_id, group_id_prefix="e2e_wfc")
+        proxy = spt.scene_show_wfc_proxy(scene_id=scene_id, proxy_name_prefix="e2e_wfc")
         assert proxy.get("success") is True, proxy
         proxy_data = proxy.get("data") or proxy
-        assert proxy_data.get("proxy_created_count", 0) > 0, proxy_data
+        proxies = proxy_data.get("proxies", [])
+        assert len(proxies) > 0, proxy_data
 
         # Step 3: Verify the per-tile world position contract.
         per_tile = proxy_data.get("tile_id_actors") or {}

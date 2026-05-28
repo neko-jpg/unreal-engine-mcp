@@ -76,6 +76,17 @@ from server.scene_procedural_tools import (  # noqa: F401
     scene_clear_generated_group,
 )
 
+# Cave orchestration
+from server.scene_cave_tools import (  # noqa: F401
+    scene_cave_audit,
+    scene_create_cave_sdf,
+    scene_apply_cave_pcg,
+    scene_apply_cave_mood,
+    scene_validate_cave,
+    scene_refine_cave_geometry,
+    scene_cave_generate_or_refine,
+)
+
 # Async jobs
 from server.scene_job_tools import (  # noqa: F401
     scene_procedural_job_submit,

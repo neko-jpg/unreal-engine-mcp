@@ -136,6 +136,8 @@ def test_scene_preview_single_sets_camera_from_scene_bounds(monkeypatch, synth_i
 
     res = dt.scene_preview(scene_id="preview_test", target="cave", batch="single")
     assert res["success"] is True
+    assert res["cave_metrics"]["is_box_cave"] is False
+    assert res["cave_metrics"]["entrance_count"] >= 1
     assert len(requests) == 1
     assert requests[0].camera_location is not None
     assert requests[0].camera_location == pytest.approx((0.0, -257.09, 210.0), abs=0.01)
