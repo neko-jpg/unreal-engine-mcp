@@ -118,6 +118,43 @@ static AWaterBody* FindWaterBodyInEditorWorld(UWorld* World, const FString& Acto
     return nullptr;
 }
 
+// Ensure a WaterZone exists in the editor world so the Water plugin does not
+// try to auto-spawn one during water body creation (which can race and crash).
+static AWaterZone* EnsureWaterZone(UWorld* World)
+{
+    if (!World) return nullptr;
+    for (TActorIterator<AWaterZone> It(World); It; ++It)
+    {
+        if (IsValid(*It))
+        {
+            return *It;
+        }
+    }
+    FActorSpawnParameters ZoneParams;
+    ZoneParams.Name = FName(TEXT("WaterZone"));
+    ZoneParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+    ZoneParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    AWaterZone* Zone = World->SpawnActor<AWaterZone>(AWaterZone::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, ZoneParams);
+    return Zone;
+}
+
+// Generic actor lookup by name/label — checks *any* actor type, not just water
+// bodies. This prevents fatal name-collisions when a retry arrives before the
+// first spawn has finished (e.g. while a modal dialog blocks the GameThread).
+static AActor* FindActorByNameInEditorWorld(UWorld* World, const FString& ActorName)
+{
+    if (!World || ActorName.IsEmpty()) return nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (It->GetName().Equals(ActorName, ESearchCase::IgnoreCase) ||
+            It->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase))
+        {
+            return *It;
+        }
+    }
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // enable_water_plugin -- Check IPluginManager for Water plugin, persist metadata.
 // ---------------------------------------------------------------------------
@@ -179,10 +216,21 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleSpawnWaterBodyOcean(c
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) return WaterErr(TEXT("No editor world available"));
 
+    // Prevent duplicate spawns on retry — check ANY actor with this name so
+    // we catch water bodies, brush managers, or anything else already in flight.
+    if (FindActorByNameInEditorWorld(World, ActorName))
+    {
+        return WaterErr(FString::Printf(TEXT("Actor '%s' already exists in the level."), *ActorName));
+    }
+
+    // Pre-create WaterZone so the Water plugin does not race during spawn.
+    EnsureWaterZone(World);
+
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_water_body_ocean"));
 
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = FName(*ActorName);
+    SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
     AWaterBodyOcean* Ocean = World->SpawnActor<AWaterBodyOcean>(AWaterBodyOcean::StaticClass(),
@@ -222,10 +270,20 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleSpawnWaterBodyLake(co
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) return WaterErr(TEXT("No editor world available"));
 
+    // Prevent duplicate spawns on retry.
+    if (FindWaterBodyInEditorWorld(World, ActorName))
+    {
+        return WaterErr(FString::Printf(TEXT("Water body '%s' already exists."), *ActorName));
+    }
+
+    // Pre-create WaterZone so the Water plugin does not race during spawn.
+    EnsureWaterZone(World);
+
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_water_body_lake"));
 
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = FName(*ActorName);
+    SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
     AWaterBodyLake* Lake = World->SpawnActor<AWaterBodyLake>(AWaterBodyLake::StaticClass(),
@@ -290,10 +348,20 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleSpawnWaterBodyRiver(c
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) return WaterErr(TEXT("No editor world available"));
 
+    // Prevent duplicate spawns on retry.
+    if (FindWaterBodyInEditorWorld(World, ActorName))
+    {
+        return WaterErr(FString::Printf(TEXT("Water body '%s' already exists."), *ActorName));
+    }
+
+    // Pre-create WaterZone so the Water plugin does not race during spawn.
+    EnsureWaterZone(World);
+
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_water_body_river"));
 
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = FName(*ActorName);
+    SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
     AWaterBodyRiver* River = World->SpawnActor<AWaterBodyRiver>(AWaterBodyRiver::StaticClass(),
@@ -352,6 +420,16 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPWaterCommands::HandleSpawnWaterBodyCustom(
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) return WaterErr(TEXT("No editor world available"));
+
+    // Prevent duplicate spawns on retry — check ANY actor with this name so
+    // we catch water bodies, brush managers, or anything else already in flight.
+    if (FindActorByNameInEditorWorld(World, ActorName))
+    {
+        return WaterErr(FString::Printf(TEXT("Actor '%s' already exists in the level."), *ActorName));
+    }
+
+    // Pre-create WaterZone so the Water plugin does not race during spawn.
+    EnsureWaterZone(World);
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: spawn_water_body_custom"));
 

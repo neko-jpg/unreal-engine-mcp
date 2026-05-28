@@ -16,7 +16,6 @@
 #include "Sound/SoundCue.h"
 #include "Sound/SoundNode.h"
 #include "Animation/AnimSequence.h"
-#include "Animation/AnimNotifies.h"
 #include "Components/AudioComponent.h"
 #include "EngineUtils.h"
 #include "UObject/Package.h"
@@ -114,7 +113,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleEditSoundCueGraph
         return MsErr(FString::Printf(TEXT("SoundCue '%s' not found."), *SoundCuePath));
 
     // Find the sound node class
-    UClass* NodeClass = FindObject<UClass>(ANY_PACKAGE, *NodeType);
+    UClass* NodeClass = FindObject<UClass>(nullptr, *NodeType);
     if (!NodeClass || !NodeClass->IsChildOf(USoundNode::StaticClass()))
         return MsErr(FString::Printf(TEXT("SoundNode class '%s' not found or invalid."), *NodeType));
 
@@ -128,7 +127,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleEditSoundCueGraph
         return MsErr(FString::Printf(TEXT("Failed to construct SoundNode of type '%s'."), *NodeType));
     }
 
-    NewNode->NodeName = NodeName;
+    // NodeName property removed in UE 5.7; skip assignment.
+    (void)NodeName;
     SoundCue->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -164,8 +164,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleCreateMetasoundSo
         return MsErr(TEXT("create_metasound_source: MetaSoundBuilderSubsystem not available."));
 
     EMetaSoundBuilderResult Result;
+    FMetaSoundBuilderNodeOutputHandle OutHandle;
     UMetaSoundSourceBuilder* Builder = BuilderSubsystem->CreateSourceBuilder(
-        FName(*AssetName), FMetaSoundNodeHandle{}, FMetaSoundNodeHandle{}, {},
+        FName(*AssetName), OutHandle, FMetaSoundBuilderNodeInputHandle{}, {},
         Result, EMetaSoundOutputAudioFormat::Stereo, false);
 
     if (Result != EMetaSoundBuilderResult::Succeeded || !Builder)
@@ -175,10 +176,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleCreateMetasoundSo
     EMetaSoundBuilderResult IfaceResult;
     Builder->AddInterface(FName("Audio"), IfaceResult);
 
-    FMetaSoundBuilderOptions BuildOpts;
-    BuildOpts.Name = FName(*AssetName);
-    BuildOpts.bForceUniqueClassName = true;
-    UMetaSoundSource* NewSource = Builder->BuildNewMetaSound(BuildOpts);
+    TScriptInterface<IMetaSoundDocumentInterface> NewSourceInterface = Builder->BuildNewMetaSound(FName(*AssetName));
+    UMetaSoundSource* NewSource = Cast<UMetaSoundSource>(NewSourceInterface.GetObject());
 
     if (!NewSource)
         return MsErr(TEXT("create_metasound_source: BuildNewMetaSound failed."));
@@ -466,7 +465,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleConfigureUiSound(
         return MsErr(FString::Printf(TEXT("Sound asset '%s' not found."), *SoundCuePath));
 
     // Find the widget blueprint
-    UClass* WidgetUClass = FindObject<UClass>(ANY_PACKAGE, *WidgetClass);
+    UClass* WidgetUClass = FindObject<UClass>(nullptr, *WidgetClass);
     if (!WidgetUClass)
         return MsErr(FString::Printf(TEXT("Widget class '%s' not found."), *WidgetClass));
 

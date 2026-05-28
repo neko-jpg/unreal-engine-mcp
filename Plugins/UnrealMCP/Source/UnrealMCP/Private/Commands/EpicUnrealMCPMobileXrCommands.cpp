@@ -10,8 +10,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
-#include "Components/MotionControllerComponent.h"
 #include "Components/SceneComponent.h"
+#include "MotionControllerComponent.h"
 #include "Camera/CameraComponent.h"
 #include "UObject/Package.h"
 #include "Editor.h"
@@ -50,7 +50,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::MakeUnavailable(const FS
     TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
     R->SetBoolField(TEXT("success"), false);
     R->SetStringField(TEXT("error"), FString::Printf(TEXT("'%s' requires the Mobile/XR modules."), *Cmd));
-    R->SetStringField(TEXT("hint"), TEXT("Enable OpenXR / AndroidRuntimeSettings / IOSRuntimeSettings depending on the platform; settings persist via TryUpdateDefaultConfigFile()."));
+    R->SetStringField(TEXT("hint"), TEXT("Enable OpenXR / AndroidRuntimeSettings / IOSRuntimeSettings depending on the platform; settings persist via FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe()."));
     return R;
 }
 
@@ -98,8 +98,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureAndroidSe
     if (Params.IsValid())
     {
         Params->TryGetStringField(TEXT("package_name"), PackageName);
-        if (const TSharedPtr<FJsonValue>* Val = Params->TryGetField(TEXT("min_sdk")))
-            MinSdk = static_cast<int32>(Val->Get()->AsNumber());
+        if (TSharedPtr<FJsonValue> Val = Params->TryGetField(TEXT("min_sdk")))
+            MinSdk = static_cast<int32>(Val->AsNumber());
     }
 
     FMCPScopedTransaction Tx(TEXT("UnrealMCP: configure_android_settings"));
@@ -108,7 +108,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureAndroidSe
     GConfig->SetString(TEXT("/Script/AndroidRuntimeSettings.AndroidRuntimeSettings"), TEXT("PackageName"), *PackageName, GEngineIni);
     GConfig->SetInt(TEXT("/Script/AndroidRuntimeSettings.AndroidRuntimeSettings"), TEXT("MinSDKVersion"), MinSdk, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_android_settings"));
@@ -138,7 +138,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureIosSettin
     GConfig->SetString(TEXT("/Script/IOSRuntimeSettings.IOSRuntimeSettings"), TEXT("BundleIdentifier"), *BundleId, GEngineIni);
     GConfig->SetString(TEXT("/Script/IOSRuntimeSettings.IOSRuntimeSettings"), TEXT("MinimumiOSVersion"), *MinimumIos, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_ios_settings"));
@@ -168,7 +168,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureMobileRen
     GConfig->SetString(TEXT("/Script/Engine.RendererSettings"), TEXT("MobileFeatureLevel"), *FeatureLevel, GEngineIni);
     GConfig->SetBool(TEXT("/Script/Engine.RendererSettings"), TEXT("bForwardShading"), bForwardShading, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_mobile_rendering"));
@@ -197,7 +197,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureTouchInpu
 
     GConfig->SetBool(TEXT("/Script/Engine.InputSettings"), TEXT("bUseTouchForTouchInterface"), bEnable, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_touch_input"));
@@ -231,7 +231,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleSetDeviceProfile(c
 
     GConfig->SetString(TEXT("DeviceProfiles"), TEXT("ActiveProfileName"), *ProfileName, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("set_device_profile"));
@@ -264,7 +264,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleCreateScalabilityP
     GConfig->SetInt(*Section, TEXT("sg.GlobalIlluminationQuality"), 3, GEngineIni);
     GConfig->SetInt(*Section, TEXT("sg.PostProcessQuality"), 3, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("create_scalability_profile"));
@@ -293,7 +293,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleEnableXrPlugin(con
     const FString Section = TEXT("/Script/Engine.XRPluginManager");
     GConfig->SetBool(*Section, *FString::Printf(TEXT("bEnable%s"), *PluginName), true, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("enable_xr_plugin"));
@@ -320,7 +320,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureOpenxr(co
     const FString Section = TEXT("/Script/OpenXRHMD.OpenXRHMDSettings");
     GConfig->SetString(*Section, TEXT("SessionMode"), *SessionMode, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_openxr"));
@@ -506,7 +506,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArSession
     const FString Section = TEXT("/Script/ARSessionConfig.ARSessionConfig");
     GConfig->SetString(*Section, TEXT("WorldAlignment"), *WorldAlignment, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_ar_session"));
@@ -540,7 +540,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandleConfigureArPlaneDe
     GConfig->SetBool(*Section, TEXT("bHorizontalPlaneDetection"), bHorizontal, GEngineIni);
     GConfig->SetBool(*Section, TEXT("bVerticalPlaneDetection"), bVertical, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("configure_ar_plane_detection"));
@@ -574,7 +574,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMobileXrCommands::HandlePlatformSpecificPa
     const FString Section = FString::Printf(TEXT("/Script/%s.%sRuntimeSettings"), *Platform, *Platform);
     GConfig->SetString(*Section, TEXT("BuildConfiguration"), *BuildConfiguration, GEngineIni);
     GConfig->Flush(false, GEngineIni);
-    TryUpdateDefaultConfigFile(GEngineIni);
+    FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(GEngineIni);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("platform_specific_packaging"));
