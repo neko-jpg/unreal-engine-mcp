@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from server.agents.base_agent import AgentContext, AgentResult, BaseAgent, ToolRegistry
+from server.agents.guardrails import Guardrails
 from server.intent.intent_resolver import IntentResolver
 from server.intent.intent_types import Intent
 
@@ -98,6 +99,17 @@ class MasterOrchestrator(BaseAgent):
             Consolidated AgentResult from all involved domains
         """
         self.logger.info(f"Orchestrating intent: {intent[:80]}...")
+
+        # Input guardrails
+        gr = Guardrails.check_input(intent, context.constraints)
+        if not gr.passed:
+            violations = "; ".join(f"{v.guardrail}: {v.message}" for v in gr.violations)
+            self.logger.warning(f"Input guardrail blocked intent: {violations}")
+            return AgentResult(
+                success=False,
+                error=f"Input guardrail blocked: {violations}",
+                data={"guardrail_violations": [v.to_dict() for v in gr.violations]},
+            )
 
         # Resolve intent
         resolution = self.intent_resolver.resolve(

@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
+from server.agents.guardrails import Guardrails, GuardrailResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,8 +187,25 @@ class BaseAgent(ABC):
             self.logger.exception(f"Tool {tool_name} failed")
             return {"success": False, "error": f"{tool_name} failed: {exc}"}
 
-    async def call_tool_async(self, tool_name: str, **kwargs: Any) -> Dict[str, Any]:
-        """Async version of call_tool."""
+    async def call_tool_async(
+        self,
+        tool_name: str,
+        constraints: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Async version of call_tool.
+
+        If ``constraints["guardrails"]`` is truthy, runs ToolGuardrail before
+        invoking the tool.
+        """
+        # Guardrails check
+        if constraints is not None:
+            gr = Guardrails.check_tool(tool_name, kwargs, constraints)
+            if not gr.passed:
+                violations = "; ".join(f"{v.guardrail}: {v.message}" for v in gr.violations)
+                self.logger.warning(f"Tool guardrail blocked {tool_name}: {violations}")
+                return {"success": False, "error": f"Guardrail blocked: {violations}"}
+
         tool = self.tool_registry.get(tool_name)
         if tool is None:
             return {"success": False, "error": f"Tool '{tool_name}' not found"}
