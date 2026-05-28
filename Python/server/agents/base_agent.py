@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 from server.agents.guardrails import Guardrails, GuardrailResult
+from server.agents.resilience import CircuitBreaker, CircuitOpenError, get_circuit_registry
 from server.agents.tracing import AgentTracer, get_tracer, is_tracing_enabled
 
 logger = logging.getLogger(__name__)
@@ -229,15 +230,20 @@ class BaseAgent(ABC):
         if tool is None:
             return {"success": False, "error": f"Tool '{tool_name}' not found"}
 
+        # Circuit breaker
+        cb = get_circuit_registry().get(tool_name)
         try:
             if asyncio.iscoroutinefunction(tool):
-                result = await tool(**kwargs)
+                result = await cb.call_async(tool, **kwargs)
             else:
-                result = tool(**kwargs)
+                result = cb.call(tool, **kwargs)
             # Tracing
             if self._current_span is not None:
                 self._tracer.log_tool_call(self._current_span, tool_name, kwargs, result)
             return result
+        except CircuitOpenError:
+            self.logger.warning(f"Circuit breaker open for tool {tool_name}")
+            return {"success": False, "error": f"Circuit breaker open for '{tool_name}'"}
         except Exception as exc:
             self.logger.exception(f"Tool {tool_name} failed")
             return {"success": False, "error": f"{tool_name} failed: {exc}"}
