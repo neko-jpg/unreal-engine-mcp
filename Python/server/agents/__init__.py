@@ -15,7 +15,10 @@ import importlib
 import logging
 from typing import Any, Dict, List, Optional
 
+from server.agents.agent_card import AgentCard, AgentCardDirectory
 from server.agents.base_agent import AgentContext, AgentResult, ToolRegistry, get_tool_registry
+from server.agents.memory import AgentMemory
+from server.agents.planner import TaskPlanner
 from server.agents.domain_agents import (
     AnimationDomainAgent,
     ArchitectureDomainAgent,

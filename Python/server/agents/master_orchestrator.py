@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from server.agents.agent_card import AgentCardDirectory, build_directory_from_orchestrator
 from server.agents.base_agent import AgentContext, AgentResult, BaseAgent, ToolRegistry
 from server.agents.guardrails import Guardrails
+from server.agents.planner import TaskPlanner
 from server.agents.tracing import is_tracing_enabled, get_tracer
 from server.intent.intent_resolver import IntentResolver
 from server.intent.intent_types import Intent
@@ -88,6 +90,8 @@ class MasterOrchestrator(BaseAgent):
             "mesh_editing": "mesh_domain",
             "navigation": "npc_domain",
         }
+        self.mode = "react"  # "react" | "plan_and_execute"
+        self.planner = TaskPlanner()
 
     async def execute(self, intent: str, context: AgentContext) -> AgentResult:
         """Execute user intent by routing to appropriate domain agents.
@@ -149,7 +153,18 @@ class MasterOrchestrator(BaseAgent):
                 data={"resolved_intent": resolved_intent.__dict__},
             )
 
-        # Execute domain agents
+        # Plan-and-Execute mode for multi-domain tasks
+        if self.mode == "plan_and_execute" and len(domain_agents) > 1:
+            self.logger.info(
+                f"Using plan-and-execute for {len(domain_agents)} domains"
+            )
+            plan = self.planner.create_plan(
+                resolved_intent.raw_text,
+                domain_agents,
+            )
+            return await self.planner.execute_plan(plan, context, self)
+
+        # Execute domain agents (ReAct-style sequential)
         results: List[AgentResult] = []
 
         try:
@@ -361,6 +376,10 @@ class MasterOrchestrator(BaseAgent):
         for agent in agents:
             self.register_sub_agent(agent)
             logger.info(f"Registered domain agent: {agent.name}")
+
+    def get_agent_cards(self) -> AgentCardDirectory:
+        """Build an AgentCardDirectory from all registered sub-agents."""
+        return build_directory_from_orchestrator(self)
 
 
 # Singleton instance

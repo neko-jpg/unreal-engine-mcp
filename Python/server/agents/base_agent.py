@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 from server.agents.guardrails import Guardrails, GuardrailResult
+from server.agents.memory import AgentMemory
 from server.agents.resilience import CircuitBreaker, CircuitOpenError, get_circuit_registry
 from server.agents.tracing import AgentTracer, get_tracer, is_tracing_enabled
 
@@ -48,6 +49,7 @@ class AgentContext:
     metadata: Dict[str, Any] = field(default_factory=dict)
     parent_agent: Optional[str] = None
     depth: int = 0
+    memory: Optional[AgentMemory] = None
 
     def fork(self, agent_name: str) -> "AgentContext":
         """Create a child context for sub-agent execution."""
@@ -60,6 +62,7 @@ class AgentContext:
             metadata=dict(self.metadata),
             parent_agent=agent_name,
             depth=self.depth + 1,
+            memory=self.memory,
         )
 
 
@@ -166,10 +169,23 @@ class BaseAgent(ABC):
             result.sub_results = []  # Flatten at this level
             # Auto-propagate result into parent context metadata
             context.metadata[f"{agent_name}_result"] = result.to_dict()
-            context.metadata[f"last_delegate_result"] = result.to_dict()
+            context.metadata["last_delegate_result"] = result.to_dict()
+            # Log to memory if available
+            if context.memory is not None:
+                context.memory.add_observation(
+                    agent=self.name,
+                    observation=f"Delegated to {agent_name}: success={result.success}",
+                    metadata={"target_agent": agent_name, "intent": intent, "success": result.success},
+                )
             return result
         except Exception as exc:
             self.logger.exception(f"Sub-agent {agent_name} failed")
+            if context.memory is not None:
+                context.memory.add_observation(
+                    agent=self.name,
+                    observation=f"Delegated to {agent_name}: failed with {exc}",
+                    metadata={"target_agent": agent_name, "intent": intent, "success": False, "error": str(exc)},
+                )
             return AgentResult(
                 success=False,
                 error=f"{agent_name} execution failed: {exc}",
