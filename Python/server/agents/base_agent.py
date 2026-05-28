@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 from server.agents.guardrails import Guardrails, GuardrailResult
+from server.agents.tracing import AgentTracer, get_tracer, is_tracing_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ class BaseAgent(ABC):
         self.tool_registry = tool_registry or {}
         self.sub_agents: Dict[str, BaseAgent] = {}
         self.logger = logging.getLogger(f"agents.{self.name}")
+        self._tracer = get_tracer()
+        self._current_span: Optional[Any] = None
 
     def register_sub_agent(self, agent: "BaseAgent") -> None:
         """Register a sub-agent for delegation."""
@@ -145,6 +148,18 @@ class BaseAgent(ABC):
             f"Delegating to {agent_name} at depth {child_context.depth}: {intent[:60]}..."
         )
 
+        # Tracing
+        parent_span = self._current_span
+        span = None
+        if is_tracing_enabled(context.constraints):
+            span = self._tracer.start_span(
+                f"agent.delegate.{agent_name}",
+                self.name,
+                parent_id=parent_span.span_id if parent_span else None,
+            )
+            self._current_span = span
+            self._tracer.log_delegate(span, self.name, agent_name, intent)
+
         try:
             result = await agent.execute(intent, child_context)
             result.sub_results = []  # Flatten at this level
@@ -158,6 +173,10 @@ class BaseAgent(ABC):
                 success=False,
                 error=f"{agent_name} execution failed: {exc}",
             )
+        finally:
+            if span is not None:
+                self._tracer.finish_span(span)
+                self._current_span = parent_span
 
     def call_tool(self, tool_name: str, **kwargs: Any) -> Dict[str, Any]:
         """Call an MCP tool by name.
@@ -212,9 +231,13 @@ class BaseAgent(ABC):
 
         try:
             if asyncio.iscoroutinefunction(tool):
-                return await tool(**kwargs)
+                result = await tool(**kwargs)
             else:
-                return tool(**kwargs)
+                result = tool(**kwargs)
+            # Tracing
+            if self._current_span is not None:
+                self._tracer.log_tool_call(self._current_span, tool_name, kwargs, result)
+            return result
         except Exception as exc:
             self.logger.exception(f"Tool {tool_name} failed")
             return {"success": False, "error": f"{tool_name} failed: {exc}"}

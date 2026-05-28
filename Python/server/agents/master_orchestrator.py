@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from server.agents.base_agent import AgentContext, AgentResult, BaseAgent, ToolRegistry
 from server.agents.guardrails import Guardrails
+from server.agents.tracing import is_tracing_enabled, get_tracer
 from server.intent.intent_resolver import IntentResolver
 from server.intent.intent_types import Intent
 
@@ -100,11 +101,23 @@ class MasterOrchestrator(BaseAgent):
         """
         self.logger.info(f"Orchestrating intent: {intent[:80]}...")
 
+        # Tracing
+        span = None
+        if is_tracing_enabled(context.constraints):
+            span = self._tracer.start_span(
+                "agent.workflow.orchestrate",
+                self.name,
+            )
+            self._current_span = span
+
         # Input guardrails
         gr = Guardrails.check_input(intent, context.constraints)
         if not gr.passed:
             violations = "; ".join(f"{v.guardrail}: {v.message}" for v in gr.violations)
             self.logger.warning(f"Input guardrail blocked intent: {violations}")
+            if span is not None:
+                self._tracer.finish_span(span)
+                self._current_span = None
             return AgentResult(
                 success=False,
                 error=f"Input guardrail blocked: {violations}",
@@ -138,34 +151,39 @@ class MasterOrchestrator(BaseAgent):
 
         # Execute domain agents
         results: List[AgentResult] = []
-        
-        for domain, agent_name in domain_agents:
-            self.logger.info(f"Invoking domain agent: {agent_name} for domain: {domain}")
-            
-            # Create domain-specific intent
-            domain_intent = self._create_domain_intent(resolved_intent, domain)
-            
-            result = await self.delegate(agent_name, domain_intent, context)
-            results.append(result)
-            
-            # Store domain result in context for cross-domain coordination
-            context.metadata[f"{domain}_result"] = result.to_dict()
 
-        # If multiple domains and all succeeded, run coordination pass
-        if len(results) > 1 and all(r.success for r in results):
-            coord_result = await self._coordinate_domains(resolved_intent, context, results)
-            if coord_result:
-                results.append(coord_result)
+        try:
+            for domain, agent_name in domain_agents:
+                self.logger.info(f"Invoking domain agent: {agent_name} for domain: {domain}")
 
-        merged = self._merge_results(results)
-        merged.data["resolved_intent"] = {
-            "action": resolved_intent.action,
-            "domains": resolved_intent.domains,
-            "mood": resolved_intent.mood,
-            "target_selector": resolved_intent.target_selector,
-        }
-        
-        return merged
+                # Create domain-specific intent
+                domain_intent = self._create_domain_intent(resolved_intent, domain)
+
+                result = await self.delegate(agent_name, domain_intent, context)
+                results.append(result)
+
+                # Store domain result in context for cross-domain coordination
+                context.metadata[f"{domain}_result"] = result.to_dict()
+
+            # If multiple domains and all succeeded, run coordination pass
+            if len(results) > 1 and all(r.success for r in results):
+                coord_result = await self._coordinate_domains(resolved_intent, context, results)
+                if coord_result:
+                    results.append(coord_result)
+
+            merged = self._merge_results(results)
+            merged.data["resolved_intent"] = {
+                "action": resolved_intent.action,
+                "domains": resolved_intent.domains,
+                "mood": resolved_intent.mood,
+                "target_selector": resolved_intent.target_selector,
+            }
+
+            return merged
+        finally:
+            if span is not None:
+                self._tracer.finish_span(span)
+                self._current_span = None
 
     def _select_domain_agents(self, intent: Intent) -> List[tuple]:
         """Select which domain agents to invoke based on intent.
