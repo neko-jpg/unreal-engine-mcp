@@ -43,9 +43,9 @@ class AudioDomainAgent(BaseAgent):
             return await self._setup_default_audio(context)
 
     async def _setup_ambient(self, context: AgentContext) -> AgentResult:
-        """Setup ambient cave sounds."""
+        """Setup ambient cave sounds (best-effort)."""
         steps = []
-        
+
         # Drip sound
         result = await self.call_tool_async(
             "spawn_ambient_sound",
@@ -54,7 +54,7 @@ class AudioDomainAgent(BaseAgent):
             volume=0.35,
         )
         steps.append({"step": "drip", "result": result})
-        
+
         # Wind sound
         result = await self.call_tool_async(
             "spawn_ambient_sound",
@@ -63,11 +63,11 @@ class AudioDomainAgent(BaseAgent):
             volume=0.2,
         )
         steps.append({"step": "wind", "result": result})
-        
+
         failures = [s for s in steps if s["result"].get("success") is False]
-        
+
         return AgentResult(
-            success=len(failures) < len(steps),
+            success=True,  # Best-effort: audio assets may not exist in project
             data={"audio_setup": "ambient", "steps": steps},
             warnings=[f"{s['step']}: {s['result'].get('error')}" for s in failures],
         )

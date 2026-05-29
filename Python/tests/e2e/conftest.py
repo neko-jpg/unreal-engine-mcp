@@ -104,14 +104,15 @@ def unreal_command(command: str, params: dict = None) -> dict:
             return parsed
         except (ConnectionAbortedError, ConnectionResetError, ConnectionError, OSError, socket.timeout) as exc:
             last_error = exc
-            try:
-                _unreal_socket.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            try:
-                _unreal_socket.close()
-            except OSError:
-                pass
+            if _unreal_socket is not None:
+                try:
+                    _unreal_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                try:
+                    _unreal_socket.close()
+                except OSError:
+                    pass
             _unreal_socket = None
             if attempt == 2:
                 break

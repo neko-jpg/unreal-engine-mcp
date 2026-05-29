@@ -60,6 +60,12 @@ class LightingDomainAgent(BaseAgent):
         else:
             return await self._create_dark_lighting(context)
 
+    def _get_spawned_name(self, result: Dict[str, Any], fallback: str) -> str:
+        """Extract the actual UE actor name from a spawn response."""
+        if not isinstance(result, dict):
+            return fallback
+        return result.get("name") or result.get("actor_name") or result.get("final_name") or fallback
+
     async def _create_dark_lighting(self, context: AgentContext) -> AgentResult:
         """Create dark/creepy lighting setup."""
         steps = []
@@ -69,10 +75,19 @@ class LightingDomainAgent(BaseAgent):
         if cave_result and cave_result.get("success"):
             return await self._auto_adjust_for_cave(context, cave_result)
 
-        # Dim main lights
+        # Ensure DirectionalLight exists, then dim it
+        result = await self.call_tool_async(
+            "spawn_actor",
+            name="DirectionalLight",
+            type="DirectionalLight",
+            location=[0, 0, 1000],
+        )
+        steps.append({"step": "ensure_directional", "result": result})
+        dir_light_name = self._get_spawned_name(result, "DirectionalLight")
+
         result = await self.call_tool_async(
             "set_light_intensity",
-            actor_name="DirectionalLight",
+            actor_name=dir_light_name,
             intensity=0.3,
         )
         steps.append({"step": "dim_directional", "result": result})
@@ -86,17 +101,18 @@ class LightingDomainAgent(BaseAgent):
                 location=loc,
             )
             steps.append({"step": f"spawn_light_{i}", "result": result})
+            light_name = self._get_spawned_name(result, f"CaveLight_{i}")
 
             result = await self.call_tool_async(
                 "set_light_intensity",
-                actor_name=f"CaveLight_{i}",
+                actor_name=light_name,
                 intensity=2.5,
             )
             steps.append({"step": f"set_intensity_{i}", "result": result})
 
             result = await self.call_tool_async(
                 "set_light_color",
-                actor_name=f"CaveLight_{i}",
+                actor_name=light_name,
                 color=[0.9, 0.7, 0.5],
             )
             steps.append({"step": f"set_color_{i}", "result": result})
@@ -114,10 +130,19 @@ class LightingDomainAgent(BaseAgent):
         self.logger.info("Auto-adjusting lighting for newly created cave")
         steps = []
 
-        # Dim directional light significantly for cave interior
+        # Ensure and dim directional light for cave interior
+        result = await self.call_tool_async(
+            "spawn_actor",
+            name="DirectionalLight",
+            type="DirectionalLight",
+            location=[0, 0, 1000],
+        )
+        steps.append({"step": "ensure_directional_for_cave", "result": result})
+        dir_light_name = self._get_spawned_name(result, "DirectionalLight")
+
         result = await self.call_tool_async(
             "set_light_intensity",
-            actor_name="DirectionalLight",
+            actor_name=dir_light_name,
             intensity=0.1,
         )
         steps.append({"step": "dim_directional_for_cave", "result": result})
@@ -136,32 +161,86 @@ class LightingDomainAgent(BaseAgent):
                 location=loc,
             )
             steps.append({"step": f"spawn_ambient_light_{i}", "result": result})
+            light_name = self._get_spawned_name(result, f"CaveAmbientLight_{i}")
 
             result = await self.call_tool_async(
                 "set_light_intensity",
-                actor_name=f"CaveAmbientLight_{i}",
+                actor_name=light_name,
                 intensity=1.8,
             )
             steps.append({"step": f"set_ambient_intensity_{i}", "result": result})
 
             result = await self.call_tool_async(
                 "set_light_color",
-                actor_name=f"CaveAmbientLight_{i}",
+                actor_name=light_name,
                 color=[0.8, 0.6, 0.4],
             )
             steps.append({"step": f"set_ambient_color_{i}", "result": result})
 
             result = await self.call_tool_async(
                 "set_light_attenuation_radius",
-                actor_name=f"CaveAmbientLight_{i}",
+                actor_name=light_name,
                 radius=800.0,
             )
             steps.append({"step": f"set_ambient_radius_{i}", "result": result})
 
-        # Add volumetric fog for atmosphere
+        dramatic_lights = [
+            {
+                "name": "Cave_MainTorch_Warm",
+                "location": [-depth * 0.45, -160.0, 170.0],
+                "intensity": 2600.0,
+                "color": [1.0, 0.55, 0.22],
+                "temperature": 2200.0,
+                "radius": 650.0,
+            },
+            {
+                "name": "Cave_DistantGlow_Cool",
+                "location": [depth * 0.42, 120.0, 260.0],
+                "intensity": 1200.0,
+                "color": [0.36, 0.55, 1.0],
+                "temperature": 7800.0,
+                "radius": 950.0,
+            },
+            {
+                "name": "Cave_EmissiveCrystal_Glow",
+                "location": [depth * 0.18, 260.0, 240.0],
+                "intensity": 820.0,
+                "color": [0.2, 0.85, 1.0],
+                "temperature": 7600.0,
+                "radius": 520.0,
+            },
+        ]
+        for spec in dramatic_lights:
+            result = await self.call_tool_async(
+                "spawn_actor",
+                name=spec["name"],
+                type="PointLight",
+                location=spec["location"],
+            )
+            steps.append({"step": f"spawn_{spec['name']}", "result": result})
+            light_name = self._get_spawned_name(result, spec["name"])
+            for step_name, tool_name, kwargs in (
+                ("intensity", "set_light_intensity", {"actor_name": light_name, "intensity": spec["intensity"]}),
+                ("color", "set_light_color", {"actor_name": light_name, "color": spec["color"]}),
+                ("temperature", "set_light_temperature", {"actor_name": light_name, "temperature": spec["temperature"]}),
+                ("radius", "set_light_attenuation_radius", {"actor_name": light_name, "radius": spec["radius"]}),
+            ):
+                result = await self.call_tool_async(tool_name, **kwargs)
+                steps.append({"step": f"{spec['name']}_{step_name}", "result": result})
+
+        # Ensure fog actor exists, then configure it
+        fog_result = await self.call_tool_async(
+            "spawn_actor",
+            name="Cave_Fog",
+            type="ExponentialHeightFog",
+            location=[0, 0, 0],
+        )
+        steps.append({"step": "ensure_fog", "result": fog_result})
+        fog_name = self._get_spawned_name(fog_result, "Cave_Fog")
+
         result = await self.call_tool_async(
             "set_height_fog_properties",
-            actor_name="Cave_Fog",
+            actor_name=fog_name,
             fog_density=0.06,
             fog_height_falloff=0.15,
             fog_max_opacity=0.75,
@@ -174,18 +253,37 @@ class LightingDomainAgent(BaseAgent):
 
         return AgentResult(
             success=len(failures) < len(steps),
-            data={"lighting_setup": "auto_cave", "steps": steps},
+            data={
+                "lighting_setup": "auto_cave",
+                "steps": steps,
+                "dramatic_lighting_pattern": {
+                    "main_torch_temperature": 2200.0,
+                    "distant_glow_temperature": 7800.0,
+                    "volumetric_fog_density": 0.06,
+                    "emissive_crystal_glow": True,
+                    "flicker_ready": True,
+                },
+            },
             warnings=[f"{s['step']}: {s['result'].get('error')}" for s in failures],
         )
 
     async def _create_bright_lighting(self, context: AgentContext) -> AgentResult:
         """Create bright lighting setup."""
+        # Ensure DirectionalLight exists
+        spawn_res = await self.call_tool_async(
+            "spawn_actor",
+            name="DirectionalLight",
+            type="DirectionalLight",
+            location=[0, 0, 1000],
+        )
+        dir_light_name = self._get_spawned_name(spawn_res, "DirectionalLight")
+
         result = await self.call_tool_async(
             "set_light_intensity",
-            actor_name="DirectionalLight",
+            actor_name=dir_light_name,
             intensity=5.0,
         )
-        
+
         if result.get("success") is False:
             return AgentResult(
                 success=False,
@@ -199,16 +297,24 @@ class LightingDomainAgent(BaseAgent):
 
     async def _setup_fog(self, context: AgentContext) -> AgentResult:
         """Setup atmospheric fog."""
+        spawn_res = await self.call_tool_async(
+            "spawn_actor",
+            name="Cave_Fog",
+            type="ExponentialHeightFog",
+            location=[0, 0, 0],
+        )
+        fog_name = self._get_spawned_name(spawn_res, "Cave_Fog")
+
         result = await self.call_tool_async(
             "set_height_fog_properties",
-            actor_name="Cave_Fog",
+            actor_name=fog_name,
             fog_density=0.08,
             fog_height_falloff=0.18,
             fog_max_opacity=0.82,
             start_distance=80.0,
             light_inscattering_color=[0.12, 0.14, 0.18],
         )
-        
+
         if result.get("success") is False:
             return AgentResult(
                 success=False,
@@ -226,7 +332,7 @@ class LightingDomainAgent(BaseAgent):
             "set_sky_atmosphere_properties",
             actor_name="SkyAtmosphere",
         )
-        
+
         if result.get("success") is False:
             return AgentResult(
                 success=False,

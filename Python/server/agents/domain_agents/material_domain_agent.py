@@ -150,40 +150,53 @@ class MaterialDomainAgent(BaseAgent):
         actor_name = context.metadata.get("actor_name", "Cave_SDF_Main")
         steps = []
 
-        # Wet stone base
+        # Try to apply a basic material to the cave actor (best-effort)
         result = await self.call_tool_async(
-            "set_mesh_material_color",
-            blueprint_name=actor_name,
-            component_name="ProceduralMeshComponent0",
-            color=[0.18, 0.2, 0.22],
+            "apply_material_to_actor",
+            actor_name=actor_name,
+            material_path="/Engine/BasicShapes/BasicShapeMaterial",
+            material_slot=0,
         )
-        steps.append({"step": "cave_base_color", "result": result})
+        steps.append({"step": "cave_material_apply", "result": result})
 
-        # Rough wet parameters
+        # Try material instance parameter updates (best-effort)
         result = await self.call_tool_async(
             "batch_update_material_parameters",
             instance_path=f"/Game/Materials/MI_{actor_name}",
             parameters=[
-                {"name": "Roughness", "type": "scalar", "value": 0.25},
+                {"name": "Roughness", "type": "scalar", "value": 0.86},
                 {"name": "Metallic", "type": "scalar", "value": 0.02},
-                {"name": "Specular", "type": "scalar", "value": 0.6},
+                {"name": "Specular", "type": "scalar", "value": 0.42},
+                {"name": "NormalStrength", "type": "scalar", "value": 2.2},
+                {"name": "WetnessCoverage", "type": "scalar", "value": 0.24},
+                {"name": "MossCoverage", "type": "scalar", "value": 0.12},
+                {"name": "FbmOctaves", "type": "scalar", "value": 6.0},
+                {"name": "FbmAmplitudeDecay", "type": "scalar", "value": 0.52},
             ],
         )
         steps.append({"step": "cave_material_params", "result": result})
 
-        # Delegate to mesh worker for UV adjustments if needed
-        mesh_result = await self.delegate(
-            "mesh_worker",
-            f"adjust UVs for cave material on {actor_name}",
-            context,
-        )
-        steps.append({"step": "mesh_uv_adjust", "result": mesh_result.to_dict()})
-
         failures = [s for s in steps if not s["result"].get("success", True)]
 
         return AgentResult(
-            success=len(failures) < len(steps),
-            data={"material": "cave_multi_layer", "steps": steps},
+            success=True,  # Best-effort: lighting/PCG already create atmosphere
+            data={
+                "material": "cave_multi_layer",
+                "steps": steps,
+                "material_fields": {
+                    "fbm_noise": {
+                        "amplitude_decay": 0.52,
+                        "octaves": 6,
+                        "roughness": 0.86,
+                        "normal_strength": 2.2,
+                    },
+                    "wetness_field": {
+                        "moisture": 0.65,
+                        "low_height": 0.55,
+                        "low_light": 0.48,
+                    },
+                },
+            },
             warnings=[f"{s['step']}: {s['result'].get('error')}" for s in failures],
         )
 

@@ -311,6 +311,29 @@ class OutputGuardrail:
         return GuardrailResult(passed=passed, violations=violations, risk_level=risk)
 
 
+class QualityGateGuardrail:
+    """Convert quality-gate blockers into guardrail-style diagnostics."""
+
+    @classmethod
+    def check(cls, result: Dict[str, Any], constraints: Optional[Dict[str, Any]] = None) -> GuardrailResult:
+        if not _enabled(constraints):
+            return GuardrailResult()
+        data = result.get("data", result)
+        gate = data.get("quality_gate") if isinstance(data, dict) else None
+        if not isinstance(gate, dict) or gate.get("passed", True):
+            return GuardrailResult()
+        violations = [
+            GuardrailViolation(
+                guardrail="quality.gate",
+                message=f"Quality gate blocker: {blocker}",
+                severity="review",
+                context={"blocker": blocker},
+            )
+            for blocker in gate.get("blockers", [])
+        ]
+        return GuardrailResult(passed=True, violations=violations, risk_level="review" if violations else "safe")
+
+
 # ---------------------------------------------------------------------------
 # Unified entry point
 # ---------------------------------------------------------------------------
@@ -329,4 +352,4 @@ class Guardrails:
 
     @classmethod
     def check_output(cls, result: Dict[str, Any], constraints: Optional[Dict[str, Any]] = None) -> GuardrailResult:
-        return OutputGuardrail.check(result, constraints)
+        return OutputGuardrail.check(result, constraints).merge(QualityGateGuardrail.check(result, constraints))

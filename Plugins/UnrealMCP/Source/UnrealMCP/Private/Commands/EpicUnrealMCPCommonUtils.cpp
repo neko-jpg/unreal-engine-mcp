@@ -40,6 +40,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/ConfigCacheIni.h"
 
 // FActorIndex implementation
 
@@ -1261,6 +1262,30 @@ bool FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(UObject* Object, 
             *Object->GetPathName());
     }
     return bSaved;
+#else
+    if (OutHint)
+    {
+        *OutHint = TEXT("TryUpdateDefaultConfigFileSafe: non-editor target, ini write skipped");
+    }
+    return false;
+#endif
+}
+
+bool FEpicUnrealMCPCommonUtils::TryUpdateDefaultConfigFileSafe(const FString& ConfigFilename, FString* OutHint)
+{
+    if (ConfigFilename.IsEmpty())
+    {
+        if (OutHint) { *OutHint = TEXT("TryUpdateDefaultConfigFileSafe: config filename is empty"); }
+        return false;
+    }
+#if WITH_EDITOR
+    if (!GConfig)
+    {
+        if (OutHint) { *OutHint = TEXT("TryUpdateDefaultConfigFileSafe: GConfig is unavailable"); }
+        return false;
+    }
+    GConfig->Flush(false, ConfigFilename);
+    return true;
 #else
     if (OutHint)
     {

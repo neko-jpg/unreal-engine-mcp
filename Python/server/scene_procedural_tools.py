@@ -3,6 +3,11 @@ from typing import Any, Dict, List, Optional
 
 from server.core import mcp
 from server.actor_sink import ActorSpec, SceneDbActorSink
+from server.generation.geometry import Aabb3
+from server.generation.lsystem import evaluate_lsystem
+from server.generation.sdf import sdf_to_voxel_surface_mesh
+from server.generation.superformula import SuperformulaParams, superformula_mesh
+from server.generation.wfc import solve_wfc_grid
 from server.validation import validate_string, ValidationError, make_validation_error_response_from_exception, sanitize_mcp_id, normalize_scene_id
 from utils.responses import make_error_response
 
@@ -18,6 +23,23 @@ from server.scene_tools_common import (
     _unreal_envelope,
 )
 from server.scene_crud_tools import scene_upsert_actors
+
+
+def _is_failed(result: Dict[str, Any]) -> bool:
+    return isinstance(result, dict) and result.get("success") is False
+
+
+def _python_mesh_response(operation: str, payload: Any, sync_error: Dict[str, Any]) -> Dict[str, Any]:
+    data = payload.to_dict() if hasattr(payload, "to_dict") else payload
+    return {
+        "success": True,
+        "operation": operation,
+        "realized_in_unreal": False,
+        "python_fallback": True,
+        "data": data,
+        "warning": "scene-syncd/Unreal realization was unavailable; returned Python-generated payload for preview/migration.",
+        "sync_error": sync_error,
+    }
 
 @mcp.tool()
 def scene_upsert_procedural_mesh(
@@ -108,6 +130,7 @@ def scene_create_sdf_mesh(
     rotation: Optional[Dict[str, float]] = None,
     scale: Optional[Dict[str, float]] = None,
     focus_viewport: bool = True,
+    python_fallback: bool = True,
 ) -> Dict[str, Any]:
     """Generate a procedural mesh from a Signed Distance Function (SDF) using Marching Cubes.
 
@@ -154,8 +177,17 @@ def scene_create_sdf_mesh(
     if scale:
         payload["scale"] = [scale.get("x", 1.0), scale.get("y", 1.0), scale.get("z", 1.0)]
 
-    result = _stc.call_scene_syncd("/procedural/sdf-mesh", payload)
-    return _scene_syncd_error_response(result, "scene_create_sdf_mesh")
+    result = _scene_syncd_error_response(_stc.call_scene_syncd("/procedural/sdf-mesh", payload), "scene_create_sdf_mesh")
+    if _is_failed(result) and python_fallback:
+        try:
+            py_bounds = None
+            if bounds:
+                py_bounds = Aabb3(tuple(payload["bounds"]["min"]), tuple(payload["bounds"]["max"]))
+            mesh = sdf_to_voxel_surface_mesh(sdf_payload, bounds=py_bounds, resolution=resolution, mcp_id=mcp_id)
+            return _python_mesh_response("scene_create_sdf_mesh", mesh, result)
+        except Exception as exc:
+            result.setdefault("python_fallback_error", f"{type(exc).__name__}: {exc}")
+    return result
 
 
 
@@ -183,6 +215,7 @@ def scene_create_superformula_mesh(
     rotation: Optional[Dict[str, float]] = None,
     scale_override: Optional[Dict[str, float]] = None,
     focus_viewport: bool = True,
+    python_fallback: bool = True,
 ) -> Dict[str, Any]:
     """Generate a procedural mesh from the 3D Superformula (Gielis).
 
@@ -213,8 +246,28 @@ def scene_create_superformula_mesh(
     if scale_override:
         payload["scale_override"] = [scale_override.get("x", 1.0), scale_override.get("y", 1.0), scale_override.get("z", 1.0)]
 
-    result = _stc.call_scene_syncd("/procedural/superformula-mesh", payload)
-    return _scene_syncd_error_response(result, "scene_create_superformula_mesh")
+    result = _scene_syncd_error_response(_stc.call_scene_syncd("/procedural/superformula-mesh", payload), "scene_create_superformula_mesh")
+    if _is_failed(result) and python_fallback:
+        try:
+            params = SuperformulaParams(
+                m1=m1,
+                n1_1=n1_1,
+                n2_1=n2_1,
+                n3_1=n3_1,
+                a1=a1,
+                b1=b1,
+                m2=m2,
+                n1_2=n1_2,
+                n2_2=n2_2,
+                n3_2=n3_2,
+                a2=a2,
+                b2=b2,
+            )
+            mesh = superformula_mesh(params, resolution=resolution, scale=scale, mcp_id=mcp_id)
+            return _python_mesh_response("scene_create_superformula_mesh", mesh, result)
+        except Exception as exc:
+            result.setdefault("python_fallback_error", f"{type(exc).__name__}: {exc}")
+    return result
 
 
 
@@ -235,6 +288,7 @@ def scene_create_lsystem_spline(
     tangent_mode: str = "curve",
     spline_name: Optional[str] = None,
     focus_viewport: bool = True,
+    python_fallback: bool = True,
 ) -> Dict[str, Any]:
     """Generate a spline from an L-System grammar and create it in Unreal.
 
@@ -289,8 +343,24 @@ def scene_create_lsystem_spline(
     if up:
         lsystem_payload["up"] = [up.get("x", 0.0), up.get("y", 0.0), up.get("z", 1.0)]
 
-    result = _stc.call_scene_syncd("/procedural/lsystem-spline", lsystem_payload)
-    return _scene_syncd_error_response(result, "scene_create_lsystem_spline")
+    result = _scene_syncd_error_response(_stc.call_scene_syncd("/procedural/lsystem-spline", lsystem_payload), "scene_create_lsystem_spline")
+    if _is_failed(result) and python_fallback:
+        try:
+            rule_map = {str(rule[0])[0]: str(rule[1]) for rule in rules}
+            generated = evaluate_lsystem(
+                axiom=axiom,
+                rules=rule_map,
+                iterations=iterations,
+                step_length=step_length,
+                angle_degrees=angle_degrees,
+                origin=[(origin or {}).get("x", 0.0), (origin or {}).get("y", 0.0), (origin or {}).get("z", 0.0)],
+                heading=[(heading or {}).get("x", 1.0), (heading or {}).get("y", 0.0), (heading or {}).get("z", 0.0)],
+                up=[(up or {}).get("x", 0.0), (up or {}).get("y", 0.0), (up or {}).get("z", 1.0)],
+            )
+            return _python_mesh_response("scene_create_lsystem_spline", generated, result)
+        except Exception as exc:
+            result.setdefault("python_fallback_error", f"{type(exc).__name__}: {exc}")
+    return result
 
 
 
@@ -303,6 +373,7 @@ def scene_create_wfc_grid(
     constraints: List[Dict[str, str]],
     seed: Optional[int] = None,
     periodic: bool = False,
+    python_fallback: bool = True,
 ) -> Dict[str, Any]:
     """Generate a tile grid using Wave Function Collapse.
 
@@ -336,8 +407,22 @@ def scene_create_wfc_grid(
     if seed is not None:
         payload["seed"] = seed
 
-    result = _stc.call_scene_syncd("/procedural/wfc-grid", payload)
-    return _scene_syncd_error_response(result, "scene_create_wfc_grid")
+    result = _scene_syncd_error_response(_stc.call_scene_syncd("/procedural/wfc-grid", payload), "scene_create_wfc_grid")
+    if _is_failed(result) and python_fallback:
+        try:
+            generated = solve_wfc_grid(width, height, tiles, constraints, seed=seed, periodic=periodic)
+            return {
+                "success": True,
+                "operation": "scene_create_wfc_grid",
+                "python_fallback": True,
+                "realized_in_unreal": False,
+                **generated,
+                "warning": "scene-syncd was unavailable; returned Python WFC result.",
+                "sync_error": result,
+            }
+        except Exception as exc:
+            result.setdefault("python_fallback_error", f"{type(exc).__name__}: {exc}")
+    return result
 
 
 
@@ -909,5 +994,4 @@ def scene_clear_generated_group(
     except Exception as e:
         return make_error_response(f"Failed to call Unreal command 'clear_generated_group': {e}")
     return _unreal_envelope("clear_generated_group", result)
-
 

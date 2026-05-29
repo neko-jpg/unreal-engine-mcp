@@ -16,6 +16,7 @@
 #include "Sound/SoundCue.h"
 #include "Sound/SoundNode.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimNotifies/AnimNotify_PlaySound.h"
 #include "Components/AudioComponent.h"
 #include "EngineUtils.h"
 #include "UObject/Package.h"
@@ -165,8 +166,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleCreateMetasoundSo
 
     EMetaSoundBuilderResult Result;
     FMetaSoundBuilderNodeOutputHandle OutHandle;
+    FMetaSoundBuilderNodeInputHandle InHandle;
+    TArray<FMetaSoundBuilderNodeInputHandle> PassthroughInputs;
     UMetaSoundSourceBuilder* Builder = BuilderSubsystem->CreateSourceBuilder(
-        FName(*AssetName), OutHandle, FMetaSoundBuilderNodeInputHandle{}, {},
+        FName(*AssetName), OutHandle, InHandle, PassthroughInputs,
         Result, EMetaSoundOutputAudioFormat::Stereo, false);
 
     if (Result != EMetaSoundBuilderResult::Succeeded || !Builder)
@@ -221,10 +224,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleCreateMetasoundPa
     if (Result != EMetaSoundBuilderResult::Succeeded || !Builder)
         return MsErr(TEXT("create_metasound_patch: Failed to create patch builder."));
 
-    FMetaSoundBuilderOptions BuildOpts;
-    BuildOpts.Name = FName(*AssetName);
-    BuildOpts.bForceUniqueClassName = true;
-    UMetaSoundPatch* NewPatch = Builder->BuildNewMetaSound(BuildOpts);
+    TScriptInterface<IMetaSoundDocumentInterface> NewPatchInterface = Builder->BuildNewMetaSound(FName(*AssetName));
+    UMetaSoundPatch* NewPatch = Cast<UMetaSoundPatch>(NewPatchInterface.GetObject());
 
     if (!NewPatch)
         return MsErr(TEXT("create_metasound_patch: BuildNewMetaSound failed."));
@@ -257,8 +258,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleAddMetasoundGraph
     {
         Params->TryGetStringField(TEXT("asset_path"), AssetPath);
         Params->TryGetStringField(TEXT("node_type"), NodeType);
-        if (const TSharedPtr<FJsonValue>* VerVal = Params->TryGetField(TEXT("major_version")))
-            MajorVersion = static_cast<int32>(VerVal->Get()->AsNumber());
+        if (TSharedPtr<FJsonValue> VerVal = Params->TryGetField(TEXT("major_version")))
+            MajorVersion = static_cast<int32>(VerVal->AsNumber());
     }
 
     if (AssetPath.IsEmpty())
@@ -279,7 +280,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleAddMetasoundGraph
             return MsErr(FString::Printf(TEXT("add_metasound_graph_node: No active builder for '%s'. Call create_metasound_source/patch first."), *AssetPath));
         // Use patch builder
         FMetasoundFrontendClassName ClassName;
-        ClassName.SetPathFromMetasoundFrontendClassNameString(NodeType, nullptr);
+        if (!FMetasoundFrontendClassName::Parse(NodeType, ClassName))
+            return MsErr(FString::Printf(TEXT("add_metasound_graph_node: Invalid node class name '%s'."), *NodeType));
         EMetaSoundBuilderResult NodeResult;
         FMetaSoundNodeHandle NodeHandle = PatchBuilder->AddNodeByClassName(ClassName, NodeResult, MajorVersion);
         if (NodeResult != EMetaSoundBuilderResult::Succeeded)
@@ -294,7 +296,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleAddMetasoundGraph
     }
 
     FMetasoundFrontendClassName ClassName;
-    ClassName.SetPathFromMetasoundFrontendClassNameString(NodeType, nullptr);
+    if (!FMetasoundFrontendClassName::Parse(NodeType, ClassName))
+        return MsErr(FString::Printf(TEXT("add_metasound_graph_node: Invalid node class name '%s'."), *NodeType));
     EMetaSoundBuilderResult NodeResult;
     FMetaSoundNodeHandle NodeHandle = Builder->AddNodeByClassName(ClassName, NodeResult, MajorVersion);
     if (NodeResult != EMetaSoundBuilderResult::Succeeded)
@@ -326,8 +329,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleSetMetasoundParam
     {
         Params->TryGetStringField(TEXT("actor_name"), ActorName);
         Params->TryGetStringField(TEXT("parameter_name"), ParameterName);
-        if (const TSharedPtr<FJsonValue>* ValField = Params->TryGetField(TEXT("value")))
-            Value = static_cast<float>(ValField->Get()->AsNumber());
+        if (TSharedPtr<FJsonValue> ValField = Params->TryGetField(TEXT("value")))
+            Value = static_cast<float>(ValField->AsNumber());
     }
 
     if (ActorName.IsEmpty())
@@ -365,7 +368,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleSetMetasoundParam
 
     // Create parameter pack and apply
     UMetasoundParameterPack* ParamPack = NewObject<UMetasoundParameterPack>();
-    ParamPack->SetFloat(FName(*ParameterName), Value, EMetasoundParameterPatchType::Unset);
+    ParamPack->SetFloat(FName(*ParameterName), Value, false);
     GenHandle->ApplyParameterPack(ParamPack);
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -417,13 +420,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMetaSoundCommands::HandleBindFootstepAudio
     // Use AnimNotify_PlaySound on the first frame as a basic footstep binding
     UAnimNotify_PlaySound* Notify = NewObject<UAnimNotify_PlaySound>(AnimSeq);
     Notify->Sound = SoundCue;
-    Notify->TriggerTimeOffset = 0.0f;
 
     // Get the notifies array
     FAnimNotifyEvent NewEvent;
     NewEvent.Notify = Notify;
     NewEvent.TriggerTimeOffset = 0.0f;
-    NewEvent.LinkSequence = AnimSeq;
+    NewEvent.Link(AnimSeq, 0.0f);
     AnimSeq->Notifies.Add(NewEvent);
     AnimSeq->MarkPackageDirty();
 

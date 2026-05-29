@@ -96,6 +96,7 @@ public:
      * warning written to *OutHint so command handlers never throw.
      */
     static bool TryUpdateDefaultConfigFileSafe(UObject* Object, FString* OutHint = nullptr);
+    static bool TryUpdateDefaultConfigFileSafe(const FString& ConfigFilename, FString* OutHint = nullptr);
 
     /** Build a { success:true, data:{ executed:true, ...payload } } envelope. */
     static TSharedPtr<FJsonObject> MakeExecutedEnvelope(const TSharedPtr<FJsonObject>& Payload = nullptr);

@@ -6,11 +6,16 @@ surfaces into one cave-specific flow.
 
 from __future__ import annotations
 
+import json
 import random
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from server.cave_metrics import compute_cave_metrics
 from server.core import mcp
+from server.generation.cave_graph_generator import CaveGraphGenerator
+from server.generation.sdf_cave_field import apply_domain_warp, apply_fractal_roughness, build_cave_sdf_from_graph, extract_mesh_marching_cubes
 from server.scene_crud_tools import scene_upsert_actors
 from server.scene_procedural_tools import scene_create_sdf_mesh
 from server.validation import ValidationError, make_validation_error_response_from_exception, normalize_scene_id
@@ -44,6 +49,68 @@ def _safe_step(name: str, func, *args, **kwargs) -> Dict[str, Any]:
         return {"success": False, "step": name, "error": "non-dict result"}
     result.setdefault("step", name)
     return result
+
+
+def _verify_actor_exists(actor_name: str) -> bool:
+    """Query Unreal Editor to confirm an actor with the exact name exists in the current level."""
+    if not actor_name:
+        return False
+    try:
+        from server.core import get_unreal_connection
+        conn = get_unreal_connection()
+        if conn is None:
+            return False
+        response = conn.send_command("find_actors_by_name", {"pattern": actor_name})
+        if not isinstance(response, dict) or response.get("success") is False:
+            return False
+        actors = response.get("actors", [])
+        if not isinstance(actors, list):
+            return False
+        for actor in actors:
+            if isinstance(actor, dict) and actor.get("name") == actor_name:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _verified_step(name: str, func, *args, verify_name: str = None, **kwargs) -> Dict[str, Any]:
+    """Run a step and, on reported success, verify the resulting actor actually exists in Unreal."""
+    result = _safe_step(name, func, *args, **kwargs)
+    if result.get("success") is False:
+        return result
+
+    actor_name = verify_name
+    if actor_name is None:
+        actor_name = result.get("final_name") or result.get("name") or result.get("actor_name")
+
+    if actor_name:
+        exists = _verify_actor_exists(actor_name)
+        result["verified"] = exists
+        if not exists:
+            result["success"] = False
+            result["error"] = f"Step reported success but actor '{actor_name}' does not exist in Unreal"
+    else:
+        result["verified"] = None  # nothing to verify
+
+    return result
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _persist_quality_metrics(payload: Dict[str, Any]) -> Optional[str]:
+    try:
+        out_dir = _repo_root() / "artifacts" / "quality_history"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        scene_id = str(payload.get("scene_id", "scene")).replace("/", "_").replace("\\", "_")
+        path = out_dir / f"{timestamp}_{scene_id}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        return str(path)
+    except Exception:
+        return None
 
 
 def _cave_bounds_dict(bounds: Optional[Dict[str, Dict[str, float]]]) -> Dict[str, Dict[str, float]]:
@@ -177,6 +244,25 @@ def scene_create_cave_sdf(
         return make_validation_error_response_from_exception(exc)
 
     bounds_dict = _cave_bounds_dict(bounds)
+    graph = CaveGraphGenerator().generate(
+        {
+            "seed": seed,
+            "chamber_count": chamber_count,
+            "branch_count": branch_count,
+            "room_scale_variance": roughness * 0.45,
+        }
+    )
+    graph_sdf = build_cave_sdf_from_graph(
+        graph,
+        {
+            "smoothness": 70.0 + roughness * 90.0,
+            "tunnel_radius_scale": 1.0,
+            "chamber_radius_scale": 1.0,
+        },
+    )
+    graph_sdf = apply_domain_warp(graph_sdf, {"domain_warp": domain_warp, "sdf_warp_strength": domain_warp})
+    graph_sdf = apply_fractal_roughness(graph_sdf, {"roughness": roughness, "noise_octaves": 6})
+    mesh_plan = extract_mesh_marching_cubes(graph_sdf, resolution=resolution)
     sdf_tree = _build_cave_sdf_tree(
         seed=seed,
         chamber_count=chamber_count,
@@ -234,6 +320,9 @@ def scene_create_cave_sdf(
         "actor_name": actor_name,
         "mcp_id": mcp_id,
         "sdf_tree": sdf_tree,
+        "cave_graph": graph,
+        "sdf_field": graph_sdf,
+        "mesh_plan": mesh_plan,
         "mesh_result": mesh_result,
         "metadata_result": metadata_result,
     }
@@ -257,13 +346,30 @@ def scene_apply_cave_pcg(
     if preset in {"wet_creepy_limestone", "limestone"}:
         mesh_path = "/Engine/BasicShapes/Cone.Cone"
 
+    # Count objects before PCG to verify it actually spawns details
+    before_count = len(_list_scene_objects(scene_id))
+
     steps = [
         _safe_step("create_pcg_graph", pcg_tools.create_pcg_graph, graph_asset_path, graph_asset_name),
         _safe_step("configure_pcg_surface_sampler", pcg_tools.configure_pcg_surface_sampler, graph_path, cave_actor, density),
         _safe_step("configure_pcg_static_mesh_spawner", pcg_tools.configure_pcg_static_mesh_spawner, graph_path, mesh_path),
-        _safe_step("add_pcg_component", pcg_tools.add_pcg_component, cave_actor, graph_path),
-        _safe_step("execute_pcg_graph", pcg_tools.execute_pcg_graph, cave_actor),
+        _verified_step("add_pcg_component", pcg_tools.add_pcg_component, cave_actor, graph_path, verify_name=cave_actor),
+        _verified_step("execute_pcg_graph", pcg_tools.execute_pcg_graph, cave_actor, verify_name=cave_actor),
     ]
+
+    # Verify PCG actually increased object count
+    after_count = len(_list_scene_objects(scene_id))
+    pcg_verified = {
+        "step": "verify_pcg_spawned_objects",
+        "success": after_count > before_count,
+        "before_count": before_count,
+        "after_count": after_count,
+        "delta": after_count - before_count,
+    }
+    if not pcg_verified["success"]:
+        pcg_verified["error"] = f"PCG did not increase object count ({before_count} -> {after_count})"
+    steps.append(pcg_verified)
+
     failures = [step for step in steps if step.get("success") is False]
     if failures and not best_effort:
         return make_error_response("scene_apply_cave_pcg failed", steps=steps)
@@ -285,52 +391,99 @@ def scene_apply_cave_mood(
     best_effort: bool = True,
 ) -> Dict[str, Any]:
     """Apply cave mood passes using existing lighting, audio, VFX, and post-process tools."""
-    from server import audio_tools, lighting_tools, niagara_tools, rendering_tools
+    from server import actor_tools, audio_tools, lighting_tools, niagara_tools, rendering_tools
 
     if mood != "creepy":
         mood = "creepy"
 
-    steps = [
-        _safe_step(
-            "set_height_fog_properties",
-            lighting_tools.set_height_fog_properties,
-            "Cave_Fog",
-            fog_density=0.08,
-            fog_height_falloff=0.18,
-            fog_max_opacity=0.82,
-            start_distance=80.0,
-            light_inscattering_color=[0.12, 0.14, 0.18],
-        ),
-        _safe_step("set_volumetric_fog", lighting_tools.set_volumetric_fog, "Cave_Fog", True),
-        _safe_step(
-            "spawn_ambient_sound",
-            audio_tools.spawn_ambient_sound,
-            "/Game/MCP/Audio/drip",
-            actor_name="Cave_Ambient_Drip",
-            volume=0.35,
-        ),
-        _safe_step(
-            "add_niagara_component",
-            niagara_tools.add_niagara_component,
-            cave_actor,
-            system_path="/Game/MCP/VFX/dust",
-            component_name="Cave_Dust",
-        ),
-        _safe_step(
-            "spawn_post_process_volume",
-            rendering_tools.spawn_post_process_volume,
-            "MCP_PostProcess_Primary",
-            infinite_extent=True,
-        ),
-        _safe_step(
-            "set_post_process_volume",
-            rendering_tools.set_post_process_volume,
-            "MCP_PostProcess_Primary",
-            bloom_intensity=0.4,
-            vignette_intensity=0.35,
-            color_temperature=4200.0,
-        ),
-    ]
+    steps: List[Dict[str, Any]] = []
+
+    # Spawn dramatic cave lighting (PointLight actors)
+    steps.append(_verified_step(
+        "spawn_main_torch",
+        actor_tools.spawn_actor,
+        "PointLight",
+        "Cave_Main_Torch",
+        location=[0.0, 0.0, 300.0],
+        tags=["cave_light", "torch", "managed_by_mcp"],
+    ))
+    steps.append(_verified_step(
+        "spawn_entrance_glow",
+        actor_tools.spawn_actor,
+        "PointLight",
+        "Cave_Entrance_Glow",
+        location=[0.0, -1200.0, 200.0],
+        tags=["cave_light", "entrance", "managed_by_mcp"],
+    ))
+    steps.append(_verified_step(
+        "spawn_distant_crystal",
+        actor_tools.spawn_actor,
+        "PointLight",
+        "Cave_Distant_Crystal",
+        location=[0.0, 1200.0, 250.0],
+        tags=["cave_light", "crystal", "distant", "managed_by_mcp"],
+    ))
+
+    # Ensure fog actor exists, then configure it (UE appends UAID suffix)
+    fog_spawn = _verified_step(
+        "spawn_actor_fog",
+        actor_tools.spawn_actor,
+        "ExponentialHeightFog",
+        "Cave_Fog",
+        location=[0.0, 0.0, 0.0],
+    )
+    steps.append(fog_spawn)
+    fog_name = fog_spawn.get("final_name") or fog_spawn.get("name") or fog_spawn.get("actor_name") or "Cave_Fog" if fog_spawn.get("success") else "Cave_Fog"
+
+    steps.append(_verified_step(
+        "set_height_fog_properties",
+        lighting_tools.set_height_fog_properties,
+        fog_name,
+        fog_density=0.08,
+        fog_height_falloff=0.18,
+        fog_max_opacity=0.82,
+        start_distance=80.0,
+        light_inscattering_color=[0.12, 0.14, 0.18],
+        verify_name=fog_name,
+    ))
+    steps.append(_verified_step("set_volumetric_fog", lighting_tools.set_volumetric_fog, fog_name, True, verify_name=fog_name))
+
+    steps.append(_verified_step(
+        "spawn_ambient_sound",
+        audio_tools.spawn_ambient_sound,
+        "/Game/MCP/Audio/drip",
+        actor_name="Cave_Ambient_Drip",
+        volume=0.35,
+    ))
+    steps.append(_verified_step(
+        "add_niagara_component",
+        niagara_tools.add_niagara_component,
+        cave_actor,
+        system_path="/Game/MCP/VFX/dust",
+        component_name="Cave_Dust",
+        verify_name=cave_actor,
+    ))
+
+    # Spawn post process volume and configure using actual UE name
+    pp_spawn = _verified_step(
+        "spawn_post_process_volume",
+        rendering_tools.spawn_post_process_volume,
+        "MCP_PostProcess_Primary",
+        infinite_extent=True,
+    )
+    steps.append(pp_spawn)
+    pp_name = pp_spawn.get("final_name") or pp_spawn.get("name") or pp_spawn.get("actor_name") or "MCP_PostProcess_Primary" if pp_spawn.get("success") else "MCP_PostProcess_Primary"
+
+    steps.append(_verified_step(
+        "set_post_process_volume",
+        rendering_tools.set_post_process_volume,
+        pp_name,
+        bloom_intensity=0.4,
+        vignette_intensity=0.35,
+        color_temperature=4200.0,
+        verify_name=pp_name,
+    ))
+
     failures = [step for step in steps if step.get("success") is False]
     if failures and not best_effort:
         return make_error_response("scene_apply_cave_mood failed", steps=steps)
@@ -443,9 +596,12 @@ def scene_cave_generate_or_refine(
     target: str = "cave",
     max_refine_iterations: int = 3,
     cave_score_threshold: float = 0.75,
+    force_geometry: bool = False,
+    resolution: int = 48,
+    quality_threshold: float = 70.0,
     include_preview: bool = False,
 ) -> Dict[str, Any]:
-    """Run the full cave flow: audit, generate/refine, PCG, mood, validation, metrics."""
+    """Run the full cave flow: audit, generate/refine, PCG, mood, validation, SQOP metrics."""
     audit = scene_cave_audit(scene_id=scene_id, target=target)
     if audit.get("success") is False:
         return audit
@@ -454,7 +610,7 @@ def scene_cave_generate_or_refine(
     metrics = audit["cave_metrics"]
     cave_actor = "Cave_SDF_Main"
 
-    if metrics["cave_score"] < cave_score_threshold or metrics["is_box_cave"]:
+    if force_geometry or metrics["cave_score"] < cave_score_threshold or metrics["is_box_cave"]:
         refine = scene_refine_cave_geometry(
             scene_id=scene_id,
             target=target,
@@ -470,7 +626,7 @@ def scene_cave_generate_or_refine(
             branch_count=int(recommendations.get("branch_count", 3)),
             roughness=float(recommendations.get("roughness", 0.72)),
             domain_warp=float(recommendations.get("domain_warp", 0.55)),
-            resolution=int(recommendations.get("resolution", 36)),
+            resolution=max(int(recommendations.get("resolution", 36)), int(resolution)),
         )
         steps.append({"step": "scene_create_cave_sdf", **generated})
         if generated.get("success") is False:
@@ -492,6 +648,40 @@ def scene_cave_generate_or_refine(
 
         preview = scene_preview(scene_id=scene_id, target=target, batch="surround")
         steps.append({"step": "scene_preview", **preview})
+
+    final_audit = scene_cave_audit(scene_id=scene_id, target=target)
+    steps.append({"step": "scene_cave_audit_final", **final_audit})
+    # Run iterative refinement loop
+    iteration_count = 0
+    for iteration_count in range(max_refine_iterations):
+        # Re-audit after each refinement
+        if iteration_count > 0:
+            audit = scene_cave_audit(scene_id=scene_id, target=target)
+            metrics = audit["cave_metrics"]
+            if metrics["cave_score"] >= cave_score_threshold and not metrics["is_box_cave"]:
+                break
+            refine = scene_refine_cave_geometry(
+                scene_id=scene_id,
+                target=target,
+                cave_score_threshold=cave_score_threshold,
+                apply=False,
+            )
+            recommendations = refine.get("recommendations", {})
+            generated = scene_create_cave_sdf(
+                scene_id=scene_id,
+                seed=252539 + iteration_count,
+                chamber_count=int(recommendations.get("chamber_count", 5)),
+                branch_count=int(recommendations.get("branch_count", 3)),
+                roughness=float(recommendations.get("roughness", 0.72)),
+                domain_warp=float(recommendations.get("domain_warp", 0.55)),
+                resolution=max(int(recommendations.get("resolution", 36)), int(resolution)),
+            )
+            steps.append({"step": f"scene_create_cave_sdf_refine_{iteration_count}", **generated})
+            if generated.get("success") is False:
+                break
+            cave_actor = generated.get("actor_name", cave_actor)
+            pcg = scene_apply_cave_pcg(scene_id=scene_id, cave_actor=cave_actor, best_effort=True)
+            steps.append({"step": f"scene_apply_cave_pcg_refine_{iteration_count}", **pcg})
 
     final_audit = scene_cave_audit(scene_id=scene_id, target=target)
     steps.append({"step": "scene_cave_audit_final", **final_audit})

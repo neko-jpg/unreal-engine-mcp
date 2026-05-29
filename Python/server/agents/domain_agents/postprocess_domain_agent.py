@@ -48,10 +48,16 @@ class PostProcessDomainAgent(BaseAgent):
         else:
             return await self._create_default_postprocess(context)
 
+    def _get_spawned_name(self, result: Dict[str, Any], fallback: str) -> str:
+        """Extract the actual UE actor name from a spawn response."""
+        if not isinstance(result, dict):
+            return fallback
+        return result.get("actor_name") or result.get("name") or result.get("final_name") or fallback
+
     async def _create_creepy_postprocess(self, context: AgentContext) -> AgentResult:
         """Create creepy post-processing setup."""
         steps = []
-        
+
         # Spawn post process volume
         result = await self.call_tool_async(
             "spawn_post_process_volume",
@@ -59,21 +65,20 @@ class PostProcessDomainAgent(BaseAgent):
             infinite_extent=True,
         )
         steps.append({"step": "spawn", "result": result})
-        
-        # Configure post process
+        pp_name = self._get_spawned_name(result, "MCP_PostProcess_Primary")
+
+        # Configure post process (saturation/contrast not supported by this tool)
         result = await self.call_tool_async(
             "set_post_process_volume",
-            volume_name="MCP_PostProcess_Primary",
+            volume_name=pp_name,
             bloom_intensity=0.4,
             vignette_intensity=0.35,
             color_temperature=4200.0,
-            saturation=0.7,
-            contrast=1.15,
         )
         steps.append({"step": "configure", "result": result})
-        
+
         failures = [s for s in steps if s["result"].get("success") is False]
-        
+
         return AgentResult(
             success=len(failures) < len(steps),
             data={"postprocess_setup": "creepy", "steps": steps},
@@ -88,8 +93,6 @@ class PostProcessDomainAgent(BaseAgent):
             bloom_intensity=1.2,
             vignette_intensity=0.1,
             color_temperature=6500.0,
-            saturation=1.1,
-            contrast=1.05,
         )
         
         if result.get("success") is False:

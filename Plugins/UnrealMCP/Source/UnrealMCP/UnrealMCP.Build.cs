@@ -278,7 +278,7 @@ public class UnrealMCP : ModuleRules
         {
             AddOptionalModuleGate(Target, "IOSDeviceProfileSelector", false);
         }
-        string[] TestingModules = new string[] { "AutomationTest", "DataValidation", "EditorValidator" };
+        string[] TestingModules = new string[] { "AutomationTest", "DataValidation", "EditorValidator", "FunctionalTesting" };
         foreach (string ModuleName in TestingModules) AddOptionalModuleGate(Target, ModuleName, true);
         AddOptionalModuleGate(Target, "AutomationController", true);
 

@@ -44,6 +44,8 @@ from server.agents.domain_agents import (
 )
 from server.agents.master_orchestrator import MasterOrchestrator, get_master_orchestrator
 
+
+
 logger = logging.getLogger("agents")
 
 
@@ -105,9 +107,13 @@ def register_all_tools(registry: ToolRegistry) -> None:
         ("lighting_tools", "set_light_intensity", ["lighting"]),
         ("lighting_tools", "set_light_color", ["lighting"]),
         ("lighting_tools", "set_light_temperature", ["lighting"]),
+        ("lighting_tools", "set_light_attenuation_radius", ["lighting"]),
         ("lighting_tools", "set_height_fog_properties", ["atmosphere"]),
         ("lighting_tools", "set_volumetric_fog", ["atmosphere"]),
         ("audio_tools", "spawn_ambient_sound", ["audio"]),
+        ("material_tools", "apply_material_to_actor", ["material"]),
+        ("material_tools", "set_mesh_material_color", ["material"]),
+        ("material_tools", "batch_update_material_parameters", ["material"]),
         ("niagara_tools", "add_niagara_component", ["vfx"]),
         ("niagara_tools", "set_niagara_user_parameter", ["vfx"]),
         ("niagara_tools", "set_niagara_color", ["vfx"]),
@@ -202,6 +208,7 @@ def create_all_domain_agents(tool_registry: Dict[str, Any]) -> List[Any]:
         LevelManagementDomainAgent(tool_registry),
         ProjectEditorDomainAgent(tool_registry),
         PostProcessDomainAgent(tool_registry),
+        VisionCritiqueDomainAgent(tool_registry),
     ]
     
     return agents

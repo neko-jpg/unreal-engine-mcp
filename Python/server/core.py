@@ -152,12 +152,18 @@ class UnrealConnection:
     def _create_socket(self) -> socket.socket:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.CONNECT_TIMEOUT)
+        # Allow rapid rebind while in TIME_WAIT (common after Unreal restart)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        except OSError:
+            pass
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 131072)
+        # Disable SO_LINGER to avoid RST on close which triggers WinError 10053
         try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('hh', 1, 0))
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('hh', 0, 0))
         except OSError:
             pass
         return sock
@@ -283,9 +289,17 @@ class UnrealConnection:
                 logger.warning(f"Command failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
                 self.disconnect()
                 if attempt < max_retries:
-                    delay = min(self.BASE_RETRY_DELAY * (2 ** attempt), self.MAX_RETRY_DELAY)
+                    delay = min(self.BASE_RETRY_DELAY * (3 ** attempt), self.MAX_RETRY_DELAY)
                     logger.info(f"Retrying command in {delay:.1f}s...")
                     time.sleep(delay)
+                    # Wait for UE to be ready to accept connections
+                    for _check in range(10):
+                        try:
+                            probe = socket.create_connection((UNREAL_HOST, UNREAL_PORT), timeout=3)
+                            probe.close()
+                            break
+                        except OSError:
+                            time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Unexpected error sending command: {e}")
                 self.disconnect()

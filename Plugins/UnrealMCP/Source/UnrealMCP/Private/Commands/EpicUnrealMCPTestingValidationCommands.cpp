@@ -217,6 +217,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleFetchAuto
     }
 
     FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+    (void)Framework;
 
     TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
     Data->SetStringField(TEXT("command"), TEXT("fetch_automation_test_results"));
@@ -225,6 +226,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPTestingValidationCommands::HandleFetchAuto
     Data->SetBoolField(TEXT("tests_running"), false);
     Data->SetBoolField(TEXT("executed"), true);
     return TvOk(Data);
+#else
+    return TvErr(TEXT("fetch_automation_test_results: unsupported engine version."));
+#endif
 #else
     return TvErr(TEXT("fetch_automation_test_results: requires WITH_EDITOR."));
 #endif

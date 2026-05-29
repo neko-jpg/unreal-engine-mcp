@@ -54,6 +54,8 @@ class PCGWorkerAgent(BaseAgent):
         graph_path = context.metadata.get("graph_path", "/Game/PCG/PCGG_CaveWet")
         mesh_path = context.metadata.get("mesh_path", "/Engine/BasicShapes/Cone.Cone")
         density = context.metadata.get("density", 0.45)
+        refinement_plan = context.metadata.get("refinement_plan", [])
+        distribution_fields = self._build_cave_distribution_fields(density, refinement_plan)
 
         steps = []
         
@@ -101,9 +103,51 @@ class PCGWorkerAgent(BaseAgent):
         
         return AgentResult(
             success=len(failures) == 0,
-            data={"steps": steps},
+            data={
+                "steps": steps,
+                "distribution_fields": distribution_fields,
+                "pcg_strategy": "non_uniform_poisson_process",
+            },
             warnings=[f"{s['step']}: {s['result'].get('error')}" for s in failures],
         )
+
+    def _build_cave_distribution_fields(self, base_density: float, refinement_plan: Any) -> Dict[str, Any]:
+        """Describe cave detail probability fields for downstream PCG tooling."""
+        stalactite_boost = 0.0
+        if isinstance(refinement_plan, list):
+            for item in refinement_plan:
+                if not isinstance(item, dict):
+                    continue
+                for action in item.get("actions", []):
+                    if isinstance(action, dict) and action.get("operation") == "spawn_ceiling_stalactites":
+                        stalactite_boost += 0.45
+        return {
+            "lambda_ceiling": {
+                "base_density": round(float(base_density) + stalactite_boost, 3),
+                "terms": {
+                    "ceiling_score": 1.0,
+                    "moisture": 0.35,
+                    "positive_curvature": 0.45,
+                    "player_path_penalty": -0.55,
+                },
+            },
+            "lambda_floor": {
+                "base_density": round(float(base_density) * 0.8, 3),
+                "terms": {
+                    "floor_score": 1.0,
+                    "wall_proximity": 0.40,
+                    "slope_instability": 0.30,
+                },
+            },
+            "lambda_moss": {
+                "base_density": round(float(base_density) * 0.35, 3),
+                "terms": {
+                    "moisture": 0.70,
+                    "low_light": 0.50,
+                    "lower_wall_region": 0.35,
+                },
+            },
+        }
 
     async def _execute_graph(self, context: AgentContext) -> AgentResult:
         """Execute an existing PCG graph."""

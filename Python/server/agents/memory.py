@@ -146,6 +146,36 @@ class AgentMemory:
         return list(self.scene_graph.keys())
 
     # ------------------------------------------------------------------
+    # Quality history
+    # ------------------------------------------------------------------
+
+    def add_quality_snapshot(
+        self,
+        quality_vector: Dict[str, Any],
+        parameters: Optional[Dict[str, Any]] = None,
+        gate_result: Optional[Dict[str, Any]] = None,
+    ) -> MemoryEntry:
+        """Record a quality vector and generation parameters."""
+        return self.add_observation(
+            agent="quality_system",
+            observation=f"Quality snapshot overall={quality_vector.get('overall')}",
+            metadata={
+                "quality_vector": dict(quality_vector),
+                "parameters": dict(parameters or {}),
+                "gate_result": dict(gate_result or {}),
+            },
+        )
+
+    def get_quality_history(self, n: int = 10) -> List[Dict[str, Any]]:
+        """Return recent quality-vector entries."""
+        entries = [
+            entry.metadata
+            for entry in self.short_term
+            if isinstance(entry.metadata, dict) and "quality_vector" in entry.metadata
+        ]
+        return entries[-n:]
+
+    # ------------------------------------------------------------------
     # Long-term (simplified)
     # ------------------------------------------------------------------
 

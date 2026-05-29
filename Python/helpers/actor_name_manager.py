@@ -126,11 +126,13 @@ def safe_spawn_actor(unreal_connection, params: Dict[str, Any], auto_unique_name
     
     try:
         response = unreal_connection.send_command("spawn_actor", params)
-        
+
         if response and is_success_response(response):
-            _global_actor_name_manager.mark_actor_created(params["name"])
+            # UE may append a unique ID suffix (e.g. _UAID_...); use the actual name
+            actual_name = response.get("name") or response.get("actor_name") or params["name"]
+            _global_actor_name_manager.mark_actor_created(actual_name)
             if isinstance(response, dict):
-                response["final_name"] = params["name"]
+                response["final_name"] = actual_name
                 response["original_name"] = original_name
         elif response and not is_success_response(response) and "already exists" in response.get("error", ""):
             if auto_unique_name:

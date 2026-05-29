@@ -15,36 +15,45 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_ROOT = REPO_ROOT / "Python"
 RUST_ROOT = REPO_ROOT / "rust" / "scene-syncd"
+ROOT_PLUGIN_PATH = REPO_ROOT / "Plugins" / "UnrealMCP"
+MATERIALIZED_PROJECT_ROOT = REPO_ROOT / "artifacts" / "dev_stack_host" / "materialized"
 # Prefer the launcher-installed UE 5.7 project (EngineAssociation="5.7"). The
 # source-built variant at FlopperamUnrealMCP/ requires a from-source engine.
 # Override via UNREAL_MCP_UPROJECT env var to use a different .uproject.
 _UPROJECT_57 = REPO_ROOT / "FlopperamUnrealMCP 5.7" / "FlopperamUnrealMCP.uproject"
 _UPROJECT_SRC = REPO_ROOT / "FlopperamUnrealMCP" / "FlopperamUnrealMCP.uproject"
+_UPROJECT_HOST = REPO_ROOT / "artifacts" / "dev_stack_host" / "HostProject" / "HostProject.uproject"
 _UPROJECT_OVERRIDE = os.getenv("UNREAL_MCP_UPROJECT")
 if _UPROJECT_OVERRIDE:
     UPROJECT_PATH = Path(_UPROJECT_OVERRIDE)
 elif _UPROJECT_57.exists():
     UPROJECT_PATH = _UPROJECT_57
-else:
+elif _UPROJECT_SRC.exists():
     UPROJECT_PATH = _UPROJECT_SRC
+else:
+    UPROJECT_PATH = _UPROJECT_HOST
 
 DEFAULT_SURREAL_BIND = "127.0.0.1:8000"
 DEFAULT_SCENE_SYNCD_URL = "http://127.0.0.1:8787"
 DEFAULT_UNREAL_HOST = "127.0.0.1"
 DEFAULT_UNREAL_PORT = 55771
+UNREAL_MCP_PLUGIN_NAME = "UnrealMCP"
 
 NO_COLOR = os.getenv("NO_COLOR") is not None
 
@@ -64,6 +73,131 @@ class Style:
 def log(service: str, message: str, color: str = Style.RESET) -> None:
     prefix = f"[{color}{Style.BOLD}{service}{Style.RESET}]"
     print(f"{prefix} {message}", flush=True)
+
+
+def _is_path_within(child: Path, parent: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_requested_uproject(args: argparse.Namespace) -> Path:
+    """Resolve the user-selected .uproject before optional MCP materialization."""
+    if getattr(args, "uproject", None):
+        return Path(args.uproject)
+    return UPROJECT_PATH
+
+
+def _read_project_descriptor(uproject_path: Path) -> Dict[str, object]:
+    try:
+        return json.loads(uproject_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Could not parse .uproject JSON at {uproject_path}: {exc}") from exc
+
+
+def _project_enables_plugin(descriptor: Dict[str, object], plugin_name: str) -> bool:
+    plugins = descriptor.get("Plugins", [])
+    if not isinstance(plugins, list):
+        return False
+    for entry in plugins:
+        if isinstance(entry, dict) and entry.get("Name") == plugin_name:
+            return bool(entry.get("Enabled", False))
+    return False
+
+
+def _ensure_project_plugin_enabled(uproject_path: Path, plugin_name: str) -> None:
+    descriptor = _read_project_descriptor(uproject_path)
+    plugins = descriptor.setdefault("Plugins", [])
+    if not isinstance(plugins, list):
+        plugins = []
+        descriptor["Plugins"] = plugins
+
+    for entry in plugins:
+        if isinstance(entry, dict) and entry.get("Name") == plugin_name:
+            entry["Enabled"] = True
+            break
+    else:
+        plugins.append({"Name": plugin_name, "Enabled": True})
+
+    uproject_path.write_text(json.dumps(descriptor, indent=2) + "\n", encoding="utf-8")
+
+
+def _copy_project_for_materialization(source_project: Path, target_dir: Path) -> Path:
+    source_dir = source_project.parent
+    target_project = target_dir / source_project.name
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    ignored = {
+        ".vs",
+        "DerivedDataCache",
+        "Intermediate",
+        "Saved",
+    }
+    for item in source_dir.iterdir():
+        if item.name in ignored:
+            continue
+        target = target_dir / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
+    return target_project
+
+
+def _link_or_copy_plugin(plugin_source: Path, project_root: Path) -> str:
+    plugin_target = project_root / "Plugins" / UNREAL_MCP_PLUGIN_NAME
+    plugin_target.parent.mkdir(parents=True, exist_ok=True)
+    if plugin_target.exists():
+        return "existing"
+
+    try:
+        os.symlink(plugin_source, plugin_target, target_is_directory=True)
+        return "symlink"
+    except OSError:
+        pass
+
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(plugin_target), str(plugin_source)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and plugin_target.exists():
+            return "junction"
+
+    shutil.copytree(
+        plugin_source,
+        plugin_target,
+        ignore=shutil.ignore_patterns("Intermediate", "Saved", ".vs"),
+    )
+    return "copy"
+
+
+def materialize_mcp_project(uproject_path: Path) -> tuple[Path, Optional[str]]:
+    """Create a workspace project that can discover the repo UnrealMCP plugin."""
+    if not ROOT_PLUGIN_PATH.exists():
+        raise RuntimeError(f"UnrealMCP plugin not found at {ROOT_PLUGIN_PATH}")
+
+    descriptor = _read_project_descriptor(uproject_path)
+    project_plugin = uproject_path.parent / "Plugins" / UNREAL_MCP_PLUGIN_NAME / "UnrealMCP.uplugin"
+    if _project_enables_plugin(descriptor, UNREAL_MCP_PLUGIN_NAME) and project_plugin.exists():
+        return uproject_path, None
+
+    digest = hashlib.sha1(str(uproject_path.resolve()).encode("utf-8")).hexdigest()[:12]
+    target_dir = MATERIALIZED_PROJECT_ROOT / f"{uproject_path.stem}_{digest}"
+    if target_dir.exists() and not _is_path_within(target_dir, MATERIALIZED_PROJECT_ROOT):
+        raise RuntimeError(f"Refusing to reuse unexpected materialized project path: {target_dir}")
+
+    target_project = _copy_project_for_materialization(uproject_path, target_dir)
+    if not target_project.exists():
+        raise RuntimeError(f"Materialized project was not created: {target_project}")
+
+    link_mode = _link_or_copy_plugin(ROOT_PLUGIN_PATH, target_dir)
+    _ensure_project_plugin_enabled(target_project, UNREAL_MCP_PLUGIN_NAME)
+    return target_project, link_mode
 
 
 def resolve_unreal_engine_root() -> Optional[Path]:
@@ -267,8 +401,11 @@ class DevStackLauncher:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.processes: List[subprocess.Popen] = []
+        self.service_processes: Dict[str, subprocess.Popen] = {}
         self.threads: List[threading.Thread] = []
         self._shutdown = False
+        self.active_uproject_path: Optional[Path] = None
+        self.active_uproject_materialized = False
 
     def start_surrealdb(self) -> bool:
         exe = resolve_surrealdb_exe()
@@ -301,6 +438,7 @@ class DevStackLauncher:
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         self.processes.append(proc)
+        self.service_processes["surreal"] = proc
         t = threading.Thread(target=stream_output, args=(proc, "SurrealDB", Style.CYAN), daemon=True)
         t.start()
         self.threads.append(t)
@@ -354,6 +492,7 @@ class DevStackLauncher:
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         self.processes.append(proc)
+        self.service_processes["scene_syncd"] = proc
         t = threading.Thread(target=stream_output, args=(proc, "scene-syncd", Style.BLUE), daemon=True)
         t.start()
         self.threads.append(t)
@@ -380,13 +519,38 @@ class DevStackLauncher:
             log("Unreal", f"{Style.RED}Editor not found at {editor_exe}{Style.RESET}")
             return False
 
-        if not UPROJECT_PATH.exists():
-            log("Unreal", f"{Style.RED}.uproject not found at {UPROJECT_PATH}{Style.RESET}")
+        requested_uproject = resolve_requested_uproject(self.args)
+        if not requested_uproject.exists():
+            log("Unreal", f"{Style.RED}.uproject not found at {requested_uproject}{Style.RESET}")
             return False
+
+        try:
+            if getattr(self.args, "no_materialize_mcp_project", False):
+                active_uproject = requested_uproject
+            else:
+                active_uproject, link_mode = materialize_mcp_project(requested_uproject)
+                if active_uproject != requested_uproject:
+                    self.active_uproject_materialized = True
+                    log(
+                        "Unreal",
+                        (
+                            f"Materialized MCP project from {requested_uproject} "
+                            f"using {ROOT_PLUGIN_PATH} ({link_mode})"
+                        ),
+                        Style.MAGENTA,
+                    )
+            self.active_uproject_path = active_uproject
+        except Exception as exc:
+            log("Unreal", f"{Style.RED}Failed to prepare MCP project: {exc}{Style.RESET}")
+            return False
+
+        if self.active_uproject_materialized and not getattr(self.args, "skip_unreal_build", False):
+            if not self.build_unreal_project(ue_root, active_uproject):
+                return False
 
         cmd = [
             str(editor_exe),
-            str(UPROJECT_PATH),
+            str(active_uproject),
             "-Windowed",
             "-ResX=1280",
             "-ResY=720",
@@ -398,7 +562,7 @@ class DevStackLauncher:
         if getattr(self.args, "render_offscreen", False):
             cmd.append("-RenderOffScreen")
 
-        log("Unreal", f"Starting: {Style.DIM}{editor_exe.name} {UPROJECT_PATH.name}{Style.RESET}", Style.MAGENTA)
+        log("Unreal", f"Starting: {Style.DIM}{editor_exe.name} {active_uproject.name}{Style.RESET}", Style.MAGENTA)
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -408,6 +572,7 @@ class DevStackLauncher:
             creationflags=0,
         )
         self.processes.append(proc)
+        self.service_processes["unreal"] = proc
         t = threading.Thread(target=stream_output, args=(proc, "Unreal", Style.MAGENTA), daemon=True)
         t.start()
         self.threads.append(t)
@@ -423,6 +588,45 @@ class DevStackLauncher:
         else:
             log("Unreal", f"{Style.YELLOW}TCP probe timed out; editor may still be loading{Style.RESET}", Style.MAGENTA)
             return True
+
+    def build_unreal_project(self, ue_root: Path, uproject_path: Path) -> bool:
+        """Run an incremental UBT build so source project plugins are loadable."""
+        if sys.platform != "win32":
+            return True
+
+        build_bat = ue_root / "Engine" / "Build" / "BatchFiles" / "Build.bat"
+        if not build_bat.exists():
+            log("Unreal", f"{Style.RED}Build.bat not found at {build_bat}{Style.RESET}")
+            return False
+
+        target = f"{uproject_path.stem}Editor"
+        cmd = [
+            str(build_bat),
+            target,
+            "Win64",
+            "Development",
+            f"-Project={uproject_path}",
+            "-WaitMutex",
+            "-NoHotReloadFromIDE",
+        ]
+        log("Unreal", f"Building source plugin target: {Style.DIM}{target}{Style.RESET}", Style.MAGENTA)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(ue_root / "Engine" / "Build" / "BatchFiles"),
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        self.processes.append(proc)
+        t = threading.Thread(target=stream_output, args=(proc, "UBT", Style.MAGENTA), daemon=True)
+        t.start()
+        self.threads.append(t)
+        return_code = proc.wait()
+        if return_code != 0:
+            log("Unreal", f"{Style.RED}UBT build failed with exit code {return_code}{Style.RESET}", Style.MAGENTA)
+            return False
+        log("Unreal", f"{Style.GREEN}UBT build succeeded{Style.RESET}", Style.MAGENTA)
+        return True
 
     def start_mcp_server(self) -> bool:
         entry = PYTHON_ROOT / "unreal_mcp_server_advanced.py"
@@ -464,6 +668,7 @@ class DevStackLauncher:
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         self.processes.append(proc)
+        self.service_processes["mcp_server"] = proc
         t = threading.Thread(target=stream_output, args=(proc, "MCP", Style.GREEN), daemon=True)
         t.start()
         self.threads.append(t)
@@ -482,7 +687,11 @@ class DevStackLauncher:
             return
         self._shutdown = True
         print(f"\n{Style.YELLOW}{Style.BOLD}Shutting down development stack...{Style.RESET}")
+        self.stop_processes()
+        print(f"{Style.GREEN}{Style.BOLD}All services stopped.{Style.RESET}")
+        sys.exit(0)
 
+    def stop_processes(self) -> None:
         for proc in self.processes:
             if proc.poll() is None:
                 try:
@@ -499,8 +708,36 @@ class DevStackLauncher:
                 except Exception:
                     pass
 
-        print(f"{Style.GREEN}{Style.BOLD}All services stopped.{Style.RESET}")
-        sys.exit(0)
+    def verify_stack(self) -> Dict[str, object]:
+        """Return a finite full-stack verification summary."""
+        summary: Dict[str, object] = {
+            "surreal_requested": bool(self.args.surreal),
+            "scene_syncd_requested": bool(self.args.scene_syncd),
+            "unreal_requested": bool(self.args.unreal),
+            "mcp_server_requested": bool(self.args.mcp_server),
+            "uproject": str(self.active_uproject_path) if self.active_uproject_path else None,
+            "surreal_health": None,
+            "scene_syncd_health": None,
+            "unreal_tcp": None,
+            "mcp_server_running": None,
+        }
+        if self.args.surreal:
+            summary["surreal_health"] = wait_for_service(f"http://{self.args.surreal_bind}/health", timeout=3.0, interval=0.25)
+        if self.args.scene_syncd:
+            summary["scene_syncd_health"] = wait_for_service(f"{DEFAULT_SCENE_SYNCD_URL}/health", timeout=3.0, interval=0.25)
+        if self.args.unreal:
+            summary["unreal_tcp"] = wait_for_tcp(DEFAULT_UNREAL_HOST, DEFAULT_UNREAL_PORT, timeout=5.0, interval=0.5)
+        if self.args.mcp_server:
+            proc = self.service_processes.get("mcp_server")
+            summary["mcp_server_running"] = bool(proc and proc.poll() is None)
+        requested_checks = [
+            value
+            for key, value in summary.items()
+            if key.endswith("_health") or key in {"unreal_tcp", "mcp_server_running"}
+            if value is not None
+        ]
+        summary["passed"] = bool(requested_checks) and all(bool(value) for value in requested_checks)
+        return summary
 
     def run(self) -> int:
         signal.signal(signal.SIGINT, self.shutdown)
@@ -526,6 +763,15 @@ class DevStackLauncher:
 
         print(f"\n{Style.GREEN}{Style.BOLD}Development stack is running!{Style.RESET}")
         print(f"{Style.DIM}Press Ctrl+C to stop all services.{Style.RESET}\n")
+
+        if getattr(self.args, "verify", False):
+            hold = max(0.0, float(getattr(self.args, "verify_hold_seconds", 2.0)))
+            if hold:
+                time.sleep(hold)
+            summary = self.verify_stack()
+            print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
+            self.stop_processes()
+            return 0 if summary.get("passed") else 1
 
         # Keep main thread alive
         try:
@@ -553,6 +799,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--headless", action="store_true", help="Run Unreal Engine in headless mode (no window)")
     parser.add_argument("--render-offscreen", action="store_true", help="Use -RenderOffScreen for Unreal Engine")
     parser.add_argument("--cleanup", action="store_true", help="Cleanup ports (55771, 8787, 8000) before starting")
+    parser.add_argument("--uproject", help="Path to a .uproject to launch; overrides UNREAL_MCP_UPROJECT")
+    parser.add_argument(
+        "--no-materialize-mcp-project",
+        action="store_true",
+        help="Launch the selected .uproject directly without linking/enabling the repo UnrealMCP plugin",
+    )
+    parser.add_argument(
+        "--skip-unreal-build",
+        action="store_true",
+        help="Skip the incremental UBT build for a materialized source-plugin project",
+    )
+    parser.add_argument("--verify", action="store_true", help="Run finite health/TCP checks after startup, then stop services")
+    parser.add_argument("--verify-hold-seconds", type=float, default=2.0, help="Seconds to keep services alive before --verify checks")
     return parser
 
 

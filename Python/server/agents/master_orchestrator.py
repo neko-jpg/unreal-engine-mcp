@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from server.agents.agent_card import AgentCardDirectory, build_directory_from_orchestrator
 from server.agents.base_agent import AgentContext, AgentResult, BaseAgent, ToolRegistry
+from server.agents.collaboration import CollaborationKernel
 from server.agents.guardrails import Guardrails
 from server.agents.planner import TaskPlanner
 from server.agents.tracing import is_tracing_enabled, get_tracer
@@ -57,6 +58,9 @@ class MasterOrchestrator(BaseAgent):
         "asset_management",
         "level_management",
         "project_editor",
+        "vision",
+        "critique",
+        "quality",
     ]
 
     def __init__(self, tool_registry: Optional[Dict[str, Any]] = None) -> None:
@@ -84,14 +88,19 @@ class MasterOrchestrator(BaseAgent):
             "asset_management": "asset_management_domain",
             "level_management": "level_management_domain",
             "project_editor": "project_editor_domain",
+            "vision": "vision_critique_domain",
+            "critique": "vision_critique_domain",
+            "quality": "vision_critique_domain",
             "post_process": "postprocess_domain",
             "camera": "cinematic_domain",
             "procedural": "procedural_domain",
             "mesh_editing": "mesh_domain",
             "navigation": "npc_domain",
+            "atmosphere": "lighting_domain",
         }
         self.mode = "react"  # "react" | "plan_and_execute"
         self.planner = TaskPlanner()
+        self.collaboration = CollaborationKernel()
 
     async def execute(self, intent: str, context: AgentContext) -> AgentResult:
         """Execute user intent by routing to appropriate domain agents.
@@ -166,6 +175,14 @@ class MasterOrchestrator(BaseAgent):
 
         # Execute domain agents (ReAct-style sequential)
         results: List[AgentResult] = []
+        decision = self.collaboration.decide(
+            intent,
+            list(resolved_intent.domains),
+            [agent_name for _, agent_name in domain_agents],
+        )
+        task = self.collaboration.start(intent, list(resolved_intent.domains), decision)
+        context.metadata["collaboration_task_id"] = task.task_id
+        context.metadata["orchestration_decision"] = decision.to_dict()
 
         try:
             for domain, agent_name in domain_agents:
@@ -176,6 +193,7 @@ class MasterOrchestrator(BaseAgent):
 
                 result = await self.delegate(agent_name, domain_intent, context)
                 results.append(result)
+                self.collaboration.record_result(task.task_id, agent_name, result)
 
                 # Store domain result in context for cross-domain coordination
                 context.metadata[f"{domain}_result"] = result.to_dict()
@@ -193,6 +211,8 @@ class MasterOrchestrator(BaseAgent):
                 "mood": resolved_intent.mood,
                 "target_selector": resolved_intent.target_selector,
             }
+            merged.data["collaboration"] = self.collaboration.finish(task.task_id, merged.success)
+            merged.data["collaboration"]["reflection"] = self.collaboration.reflection(task.task_id)
 
             return merged
         finally:
@@ -254,6 +274,9 @@ class MasterOrchestrator(BaseAgent):
             "asset_management": ["asset", "folder", "content", "browser", "redirector"],
             "level_management": ["level", "map", "sublevel", "stream", "world partition"],
             "project_editor": ["project", "editor", "settings", "plugin", "build", "package"],
+            "vision": ["vision", "screenshot", "visual", "critique", "quality", "sqop"],
+            "critique": ["critique", "evaluate", "score", "quality vector", "vlm"],
+            "quality": ["quality", "gate", "metric", "score", "observation"],
             "procedural": ["procedural", "sdf", "wfc", "generate", "marching cubes"],
             "mesh_editing": ["remesh", "uv", "collision", "nanite", "simplify", "bake"],
             "navigation": ["navmesh", "nav", "walkable", "path", "waypoint"],
@@ -321,6 +344,13 @@ class MasterOrchestrator(BaseAgent):
             self.logger.info("Coordinating lighting-atmosphere cross-domain pass")
             coord_actions.append("lighting_atmosphere")
             try:
+                # Ensure fog actor exists before configuring
+                await self.call_tool_async(
+                    "spawn_actor",
+                    name="ExponentialHeightFog",
+                    type="ExponentialHeightFog",
+                    location=[0, 0, 0],
+                )
                 fog_result = await self.call_tool_async(
                     "set_height_fog_properties",
                     actor_name="ExponentialHeightFog",
