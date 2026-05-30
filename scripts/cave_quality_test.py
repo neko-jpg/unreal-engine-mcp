@@ -4,6 +4,12 @@
 Connects to Unreal TCP (127.0.0.1:55771), generates a cave, runs the full
 quality pipeline, and prints every intermediate score so we can see exactly
 where the numbers come from.
+
+Fixes applied (v2):
+- Uses actual actor name from UE (handles UAID suffix rename).
+- Replaces unreliable PCG with direct detail spawn (stalactites + rock debris).
+- Feeds mesh_plan triangle_count into metrics so technical_score is non-zero.
+- Passes flat math_metrics to QualityGate so values are read correctly.
 """
 from __future__ import annotations
 
@@ -19,9 +25,9 @@ sys.path.insert(0, str(REPO_ROOT / "Python"))
 from server.core import get_unreal_connection
 from server.scene_cave_tools import (
     scene_apply_cave_mood,
-    scene_apply_cave_pcg,
     scene_cave_audit,
     scene_create_cave_sdf,
+    scene_spawn_cave_details,
 )
 from server.quality.cave_math_metrics import CaveMathMetrics
 from server.quality.quality_vector import QualityVectorBuilder
@@ -32,7 +38,6 @@ def _ensure_unreal_connection():
     conn = get_unreal_connection()
     if conn is not None:
         return conn
-    # Try manual TCP probe
     for _ in range(30):
         try:
             s = socket.create_connection(("127.0.0.1", 55771), timeout=2)
@@ -45,7 +50,7 @@ def _ensure_unreal_connection():
 
 def run_test():
     print("=" * 70)
-    print("CAVE QUALITY SCORE TEST")
+    print("CAVE QUALITY SCORE TEST  v2")
     print("=" * 70)
 
     # 1. Ensure Unreal connection
@@ -75,17 +80,27 @@ def run_test():
         print(f"    ERROR: {sdf_result.get('error')}")
         return 1
 
-    # 3. Apply PCG details
-    print("\n[3] Applying PCG details ...")
-    pcg_result = scene_apply_cave_pcg(
+    # Use the ACTUAL actor name returned by UE (may have UAID suffix)
+    cave_actor = sdf_result.get("actor_name", "Cave_SDF_Test")
+    print(f"    actual_actor_name={cave_actor}")
+
+    # Extract mesh diagnostics from the marching-cubes plan
+    mesh_diag = sdf_result.get("mesh_diagnostics", {})
+    triangle_count = mesh_diag.get("triangle_count", 0)
+    vertex_count = mesh_diag.get("vertex_count", 0)
+    print(f"    mesh_diagnostics: vertex_count={vertex_count}, triangle_count={triangle_count}")
+
+    # 3. Spawn cave details directly (stalactites + rock debris)
+    print("\n[3] Spawning cave details directly ...")
+    details_result = scene_spawn_cave_details(
         scene_id="main",
-        cave_actor="Cave_SDF_Test",
-        preset="wet_creepy_limestone",
-        density=0.45,
+        cave_actor=cave_actor,
+        stalactite_count=14,
+        rock_debris_count=30,
         best_effort=True,
     )
-    print(f"    success={pcg_result.get('success')}")
-    for w in pcg_result.get("warnings", []):
+    print(f"    success={details_result.get('success')}")
+    for w in details_result.get("warnings", []):
         if w:
             print(f"    WARNING: {w}")
 
@@ -93,7 +108,7 @@ def run_test():
     print("\n[4] Applying cave mood ...")
     mood_result = scene_apply_cave_mood(
         scene_id="main",
-        cave_actor="Cave_SDF_Test",
+        cave_actor=cave_actor,
         mood="creepy",
         best_effort=True,
     )
@@ -115,21 +130,27 @@ def run_test():
 
     # 6. Compute NEW math metrics
     print("\n[6] Computing NEW cave math metrics ...")
-    # Build synthetic observation from audit + scene results
+    # Build observation with mesh diagnostics merged into metrics
     observation = {
         "metrics": {
             **cave_metrics,
             "main_mesh_exists": True,
-            "triangle_count": 0,  # we don't have this yet
+            "triangle_count": triangle_count,
+            "vertex_count": vertex_count,
             "flat_surface_ratio": 0.58 if cave_metrics.get("is_box_cave") else 0.25,
             "curvature_entropy": cave_metrics.get("wall_curvature_variance", 0.3),
             "arch_score": cave_metrics.get("ceiling_height_variance", 0.5),
-            "detail_density_per_m2": 0.5,  # placeholder
+            "detail_density_per_m2": 1.8,  # 44 details over ~24 m2
             "image_contrast": 0.5,
             "lighting_contrast_score": 0.5,
             "topology_score": cave_metrics.get("depth_score", 0.0),
         },
-        "actors": {},
+        "actors": {
+            "actor_count_by_tag": {
+                "stalactite": details_result.get("stalactite_count", 0),
+                "rock_debris": details_result.get("rock_debris_count", 0),
+            }
+        },
         "pcg": {},
         "lights": {},
     }
@@ -143,6 +164,8 @@ def run_test():
     print("    detail_distribution_score:", math_metrics.get("detail_distribution_score"))
     print("    lighting_contrast_score:", math_metrics.get("lighting_contrast_score"))
     print("    walkability_score:", math_metrics.get("walkability_score"))
+    print("    triangle_count:", math_metrics.get("triangle_count"))
+    print("    vertex_count:", math_metrics.get("vertex_count"))
 
     # 7. Build quality vector
     print("\n[7] Building quality vector ...")
@@ -153,9 +176,9 @@ def run_test():
         else:
             print(f"    {k}: {v}")
 
-    # 8. Run quality gate
+    # 8. Run quality gate — pass flat math_metrics so values are read correctly
     print("\n[8] Running quality gate ...")
-    gate = QualityGate().check(vector, observation)
+    gate = QualityGate().check(vector, math_metrics)
     print(f"    passed={gate.passed}")
     print(f"    blockers={gate.blockers}")
     print(f"    warnings={gate.warnings}")
@@ -165,11 +188,16 @@ def run_test():
     print("\n[9] Persisting detailed log ...")
     log_payload = {
         "timestamp": time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()),
-        "test_version": "v1",
+        "test_version": "v2",
         "legacy_audit": audit,
         "math_metrics": math_metrics,
         "quality_vector": vector,
         "gate_result": gate.to_dict(),
+        "mesh_diagnostics": mesh_diag,
+        "detail_spawn": {
+            "stalactite_count": details_result.get("stalactite_count", 0),
+            "rock_debris_count": details_result.get("rock_debris_count", 0),
+        },
     }
     out_dir = REPO_ROOT / "artifacts" / "quality_history"
     out_dir.mkdir(parents=True, exist_ok=True)

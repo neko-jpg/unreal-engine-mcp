@@ -131,12 +131,19 @@ class QualityGate:
             metrics = dict(getattr(observation_or_metrics, "metrics", {}) or {})
             meshes = getattr(observation_or_metrics, "meshes", {}) or {}
             if isinstance(meshes, Mapping):
+                # Promote ALL mesh values, not just the first one.
                 for value in meshes.values():
                     if hasattr(value, "to_dict"):
                         metrics.update(value.to_dict())
                     elif isinstance(value, Mapping):
                         metrics.update(value)
-                    break
+                # Also promote a specific "main" mesh if present.
+                main = meshes.get("main")
+                if main is not None:
+                    if hasattr(main, "to_dict"):
+                        metrics.update(main.to_dict())
+                    elif isinstance(main, Mapping):
+                        metrics.update(main)
             for attr in ("materials", "lights", "pcg"):
                 value = getattr(observation_or_metrics, attr, None)
                 if hasattr(value, "to_dict"):
@@ -144,7 +151,15 @@ class QualityGate:
                 elif isinstance(value, Mapping):
                     metrics.update(value)
             return metrics
-        return dict(observation_or_metrics or {})
+        # Flat dict path: flatten nested metric containers.
+        raw = dict(observation_or_metrics or {})
+        nested_keys = ("math_metrics", "cave_metrics", "mesh_metrics", "quality_metrics")
+        for key in nested_keys:
+            nested = raw.get(key)
+            if isinstance(nested, Mapping):
+                for nk, nv in nested.items():
+                    raw.setdefault(nk, nv)
+        return raw
 
     def _actor_counts(self, observation_or_metrics: Any) -> Dict[str, Any]:
         if hasattr(observation_or_metrics, "actors"):

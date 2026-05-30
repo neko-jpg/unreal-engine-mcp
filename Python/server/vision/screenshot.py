@@ -94,8 +94,17 @@ def take_via_focus(
         # Some UE handlers respect output_path, others write to a default
         # Saved/Screenshots dir. Honour an absolute path in the response.
         returned = shot_resp.get("path") or shot_resp.get("file") or out_path
-        result.success = True
-        result.path = str(returned)
+        # CRITICAL: verify the file actually exists and is non-empty
+        returned_path = Path(returned)
+        if not returned_path.exists():
+            result.warnings.append(f"screenshot file missing: {returned}")
+            result.success = False
+        elif returned_path.stat().st_size == 0:
+            result.warnings.append(f"screenshot file is empty: {returned}")
+            result.success = False
+        else:
+            result.success = True
+            result.path = str(returned)
     else:
         result.warnings.append(
             f"take_screenshot failed: {(shot_resp or {}).get('error', 'unknown')}"

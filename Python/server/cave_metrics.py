@@ -174,10 +174,22 @@ def compute_cave_metrics(
     if entrance_count == 0 and (is_box_cave or has_procedural or any(_has_any(t, CAVE_TERMS) for t in metric_texts)):
         entrance_count = 1
 
-    branch_count = sum(1 for text in metric_texts if "branch" in text or "fork" in text or "side_tunnel" in text)
+    # Read generation metadata first, then fall back to text heuristics.
+    meta_branch_count = 0
+    meta_chamber_count = 0
+    for obj in metric_objects:
+        generation = obj.get("generation") if isinstance(obj, dict) else None
+        if isinstance(generation, dict):
+            meta_branch_count = max(meta_branch_count, int(generation.get("branch_count", 0) or 0))
+            meta_chamber_count = max(meta_chamber_count, int(generation.get("chamber_count", 0) or 0))
+
+    text_branch_count = sum(1 for text in metric_texts if "branch" in text or "fork" in text or "side_tunnel" in text)
     tunnel_count = sum(1 for text in metric_texts if "tunnel" in text or "corridor" in text)
-    chamber_count = sum(1 for text in metric_texts if "chamber" in text or "cavern" in text)
-    branch_count = max(branch_count, max(0, tunnel_count + chamber_count - 2))
+    text_chamber_count = sum(1 for text in metric_texts if "chamber" in text or "cavern" in text)
+    text_branch_count = max(text_branch_count, max(0, tunnel_count + text_chamber_count - 2))
+
+    branch_count = meta_branch_count or text_branch_count
+    chamber_count = meta_chamber_count or text_chamber_count
 
     extent = _scene_extent(metric_objects)
     max_horizontal_extent = max(extent[0], extent[1])

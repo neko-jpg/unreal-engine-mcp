@@ -224,11 +224,25 @@ class CaveMathMetrics:
             lights = getattr(observation, "lights", None)
         else:
             observation = None
-            metrics = dict(observation_or_metrics or {})
-            mesh = metrics
-            actors = metrics
-            pcg = metrics
-            lights = metrics
+            raw = dict(observation_or_metrics or {})
+            # Flatten nested metric containers so values like triangle_count
+            # are promoted to the top level.
+            nested_keys = ("math_metrics", "cave_metrics", "mesh_metrics", "quality_metrics")
+            for key in nested_keys:
+                nested = raw.get(key)
+                if isinstance(nested, Mapping):
+                    for nk, nv in nested.items():
+                        raw.setdefault(nk, nv)
+            metrics = raw
+            mesh = raw.get("mesh") or raw.get("main_mesh") or metrics
+            actors = raw.get("actors") or metrics
+            pcg = raw.get("pcg") or metrics
+            lights = raw.get("lights") or metrics
+
+        # Ensure mesh data (e.g., triangle_count) is merged into metrics.
+        mesh_dict = _as_mapping(mesh)
+        for mk, mv in mesh_dict.items():
+            metrics.setdefault(mk, mv)
 
         pcg_dict = pcg.to_dict() if hasattr(pcg, "to_dict") else pcg
         light_dict = lights.to_dict() if hasattr(lights, "to_dict") else lights
@@ -248,7 +262,10 @@ class CaveMathMetrics:
             "lighting_contrast_score": round(self.compute_lighting_contrast_score(light_dict or metrics), 3),
             "walkability_score": round(self.compute_walkability_score(metrics), 3),
         }
-        result.update({k: v for k, v in metrics.items() if k not in result})
+        # Merge original metrics (including mesh-promoted values) into result.
+        for k, v in metrics.items():
+            if k not in result:
+                result[k] = v
         if observation is not None:
             result["screenshot_count"] = len(getattr(observation, "screenshots", []) or [])
         return result
